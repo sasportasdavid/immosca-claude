@@ -1,9 +1,11 @@
 import type { Config } from "tailwindcss";
 import animate from "tailwindcss-animate";
 
-// Configuration de base shadcn/ui.
-// Claude Design ajustera les tokens via index.css (variables CSS).
-// Claude Code ne touche PAS ce fichier sans accord — il pilote la cohérence design.
+// ImmoScan — direction Linear/Attio/Qonto (validée mai 2026).
+// Stone warm-neutral + violet brand. Mode clair uniquement.
+// Tokens définis dans index.css en CSS vars HSL ; ce fichier les expose
+// en utilitaires Tailwind. Aucun hex hardcodé ici sauf les valeurs DPE
+// (couleurs ADEME officielles, hors palette neutre).
 
 export default {
   darkMode: ["class"],
@@ -26,6 +28,8 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
+          hover: "hsl(var(--primary-hover))",
+          soft: "hsl(var(--primary-soft))",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
@@ -51,13 +55,21 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        // Couleurs sémantiques scoring ImmoScan
-        // Utilisées par le composant <ScoreBadge /> et la carte.
-        // Renseignées dans index.css par Claude Design.
+        // Scoring ImmoScan — utilisé par <ScoreBadge />.
         score: {
-          excellent: "hsl(var(--score-excellent))", // >= 75
-          good: "hsl(var(--score-good))", // 50-74
-          poor: "hsl(var(--score-poor))", // < 50
+          excellent: "hsl(var(--score-excellent))",
+          good: "hsl(var(--score-good))",
+          poor: "hsl(var(--score-poor))",
+        },
+        // DPE ADEME officiel.
+        dpe: {
+          a: "hsl(var(--dpe-a))",
+          b: "hsl(var(--dpe-b))",
+          c: "hsl(var(--dpe-c))",
+          d: "hsl(var(--dpe-d))",
+          e: "hsl(var(--dpe-e))",
+          f: "hsl(var(--dpe-f))",
+          g: "hsl(var(--dpe-g))",
         },
       },
       borderRadius: {
@@ -68,6 +80,12 @@ export default {
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
         display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
+      },
+      boxShadow: {
+        "lvl-1": "0 1px 2px rgba(0,0,0,0.04)",
+        "lvl-2": "0 4px 12px rgba(0,0,0,0.06)",
+        "lvl-3": "0 16px 48px rgba(0,0,0,0.12)",
       },
     },
   },
