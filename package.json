@@ -1,0 +1,54 @@
+{
+  "name": "immoscan",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SaaS d'analyse d'investissement locatif",
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @immoscan/web dev",
+    "dev:worker": "pnpm --filter @immoscan/worker dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm --silent --filter @immoscan/web routes:generate && pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "lint:fix": "pnpm -r lint:fix",
+    "test": "pnpm -r test",
+    "test:watch": "pnpm -r test:watch",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,sql}\"",
+    "db:types": "pnpm db:types:app && pnpm db:types:data",
+    "db:types:app": "supabase gen types typescript --workdir supabase/app --schema public > packages/db/src/app.types.ts",
+    "db:types:data": "supabase gen types typescript --workdir supabase/data --schema public > packages/db/src/data.types.ts",
+    "db:migrate:app": "supabase db push --workdir supabase/app",
+    "db:migrate:data": "supabase db push --workdir supabase/data",
+    "db:reset:app": "supabase db reset --workdir supabase/app",
+    "db:reset:data": "supabase db reset --workdir supabase/data",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@typescript-eslint/eslint-plugin": "^8.5.0",
+    "@typescript-eslint/parser": "^8.5.0",
+    "eslint": "^9.10.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.30.0",
+    "husky": "^9.1.6",
+    "lint-staged": "^15.2.10",
+    "prettier": "^3.3.3",
+    "prettier-plugin-tailwindcss": "^0.6.6",
+    "supabase": "^1.190.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,sql}": [
+      "prettier --write"
+    ]
+  }
+}

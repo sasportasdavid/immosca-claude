@@ -1,0 +1,28 @@
+address,expected_city
+# ─────────────────────────────────────────────────────────────────────────
+# Adresses témoins publiques (bâtiments connus)
+# Vérification immédiate : si BAN ne retrouve pas ces 5 adresses, problème API.
+# ─────────────────────────────────────────────────────────────────────────
+1 Place Foch 93220 Gagny,Gagny
+Place de la Légion d'Honneur 93200 Saint-Denis,Saint-Denis
+5 Place Armand Carrel 75019 Paris,Paris 19e
+16 Place Jean Macé 69007 Lyon,Lyon 7e
+16 Boulevard de la Libération 13003 Marseille,Marseille 3e
+# ─────────────────────────────────────────────────────────────────────────
+# À COMPLÉTER : ~95 adresses tirées d'annonces SeLoger réelles
+# Coller au format `<adresse>,<ville>` une par ligne, sans guillemets sauf si
+# l'adresse contient une virgule.
+#
+# Répartition cible :
+#   - 20 Gagny (cohérence référentiel)
+#   - 20 Saint-Denis
+#   - 20 Paris 19e
+#   - 20 Lyon 7e
+#   - 20 Marseille 3e
+#
+# Source recommandée : un run Apify SeLoger sur chaque ville, et extraire le
+# champ "adresse_raw" pour 20 annonces variées (centre + périphérie, app + maison).
+# Important : sur SeLoger, l'adresse est souvent au pâté de maisons près. C'est
+# OK pour ce spike, l'objectif est de mesurer la couverture, pas la précision
+# de la parcelle.
+# ─────────────────────────────────────────────────────────────────────────

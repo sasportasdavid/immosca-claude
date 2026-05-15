@@ -1,0 +1,72 @@
+# ─── Dependencies ───
+node_modules/
+.pnpm-store/
+
+# ─── Build outputs ───
+dist/
+build/
+.next/
+.turbo/
+out/
+*.tsbuildinfo
+*.timestamp-*.mjs
+
+# ─── Environment & secrets ───
+.env
+.env.local
+.env.*.local
+!.env.example
+# (les .env.example sont autorisés et committés volontairement)
+
+# ─── Logs ───
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── Tests & coverage ───
+coverage/
+.nyc_output/
+
+# ─── Supabase ───
+supabase/.branches/
+supabase/.temp/
+supabase/**/.env
+
+# ─── Trigger.dev ───
+.trigger/
+
+# ─── Sentry ───
+.sentryclirc
+
+# ─── Editor & OS ───
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Spike PLU ───
+experiments/*/node_modules/
+experiments/*/results/*.json
+experiments/*/results/*.csv
+experiments/*/results/*.pdf
+experiments/*/results/extractions/*.json
+# Mais on garde le template :
+!experiments/*/results/REPORT.md
+!experiments/*/results/.gitkeep
+!experiments/*/results/extractions/.gitkeep
+
+# ─── AI tooling artifacts ───
+# Artefacts générés par Claude Code (chemins absolus locaux, non
+# portables). Si on a besoin d'une config dev partagée, créer un
+# .claude.example/ committé séparément.
+.claude/
+
+# ─── Misc ───
+*.pem
+.cache/

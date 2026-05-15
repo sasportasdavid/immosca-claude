@@ -1,0 +1,26 @@
+{
+  "name": "plu-feasibility-spike",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Spike isolé pour mesurer la faisabilité du module PLU. Pas dans le workspace pnpm.",
+  "type": "module",
+  "scripts": {
+    "check:apis": "tsx src/check-apis.ts",
+    "measure:coverage": "tsx src/measure-coverage.ts",
+    "extract:reglement": "tsx src/extract-reglement.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "dotenv": "^16.4.5",
+    "p-limit": "^6.1.0",
+    "pdf-parse": "^1.1.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@types/pdf-parse": "^1.1.4",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+.env
+.env.local
+results/*.json
+results/*.csv
+results/*.pdf
+!results/.gitkeep
+!results/REPORT.md
