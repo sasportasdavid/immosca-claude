@@ -50,7 +50,11 @@ if (!root) throw new Error("Root element #root not found");
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <Sentry.ErrorBoundary fallback={<div>Une erreur est survenue.</div>} showDialog>
+    {/* showDialog désactivé : le formulaire feedback Sentry collecte email+nom
+        et les envoie via /user-feedback, endpoint séparé non couvert par notre
+        beforeSend. Si on veut un canal de feedback utilisateur, on construira
+        un formulaire ImmoScan qui passe par Supabase (RLS + logs sans PII). */}
+    <Sentry.ErrorBoundary fallback={<div>Une erreur est survenue.</div>}>
       <PostHogProvider client={posthog}>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
