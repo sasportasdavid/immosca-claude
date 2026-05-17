@@ -238,25 +238,29 @@ Voir `docs/data-sources.md` pour les URLs précises et endpoints.
 
 ---
 
-## 12. Pricing — à hard-coder dans `packages/shared/src/constants.ts`
+## 12. Pricing — source de vérité `docs/01-spec-produit.md` §Pricing
 
-| Plan | Mensuel | Annuel (équiv. /mois) | Analyses/mois | Veilles | Modèle Claude |
-|---|---|---|---|---|---|
-| Free | 0€ | — | illimitées (floutées) | 0 | Sonnet 4.6 |
-| Pro | 49€ | 468€/an (39€/mois) | 20 | 5 hebdo | Sonnet 4.6 |
-| Pro+ | 99€ | 948€/an (79€/mois) | 100 | 20 quotidien | Sonnet 4.6 |
+| Plan      | Mensuel | Annuel (équiv. /mois) | Analyses/mois | Veilles        | Top N        | Multi-users | Modèle Claude |
+|-----------|---------|------------------------|---------------|----------------|--------------|-------------|---------------|
+| Free      | 0€      | —                      | illimitées (>70 masqués) | 0              | 5 (masqué)   | 1           | Sonnet 4.6    |
+| Pro       | 49€     | 468€/an (39€/mois)     | 30            | 5 hebdo        | 10           | 1           | Sonnet 4.6    |
+| Pro+      | 99€     | 948€/an (79€/mois)     | illimité      | 20 quotidien   | 20           | 1           | Sonnet 4.6    |
+| Business  | 249€    | 2 388€/an (199€/mois)  | illimité      | illimité       | 30           | 5           | Opus 4.7      |
 
-Annuel = -20% (engagement 12 mois). 7 jours gratuits Pro sans CB. Plan Business retiré pour l'instant.
+Annuel = -20% (engagement 12 mois). 7 jours gratuits Pro sans CB.
 
-**Pay-per-use** (tous plans, hors veilles) :
+**Status implémentation** : l'enum SQL `subscription_plan` et le type TS `PlanId`
+ne contiennent que `free | pro | pro_plus` aujourd'hui. **Business est publié au
+pricing mais sa prise en charge code + DB est différée à PR6+ Stripe Billing**
+(migration `ALTER TYPE subscription_plan ADD VALUE 'business'`, extension Zod
+`subscriptionPlanSchema`, entrée `PLANS.business` avec multi-users 5 et Opus
+4.7). Ne pas inventer du code Business avant cette PR.
 
-| SKU | Analyses | Prix |
-|---|---|---|
-| `single` | 1 | 9€ |
-| `pack_5` | 5 | 39€ |
-| `pack_20` | 20 | 119€ |
-
-Les analyses pay-per-use sont débloquées **à vie** sur le compte du user, indépendamment du plan en cours — c'est ce qui distingue le pack du quota mensuel récurrent.
+**Pay-per-use** : la spec produit ne mentionne pas de pay-per-use. Le code
+historique en a (`PAY_PER_USE` dans `constants.ts`, SKU `single 9€` / `pack_5
+39€` / `pack_20 119€`). Conservé "dormant" jusqu'à arbitrage explicite avec le
+PO au moment de Stripe Billing PR6+. Ne pas câbler de checkout Stripe pay-per-use
+sans valider d'abord son maintien produit.
 
 ---
 
