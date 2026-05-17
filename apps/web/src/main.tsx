@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
@@ -8,6 +8,7 @@ import ReactDOM from "react-dom/client";
 
 import "./index.css";
 import { initPostHog } from "./lib/posthog";
+import { createQueryClient } from "./lib/query-client";
 import { initSentry } from "./lib/sentry";
 import { routeTree } from "./routeTree.gen";
 
@@ -29,16 +30,9 @@ declare module "@tanstack/react-router" {
 }
 
 // ────────── React Query ──────────
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000, // 1 min
-      gcTime: 5 * 60 * 1000, // 5 min
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+// Defaults centralisés dans lib/query-client.ts. Une factory par instance
+// (ici une seule, mais permet d'isoler en tests).
+const queryClient = createQueryClient();
 
 // ────────── Mount ──────────
 const root = document.getElementById("root");
