@@ -9,13 +9,22 @@ import type { StrategyType } from "./schemas/user.js";
 // ──────────────────────────────────────────────────────────────────
 
 export type PlanId = "free" | "pro" | "pro_plus";
+// Note Business : publié au pricing (cf CLAUDE.md §12 et docs/01-spec-produit.md),
+// mais code + enum SQL `subscription_plan` ne le contiennent pas encore.
+// Ajout différé à PR6+ Stripe Billing : il faudra étendre PlanId, ajouter
+// l'entrée PLANS.business (multi-users 5, Opus 4.7, illimité partout), créer
+// la migration `ALTER TYPE subscription_plan ADD VALUE 'business'`, et étendre
+// subscriptionPlanSchema dans packages/shared/src/schemas/user.ts.
 
 /**
- * Plans récurrents (abonnement). Trois niveaux : Free / Pro / Pro+.
- * Quand un user atteint son plafond mensuel d'analyses, il a deux
- * options : upgrade vers un plan supérieur, ou acheter du pay-per-use
- * (voir PAY_PER_USE) qui débloque des analyses **à vie** sur son
- * compte, indépendamment du plan en cours.
+ * Plans récurrents (abonnement). Trois niveaux actuellement implémentés :
+ * Free / Pro / Pro+. Le plan Business 249€/mois est publié au pricing
+ * mais sa prise en charge code+DB est différée à PR6+ Stripe Billing.
+ *
+ * Quand un user atteint son plafond mensuel d'analyses :
+ * - upgrade vers le plan supérieur, ou
+ * - pay-per-use (voir PAY_PER_USE) — actuellement "dormant", maintien
+ *   produit à arbitrer avec le PO au moment de Stripe.
  */
 export const PLANS = {
   free: {
@@ -23,9 +32,10 @@ export const PLANS = {
     name: "Free",
     monthlyPriceEur: 0,
     yearlyPriceEur: 0,
-    analysesPerMonth: null, // illimitées mais floutées
+    analysesPerMonth: null, // illimitées mais floutées (>70 masqués)
     watchesMax: 0,
     pipelineMax: 0,
+    topN: 5, // visible mais masqué pour Free
     exportCsv: false,
     exportPdf: false,
     publicShare: false,
@@ -39,10 +49,11 @@ export const PLANS = {
     name: "Pro",
     monthlyPriceEur: 49,
     yearlyPriceEur: 468, // 468€/an, soit 39€/mois facturé annuellement
-    analysesPerMonth: 20,
+    analysesPerMonth: 30,
     watchesMax: 5,
     watchFrequency: "weekly",
     pipelineMax: 50,
+    topN: 10,
     exportCsv: true,
     exportPdf: true,
     publicShare: true,
@@ -56,10 +67,11 @@ export const PLANS = {
     name: "Pro+",
     monthlyPriceEur: 99,
     yearlyPriceEur: 948, // 948€/an, soit 79€/mois facturé annuellement
-    analysesPerMonth: 100,
+    analysesPerMonth: null, // illimité
     watchesMax: 20,
     watchFrequency: "daily",
     pipelineMax: 200,
+    topN: 20,
     exportCsv: true,
     exportPdf: true,
     publicShare: true,
