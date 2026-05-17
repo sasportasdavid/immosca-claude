@@ -7,22 +7,13 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import "./index.css";
+import { initSentry } from "./lib/sentry";
 import { routeTree } from "./routeTree.gen";
 
 // ────────── Observability ──────────
-if (import.meta.env.VITE_SENTRY_DSN_WEB) {
-  Sentry.init({
-    dsn: import.meta.env.VITE_SENTRY_DSN_WEB,
-    environment: import.meta.env.MODE,
-    integrations: [
-      Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
-    ],
-    tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
-    replaysSessionSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1.0,
-  });
-}
+// Sentry init centralisé dans lib/sentry.ts (beforeSend / beforeBreadcrumb
+// scrub PII complet). Idempotent et no-op si VITE_SENTRY_DSN_WEB absente.
+initSentry();
 
 if (import.meta.env.VITE_POSTHOG_KEY) {
   posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
