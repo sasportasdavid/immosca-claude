@@ -30,9 +30,9 @@ coverage/
 .nyc_output/
 
 # ─── Supabase ───
-supabase/.branches/
-supabase/.temp/
-supabase/**/.env
+supabase-*/supabase/.branches/
+supabase-*/supabase/.temp/
+supabase-*/supabase/.env
 
 # ─── Trigger.dev ───
 .trigger/

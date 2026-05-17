@@ -19,12 +19,12 @@
     "test:watch": "pnpm -r test:watch",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,sql}\"",
     "db:types": "pnpm db:types:app && pnpm db:types:data",
-    "db:types:app": "supabase gen types typescript --workdir supabase/app --schema public > packages/db/src/app.types.ts",
-    "db:types:data": "supabase gen types typescript --workdir supabase/data --schema public > packages/db/src/data.types.ts",
-    "db:migrate:app": "supabase db push --workdir supabase/app",
-    "db:migrate:data": "supabase db push --workdir supabase/data",
-    "db:reset:app": "supabase db reset --workdir supabase/app",
-    "db:reset:data": "supabase db reset --workdir supabase/data",
+    "db:types:app": "supabase gen types typescript --workdir supabase-app --linked --schema public > packages/db/src/app.types.ts",
+    "db:types:data": "supabase gen types typescript --workdir supabase-data --linked --schema public > packages/db/src/data.types.ts",
+    "db:migrate:app": "supabase db push --workdir supabase-app",
+    "db:migrate:data": "supabase db push --workdir supabase-data",
+    "db:reset:app": "supabase db reset --workdir supabase-app",
+    "db:reset:data": "supabase db reset --workdir supabase-data",
     "prepare": "husky"
   },
   "devDependencies": {

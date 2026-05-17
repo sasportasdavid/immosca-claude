@@ -34,12 +34,12 @@ cp .env.example .env.local
 
 # 3. Remplir les variables (voir .env.example)
 # 4. Initialiser les 2 projets Supabase
-supabase link --project-ref <APP_PROJECT_REF> --workdir supabase/app
-supabase link --project-ref <DATA_PROJECT_REF> --workdir supabase/data
+supabase link --project-ref <APP_PROJECT_REF> --workdir supabase-app
+supabase link --project-ref <DATA_PROJECT_REF> --workdir supabase-data
 
 # 5. Appliquer les migrations
-supabase db push --workdir supabase/app
-supabase db push --workdir supabase/data
+supabase db push --workdir supabase-app
+supabase db push --workdir supabase-data
 
 # 6. Générer les types
 pnpm db:types
@@ -58,9 +58,10 @@ immoscan/
 ├── packages/
 │   ├── shared/              # Zod schemas, scoring (logique pure)
 │   └── db/                  # Types Supabase générés
-├── supabase/
-│   ├── app/migrations/      # Schéma transactionnel (users, analyses…)
-│   └── data/migrations/     # Référentiels publics (DVF, INSEE…)
+├── supabase-app/             # Projet Supabase immoscan-app (transactionnel)
+│   └── supabase/{config.toml, migrations/}
+├── supabase-data/            # Projet Supabase immoscan-data (référentiels publics)
+│   └── supabase/{config.toml, migrations/}
 └── docs/
 ```
 

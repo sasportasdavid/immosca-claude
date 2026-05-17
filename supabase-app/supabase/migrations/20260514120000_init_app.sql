@@ -75,32 +75,6 @@ begin
 end;
 $$;
 
--- Récupère le plan du user courant (auth.uid())
--- Utilisé partout dans les RLS et la vue freemium.
-create or replace function current_user_plan()
-returns subscription_plan
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select coalesce(
-    (select subscription_plan from profiles where id = auth.uid()),
-    'free'::subscription_plan
-  );
-$$;
-
--- True si le user a un plan payant
-create or replace function is_user_paid()
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select current_user_plan() <> 'free'::subscription_plan;
-$$;
-
 -- ─── Table : profiles ───
 -- 1-1 avec auth.users. Créé via trigger on auth.users.
 create table profiles (
@@ -156,6 +130,37 @@ create policy "profiles_select_own" on profiles
 create policy "profiles_update_own" on profiles
   for update using (auth.uid() = id)
   with check (auth.uid() = id);
+
+-- ─── Fonctions helper RLS ───
+-- DOIVENT être déclarées APRÈS la création de profiles : LANGUAGE SQL
+-- valide les références à la création, contrairement à plpgsql.
+-- Ces fonctions sont utilisées par la vue listings_freemium_view.
+
+-- Récupère le plan du user courant (auth.uid())
+-- Utilisé partout dans les RLS et la vue freemium.
+create or replace function current_user_plan()
+returns subscription_plan
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (select subscription_plan from profiles where id = auth.uid()),
+    'free'::subscription_plan
+  );
+$$;
+
+-- True si le user a un plan payant
+create or replace function is_user_paid()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select current_user_plan() <> 'free'::subscription_plan;
+$$;
 
 -- ─── Table : user_params ───
 -- Paramètres d'investissement, une ligne par user, mis à jour à l'onboarding.

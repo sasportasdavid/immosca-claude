@@ -83,4 +83,4 @@ Répartition cible :
 
 ## Ce qui n'a PAS été modifié
 
-Aucun fichier du monorepo (`apps/`, `packages/`, `supabase/`, `docs/`, `CLAUDE.md`, `TASKS.md`) n'a été touché. Ce spike est complètement isolé.
+Aucun fichier du monorepo (`apps/`, `packages/`, `supabase-app/`, `supabase-data/`, `docs/`, `CLAUDE.md`, `TASKS.md`) n'a été touché. Ce spike est complètement isolé.

@@ -103,3 +103,22 @@ type ListingCardProps = {
 
 Le rendu interne fait `<img src={photoUrl} />` si défini, sinon
 garde la silhouette SVG actuelle.
+
+---
+
+## 2026-05-17 — Ports locaux Supabase identiques entre `supabase-app` et `supabase-data`
+
+**Contexte** : LOT H bis, Phase Code PR1. Restructure monorepo
+Supabase en Option A (nesting 2 niveaux : `supabase-app/supabase/`
+et `supabase-data/supabase/`).
+
+**Point** : les deux `config.toml` ont les mêmes ports locaux par
+défaut (API 54321, DB 54322, shadow_port 54320, Studio 54323, Inbucket
+54324, etc.). Si un jour on lance `supabase start` sur les deux
+projets en parallèle pour test local, collision garantie sur tous
+les ports.
+
+**Recommandation** : pour l'instant on travaille exclusivement contre
+Supabase Cloud eu-west-3, pas de mode local. Si besoin d'un mode
+local en PR ultérieure, décaler tous les ports de `supabase-data` de
++10 (54331/54332/54330/54333/54334/...).

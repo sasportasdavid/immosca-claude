@@ -57,9 +57,14 @@ immoscan/
 ├── packages/
 │   ├── shared/               # Zod schemas, constantes, scoring (logique pure)
 │   └── db/                   # Types Supabase auto-générés (les deux projets)
-├── supabase/
-│   ├── app/migrations/       # Migrations du projet immoscan-app
-│   └── data/migrations/      # Migrations du projet immoscan-data
+├── supabase-app/              # Projet Supabase immoscan-app (CLI workdir)
+│   └── supabase/
+│       ├── config.toml
+│       └── migrations/
+├── supabase-data/             # Projet Supabase immoscan-data (CLI workdir)
+│   └── supabase/
+│       ├── config.toml
+│       └── migrations/
 └── docs/
 ```
 

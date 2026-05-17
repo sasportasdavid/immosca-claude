@@ -1,19 +1,933 @@
-// ⚠️ AUTO-GENERATED — DO NOT EDIT MANUALLY
-// Régénéré par `pnpm db:types:app`. Le placeholder ci-dessous permet au
-// monorepo de compiler avant la première génération.
-//
-// Pour régénérer :
-//   pnpm db:types:app
-// (alias de : supabase gen types typescript --workdir supabase/app --schema public)
 
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   public: {
-    Tables: Record<string, never>;
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
-  };
-};
+    Tables: {
+      analyses: {
+        Row: {
+          apify_run_id: string | null
+          code_postal: string | null
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          median_price_per_sqm: number | null
+          median_score: number | null
+          params_snapshot: Json
+          profile_id: string
+          progress_pct: number
+          source_site: Database["public"]["Enums"]["listing_source"]
+          source_url: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["analysis_status"]
+          total_listings_filtered: number | null
+          total_listings_raw: number | null
+          trigger_run_id: string | null
+          ville: string | null
+        }
+        Insert: {
+          apify_run_id?: string | null
+          code_postal?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          median_price_per_sqm?: number | null
+          median_score?: number | null
+          params_snapshot: Json
+          profile_id: string
+          progress_pct?: number
+          source_site: Database["public"]["Enums"]["listing_source"]
+          source_url: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["analysis_status"]
+          total_listings_filtered?: number | null
+          total_listings_raw?: number | null
+          trigger_run_id?: string | null
+          ville?: string | null
+        }
+        Update: {
+          apify_run_id?: string | null
+          code_postal?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          median_price_per_sqm?: number | null
+          median_score?: number | null
+          params_snapshot?: Json
+          profile_id?: string
+          progress_pct?: number
+          source_site?: Database["public"]["Enums"]["listing_source"]
+          source_url?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["analysis_status"]
+          total_listings_filtered?: number | null
+          total_listings_raw?: number | null
+          trigger_run_id?: string | null
+          ville?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analyses_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listing_scores: {
+        Row: {
+          analysis_id: string
+          cashflow_mensuel: number | null
+          claude_model: string | null
+          claude_tokens_used: number | null
+          cout_total_acquisition: number | null
+          created_at: string
+          ecart_prix_pct: number | null
+          financement_claude: string | null
+          frais_notaire: number | null
+          id: string
+          is_passoire_dpe: boolean | null
+          listing_id: string
+          loyer_estime: number | null
+          loyer_m2_estime: number | null
+          mensualite_credit: number | null
+          negociation_claude: string | null
+          prix_marche_estime: number | null
+          prix_negociation_cible: number | null
+          rendement_brut_pct: number | null
+          rendement_net_net_pct: number | null
+          rendement_net_pct: number | null
+          risque_climat_2025: boolean | null
+          risque_climat_2028: boolean | null
+          risque_climat_2034: boolean | null
+          score_cashflow: number
+          score_dpe: number
+          score_prix: number
+          score_quartier: number
+          score_rendement: number
+          score_risques: number
+          score_total: number
+          scoring_version: string
+          these_claude: string | null
+          verdict: Database["public"]["Enums"]["verdict_type"] | null
+        }
+        Insert: {
+          analysis_id: string
+          cashflow_mensuel?: number | null
+          claude_model?: string | null
+          claude_tokens_used?: number | null
+          cout_total_acquisition?: number | null
+          created_at?: string
+          ecart_prix_pct?: number | null
+          financement_claude?: string | null
+          frais_notaire?: number | null
+          id?: string
+          is_passoire_dpe?: boolean | null
+          listing_id: string
+          loyer_estime?: number | null
+          loyer_m2_estime?: number | null
+          mensualite_credit?: number | null
+          negociation_claude?: string | null
+          prix_marche_estime?: number | null
+          prix_negociation_cible?: number | null
+          rendement_brut_pct?: number | null
+          rendement_net_net_pct?: number | null
+          rendement_net_pct?: number | null
+          risque_climat_2025?: boolean | null
+          risque_climat_2028?: boolean | null
+          risque_climat_2034?: boolean | null
+          score_cashflow: number
+          score_dpe: number
+          score_prix: number
+          score_quartier: number
+          score_rendement: number
+          score_risques: number
+          score_total: number
+          scoring_version?: string
+          these_claude?: string | null
+          verdict?: Database["public"]["Enums"]["verdict_type"] | null
+        }
+        Update: {
+          analysis_id?: string
+          cashflow_mensuel?: number | null
+          claude_model?: string | null
+          claude_tokens_used?: number | null
+          cout_total_acquisition?: number | null
+          created_at?: string
+          ecart_prix_pct?: number | null
+          financement_claude?: string | null
+          frais_notaire?: number | null
+          id?: string
+          is_passoire_dpe?: boolean | null
+          listing_id?: string
+          loyer_estime?: number | null
+          loyer_m2_estime?: number | null
+          mensualite_credit?: number | null
+          negociation_claude?: string | null
+          prix_marche_estime?: number | null
+          prix_negociation_cible?: number | null
+          rendement_brut_pct?: number | null
+          rendement_net_net_pct?: number | null
+          rendement_net_pct?: number | null
+          risque_climat_2025?: boolean | null
+          risque_climat_2028?: boolean | null
+          risque_climat_2034?: boolean | null
+          score_cashflow?: number
+          score_dpe?: number
+          score_prix?: number
+          score_quartier?: number
+          score_rendement?: number
+          score_risques?: number
+          score_total?: number
+          scoring_version?: string
+          these_claude?: string | null
+          verdict?: Database["public"]["Enums"]["verdict_type"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listing_scores_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_scores_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: true
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listing_scores_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: true
+            referencedRelation: "listings_freemium_view"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listings: {
+        Row: {
+          adresse_geocoded: string | null
+          adresse_raw: string | null
+          analysis_id: string
+          annee_construction: number | null
+          ascenseur: boolean | null
+          balcon: boolean | null
+          cave: boolean | null
+          chambres: number | null
+          charges_copro_annuelles: number | null
+          code_insee: string | null
+          code_postal: string | null
+          description: string | null
+          dpe: string | null
+          etage: number | null
+          external_id: string
+          ges: string | null
+          id: string
+          is_exclusive: boolean | null
+          is_new_construction: boolean | null
+          lat: number | null
+          lng: number | null
+          parking: boolean | null
+          photos_urls: string[] | null
+          pieces: number | null
+          prix: number
+          published_at: string | null
+          scraped_at: string
+          source_site: Database["public"]["Enums"]["listing_source"]
+          source_url: string
+          surface: number | null
+          taxe_fonciere: number | null
+          terrasse: boolean | null
+          title: string | null
+          type: Database["public"]["Enums"]["bien_type"]
+          ville: string | null
+        }
+        Insert: {
+          adresse_geocoded?: string | null
+          adresse_raw?: string | null
+          analysis_id: string
+          annee_construction?: number | null
+          ascenseur?: boolean | null
+          balcon?: boolean | null
+          cave?: boolean | null
+          chambres?: number | null
+          charges_copro_annuelles?: number | null
+          code_insee?: string | null
+          code_postal?: string | null
+          description?: string | null
+          dpe?: string | null
+          etage?: number | null
+          external_id: string
+          ges?: string | null
+          id?: string
+          is_exclusive?: boolean | null
+          is_new_construction?: boolean | null
+          lat?: number | null
+          lng?: number | null
+          parking?: boolean | null
+          photos_urls?: string[] | null
+          pieces?: number | null
+          prix: number
+          published_at?: string | null
+          scraped_at?: string
+          source_site: Database["public"]["Enums"]["listing_source"]
+          source_url: string
+          surface?: number | null
+          taxe_fonciere?: number | null
+          terrasse?: boolean | null
+          title?: string | null
+          type: Database["public"]["Enums"]["bien_type"]
+          ville?: string | null
+        }
+        Update: {
+          adresse_geocoded?: string | null
+          adresse_raw?: string | null
+          analysis_id?: string
+          annee_construction?: number | null
+          ascenseur?: boolean | null
+          balcon?: boolean | null
+          cave?: boolean | null
+          chambres?: number | null
+          charges_copro_annuelles?: number | null
+          code_insee?: string | null
+          code_postal?: string | null
+          description?: string | null
+          dpe?: string | null
+          etage?: number | null
+          external_id?: string
+          ges?: string | null
+          id?: string
+          is_exclusive?: boolean | null
+          is_new_construction?: boolean | null
+          lat?: number | null
+          lng?: number | null
+          parking?: boolean | null
+          photos_urls?: string[] | null
+          pieces?: number | null
+          prix?: number
+          published_at?: string | null
+          scraped_at?: string
+          source_site?: Database["public"]["Enums"]["listing_source"]
+          source_url?: string
+          surface?: number | null
+          taxe_fonciere?: number | null
+          terrasse?: boolean | null
+          title?: string | null
+          type?: Database["public"]["Enums"]["bien_type"]
+          ville?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listings_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline_items: {
+        Row: {
+          adjusted_params: Json | null
+          compromis_date: string | null
+          created_at: string
+          delisted_at: string | null
+          delisted_reason: string | null
+          id: string
+          listing_id: string | null
+          listing_snapshot: Json
+          notes: string | null
+          offre_price: number | null
+          photos: string[] | null
+          position: number
+          profile_id: string
+          signe_date: string | null
+          stage: Database["public"]["Enums"]["pipeline_stage"]
+          updated_at: string
+          visite_date: string | null
+        }
+        Insert: {
+          adjusted_params?: Json | null
+          compromis_date?: string | null
+          created_at?: string
+          delisted_at?: string | null
+          delisted_reason?: string | null
+          id?: string
+          listing_id?: string | null
+          listing_snapshot: Json
+          notes?: string | null
+          offre_price?: number | null
+          photos?: string[] | null
+          position?: number
+          profile_id: string
+          signe_date?: string | null
+          stage?: Database["public"]["Enums"]["pipeline_stage"]
+          updated_at?: string
+          visite_date?: string | null
+        }
+        Update: {
+          adjusted_params?: Json | null
+          compromis_date?: string | null
+          created_at?: string
+          delisted_at?: string | null
+          delisted_reason?: string | null
+          id?: string
+          listing_id?: string | null
+          listing_snapshot?: Json
+          notes?: string | null
+          offre_price?: number | null
+          photos?: string[] | null
+          position?: number
+          profile_id?: string
+          signe_date?: string | null
+          stage?: Database["public"]["Enums"]["pipeline_stage"]
+          updated_at?: string
+          visite_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_items_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_items_listing_id_fkey"
+            columns: ["listing_id"]
+            isOneToOne: false
+            referencedRelation: "listings_freemium_view"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_items_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string
+          full_name: string | null
+          id: string
+          marketing_emails_opt_in: boolean
+          preferred_locale: string | null
+          stripe_customer_id: string | null
+          subscription_plan: Database["public"]["Enums"]["subscription_plan"]
+          subscription_status: Database["public"]["Enums"]["subscription_status"]
+          trial_ends_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email: string
+          full_name?: string | null
+          id: string
+          marketing_emails_opt_in?: boolean
+          preferred_locale?: string | null
+          stripe_customer_id?: string | null
+          subscription_plan?: Database["public"]["Enums"]["subscription_plan"]
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string
+          full_name?: string | null
+          id?: string
+          marketing_emails_opt_in?: boolean
+          preferred_locale?: string | null
+          stripe_customer_id?: string | null
+          subscription_plan?: Database["public"]["Enums"]["subscription_plan"]
+          subscription_status?: Database["public"]["Enums"]["subscription_status"]
+          trial_ends_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean
+          canceled_at: string | null
+          created_at: string
+          current_period_end: string
+          current_period_start: string
+          id: string
+          plan: Database["public"]["Enums"]["subscription_plan"]
+          profile_id: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          stripe_price_id: string
+          stripe_subscription_id: string
+          trial_end: string | null
+          trial_start: string | null
+          updated_at: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          created_at?: string
+          current_period_end: string
+          current_period_start: string
+          id?: string
+          plan: Database["public"]["Enums"]["subscription_plan"]
+          profile_id: string
+          status: Database["public"]["Enums"]["subscription_status"]
+          stripe_price_id: string
+          stripe_subscription_id: string
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          created_at?: string
+          current_period_end?: string
+          current_period_start?: string
+          id?: string
+          plan?: Database["public"]["Enums"]["subscription_plan"]
+          profile_id?: string
+          status?: Database["public"]["Enums"]["subscription_status"]
+          stripe_price_id?: string
+          stripe_subscription_id?: string
+          trial_end?: string | null
+          trial_start?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_params: {
+        Row: {
+          apport: number
+          budget_max: number | null
+          created_at: string
+          duree_credit_ans: number
+          id: string
+          profile_id: string
+          rendement_min_pct: number
+          scoring_weights: Json | null
+          strategy: Database["public"]["Enums"]["strategy_type"]
+          taux_credit_pct: number
+          tmi_pct: number
+          tolerance_travaux: Database["public"]["Enums"]["travaux_tolerance"]
+          updated_at: string
+        }
+        Insert: {
+          apport?: number
+          budget_max?: number | null
+          created_at?: string
+          duree_credit_ans?: number
+          id?: string
+          profile_id: string
+          rendement_min_pct?: number
+          scoring_weights?: Json | null
+          strategy?: Database["public"]["Enums"]["strategy_type"]
+          taux_credit_pct?: number
+          tmi_pct?: number
+          tolerance_travaux?: Database["public"]["Enums"]["travaux_tolerance"]
+          updated_at?: string
+        }
+        Update: {
+          apport?: number
+          budget_max?: number | null
+          created_at?: string
+          duree_credit_ans?: number
+          id?: string
+          profile_id?: string
+          rendement_min_pct?: number
+          scoring_weights?: Json | null
+          strategy?: Database["public"]["Enums"]["strategy_type"]
+          taux_credit_pct?: number
+          tmi_pct?: number
+          tolerance_travaux?: Database["public"]["Enums"]["travaux_tolerance"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_params_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      watches: {
+        Row: {
+          created_at: string
+          frequency: Database["public"]["Enums"]["watch_frequency"]
+          id: string
+          is_active: boolean
+          last_analysis_id: string | null
+          last_run_at: string | null
+          name: string
+          next_run_at: string
+          notify_email: boolean
+          notify_push: boolean
+          notify_telegram: boolean
+          profile_id: string
+          score_threshold: number
+          source_site: Database["public"]["Enums"]["listing_source"]
+          source_url: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          frequency?: Database["public"]["Enums"]["watch_frequency"]
+          id?: string
+          is_active?: boolean
+          last_analysis_id?: string | null
+          last_run_at?: string | null
+          name: string
+          next_run_at?: string
+          notify_email?: boolean
+          notify_push?: boolean
+          notify_telegram?: boolean
+          profile_id: string
+          score_threshold?: number
+          source_site: Database["public"]["Enums"]["listing_source"]
+          source_url: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          frequency?: Database["public"]["Enums"]["watch_frequency"]
+          id?: string
+          is_active?: boolean
+          last_analysis_id?: string | null
+          last_run_at?: string | null
+          name?: string
+          next_run_at?: string
+          notify_email?: boolean
+          notify_push?: boolean
+          notify_telegram?: boolean
+          profile_id?: string
+          score_threshold?: number
+          source_site?: Database["public"]["Enums"]["listing_source"]
+          source_url?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "watches_last_analysis_id_fkey"
+            columns: ["last_analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "watches_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      listings_freemium_view: {
+        Row: {
+          adresse_geocoded: string | null
+          adresse_raw: string | null
+          analysis_id: string | null
+          annee_construction: number | null
+          ascenseur: boolean | null
+          balcon: boolean | null
+          cashflow_mensuel: number | null
+          cave: boolean | null
+          chambres: number | null
+          charges_copro_annuelles: number | null
+          code_postal: string | null
+          description: string | null
+          dpe: string | null
+          ecart_prix_pct: number | null
+          etage: number | null
+          external_id: string | null
+          financement_claude: string | null
+          ges: string | null
+          id: string | null
+          is_exclusive: boolean | null
+          is_masked: boolean | null
+          is_new_construction: boolean | null
+          is_passoire_dpe: boolean | null
+          lat: number | null
+          lng: number | null
+          loyer_estime: number | null
+          negociation_claude: string | null
+          parking: boolean | null
+          photos_urls: string[] | null
+          pieces: number | null
+          prix: number | null
+          prix_marche_estime: number | null
+          prix_negociation_cible: number | null
+          published_at: string | null
+          rendement_brut_pct: number | null
+          rendement_net_pct: number | null
+          score_cashflow: number | null
+          score_dpe: number | null
+          score_prix: number | null
+          score_quartier: number | null
+          score_rendement: number | null
+          score_risques: number | null
+          score_total: number | null
+          scraped_at: string | null
+          source_site: Database["public"]["Enums"]["listing_source"] | null
+          source_url: string | null
+          surface: number | null
+          taxe_fonciere: number | null
+          terrasse: boolean | null
+          these_claude: string | null
+          title: string | null
+          type: Database["public"]["Enums"]["bien_type"] | null
+          verdict: Database["public"]["Enums"]["verdict_type"] | null
+          ville: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listings_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Functions: {
+      current_month_analyses_count: {
+        Args: { p_profile_id: string }
+        Returns: number
+      }
+      current_user_plan: {
+        Args: never
+        Returns: Database["public"]["Enums"]["subscription_plan"]
+      }
+      is_user_paid: { Args: never; Returns: boolean }
+    }
+    Enums: {
+      analysis_status:
+        | "pending"
+        | "scraping"
+        | "enriching"
+        | "scoring"
+        | "generating"
+        | "done"
+        | "failed"
+      bien_type: "appartement" | "maison" | "terrain" | "immeuble" | "autre"
+      listing_source: "seloger" | "leboncoin" | "bienici" | "pap" | "logic_immo"
+      pipeline_stage: "a_visiter" | "visite" | "offre" | "compromis" | "signe"
+      strategy_type:
+        | "locatif_nu"
+        | "lmnp_meuble"
+        | "mixte"
+        | "colocation"
+        | "courte_duree"
+      subscription_plan: "free" | "pro" | "pro_plus"
+      subscription_status:
+        | "active"
+        | "trialing"
+        | "past_due"
+        | "canceled"
+        | "incomplete"
+        | "incomplete_expired"
+        | "unpaid"
+      travaux_tolerance: "aucun" | "leger" | "moyen" | "lourd"
+      verdict_type: "a_visiter" | "sous_reserve" | "no_go"
+      watch_frequency: "daily" | "three_days" | "weekly"
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
+}
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {
+      analysis_status: [
+        "pending",
+        "scraping",
+        "enriching",
+        "scoring",
+        "generating",
+        "done",
+        "failed",
+      ],
+      bien_type: ["appartement", "maison", "terrain", "immeuble", "autre"],
+      listing_source: ["seloger", "leboncoin", "bienici", "pap", "logic_immo"],
+      pipeline_stage: ["a_visiter", "visite", "offre", "compromis", "signe"],
+      strategy_type: [
+        "locatif_nu",
+        "lmnp_meuble",
+        "mixte",
+        "colocation",
+        "courte_duree",
+      ],
+      subscription_plan: ["free", "pro", "pro_plus"],
+      subscription_status: [
+        "active",
+        "trialing",
+        "past_due",
+        "canceled",
+        "incomplete",
+        "incomplete_expired",
+        "unpaid",
+      ],
+      travaux_tolerance: ["aucun", "leger", "moyen", "lourd"],
+      verdict_type: ["a_visiter", "sous_reserve", "no_go"],
+      watch_frequency: ["daily", "three_days", "weekly"],
+    },
+  },
+} as const
