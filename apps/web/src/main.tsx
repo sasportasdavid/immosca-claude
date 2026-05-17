@@ -7,21 +7,17 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import "./index.css";
+import { initPostHog } from "./lib/posthog";
 import { initSentry } from "./lib/sentry";
 import { routeTree } from "./routeTree.gen";
 
 // ────────── Observability ──────────
-// Sentry init centralisé dans lib/sentry.ts (beforeSend / beforeBreadcrumb
-// scrub PII complet). Idempotent et no-op si VITE_SENTRY_DSN_WEB absente.
+// Sentry et PostHog initialisés via modules dédiés dans lib/. Tous deux :
+// - centralisent les options conformes à notre politique anti-PII
+// - sont idempotents et no-op si la clé d'env correspondante est absente
+// Cf lib/sentry.ts et lib/posthog.ts pour le détail des scrubs et configs.
 initSentry();
-
-if (import.meta.env.VITE_POSTHOG_KEY) {
-  posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
-    api_host: import.meta.env.VITE_POSTHOG_HOST ?? "https://eu.posthog.com",
-    capture_pageview: false, // géré par le router
-    person_profiles: "identified_only",
-  });
-}
+initPostHog();
 
 // ────────── Routing ──────────
 const router = createRouter({ routeTree });
