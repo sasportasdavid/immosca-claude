@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ConfidentialiteRouteImport } from './routes/confidentialite'
+import { Route as CguRouteImport } from './routes/cgu'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as OnboardingStep2RouteImport } from './routes/onboarding/step-2'
 import { Route as OnboardingStep1RouteImport } from './routes/onboarding/step-1'
@@ -20,6 +22,16 @@ import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfidentialiteRoute = ConfidentialiteRouteImport.update({
+  id: '/confidentialite',
+  path: '/confidentialite',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CguRoute = CguRouteImport.update({
+  id: '/cgu',
+  path: '/cgu',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -55,6 +67,8 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/cgu': typeof CguRoute
+  '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
@@ -64,6 +78,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/cgu': typeof CguRoute
+  '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
@@ -74,6 +90,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/cgu': typeof CguRoute
+  '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
@@ -85,6 +103,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/cgu'
+    | '/confidentialite'
     | '/dashboard'
     | '/auth/callback'
     | '/auth/login'
@@ -94,6 +114,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/cgu'
+    | '/confidentialite'
     | '/dashboard'
     | '/auth/callback'
     | '/auth/login'
@@ -103,6 +125,8 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/cgu'
+    | '/confidentialite'
     | '/dashboard'
     | '/auth/callback'
     | '/auth/login'
@@ -113,6 +137,8 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CguRoute: typeof CguRoute
+  ConfidentialiteRoute: typeof ConfidentialiteRoute
   DashboardRoute: typeof DashboardRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
@@ -128,6 +154,20 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/confidentialite': {
+      id: '/confidentialite'
+      path: '/confidentialite'
+      fullPath: '/confidentialite'
+      preLoaderRoute: typeof ConfidentialiteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cgu': {
+      id: '/cgu'
+      path: '/cgu'
+      fullPath: '/cgu'
+      preLoaderRoute: typeof CguRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -177,6 +217,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CguRoute: CguRoute,
+  ConfidentialiteRoute: ConfidentialiteRoute,
   DashboardRoute: DashboardRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,

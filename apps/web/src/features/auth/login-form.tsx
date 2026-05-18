@@ -74,6 +74,22 @@ function GoogleIcon() {
   );
 }
 
+/**
+ * Lit `?redirect=<path>` de l'URL et retourne un chemin sûr (interne).
+ * Refuse les URLs absolues (open redirect) et les protocole-relative
+ * (`//evil.com`). Defaut: `/dashboard`.
+ */
+function safeRedirectFromQuery(): "/dashboard" | string {
+  if (typeof window === "undefined") return "/dashboard";
+  const raw = new URLSearchParams(window.location.search).get("redirect");
+  if (!raw) return "/dashboard";
+  // Doit commencer par `/` et NE PAS commencer par `//` ou `/\`
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) {
+    return "/dashboard";
+  }
+  return raw;
+}
+
 export function LoginForm() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -86,7 +102,13 @@ export function LoginForm() {
     onSuccess: () => {
       posthog.capture("login_completed", { method: "password" });
       toast.success("Bienvenue !");
-      navigate({ to: "/dashboard" });
+      // Honore `?redirect=<from>` posé par les guards beforeLoad (cf
+      // lib/auth-guards.ts).
+      const target = safeRedirectFromQuery();
+      // `as never` parce que TanStack Router type-check le `to` contre
+      // le union des routes connues — ici on accepte un chemin string
+      // arbitraire validé par safeRedirectFromQuery.
+      navigate({ to: target as never });
     },
     onError: (err) => toast.error(mapAuthError(err)),
   });
