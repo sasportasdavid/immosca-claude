@@ -22,7 +22,7 @@ import { z } from "zod";
 
 import { Sentry } from "@/lib/sentry";
 import { supabaseApp, supabaseData } from "@/lib/supabase";
-import { runApifyActor } from "@/services/apify";
+import { buildApifyRunInput, runApifyActor } from "@/services/apify";
 import {
   APIFY_MAPPERS,
   type ListingInsert,
@@ -107,11 +107,7 @@ export const analyzeTask = task({
 
       const apifyResult = await runApifyActor<RawApifyListing>({
         actorId: resolvedActorId,
-        runInput: {
-          startUrls: [{ url: analysis.source_url }],
-          // Limit conservateur — cf MAX_LISTINGS_PER_ANALYSIS dans shared
-          maxItems: 1000,
-        },
+        runInput: buildApifyRunInput(resolvedActorId, analysis.source_url),
       });
 
       logger.info("Apify done", {

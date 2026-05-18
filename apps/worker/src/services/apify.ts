@@ -1,24 +1,23 @@
-// Wrapper Apify client — exécute un actor public SeLoger ou Leboncoin
-// et retourne les résultats normalisés. Avec budget tracking (alerte
-// BetterStack si dépasse 150 €/mois) et retry exponentiel.
+// Wrapper Apify avec fetch HTTP direct vers l'API REST v2.
 //
-// Les actors publics et leurs schémas d'input changent : on garde
-// l'API du wrapper paramétrable (`actorId`, `runInput`) et on laisse
-// les mappers (`apify-mappers.ts`) s'occuper de la transformation
-// raw → listingInputSchema. Le PO choisit l'actor au moment de
-// l'activation Apify et l'enregistre dans les env vars.
+// On utilisait `apify-client` (npm) mais il crashe sur Node 21 (Trigger.dev
+// runtime) avec "ProxyAgent is not a constructor" — bug undici/ESM dans
+// le bundler. Le passer en `additionalPackages` n'a pas suffi.
+//
+// L'API REST Apify est stable et simple. On fait :
+//   1. POST /v2/acts/{actorId}/runs → lance le run (renvoie runId, datasetId)
+//   2. Poll GET /v2/actor-runs/{runId} jusqu'à SUCCEEDED/FAILED
+//   3. GET /v2/datasets/{datasetId}/items → récupère les items scrapés
+//
+// Doc : https://docs.apify.com/api/v2
 
-import { ApifyClient } from "apify-client";
 import pRetry from "p-retry";
 
 const APIFY_TOKEN = process.env.APIFY_TOKEN;
-if (!APIFY_TOKEN && process.env.NODE_ENV === "production") {
-  throw new Error("APIFY_TOKEN manquant — Apify ne fonctionnera pas en prod");
-}
-
-const apify = APIFY_TOKEN ? new ApifyClient({ token: APIFY_TOKEN }) : null;
+const APIFY_BASE = "https://api.apify.com/v2";
 
 export type ApifyRunOptions = {
+  /** Format `username/actor-name` (slash) ou `username~actor-name` (tilde). */
   actorId: string;
   runInput: Record<string, unknown>;
   /** Timeout total du run en secondes (defaut 480 = 8 min). */
@@ -38,57 +37,136 @@ export type ApifyRunResult<T = unknown> = {
   };
 };
 
+type RunMeta = {
+  data: {
+    id: string;
+    status: "READY" | "RUNNING" | "SUCCEEDED" | "FAILED" | "ABORTED" | "TIMING-OUT" | "TIMED-OUT";
+    defaultDatasetId: string;
+    usage?: { COMPUTE_UNITS?: number };
+  };
+};
+
+function normalizeActorId(id: string): string {
+  // L'API accepte `user~actor` dans l'URL (le `/` doit être encodé sinon).
+  return id.replace("/", "~");
+}
+
+async function apifyFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  if (!APIFY_TOKEN) throw new Error("APIFY_TOKEN manquant");
+  const res = await fetch(`${APIFY_BASE}${path}`, {
+    ...init,
+    headers: {
+      ...init?.headers,
+      Authorization: `Bearer ${APIFY_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Apify API ${res.status} on ${path}: ${body.slice(0, 300)}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 /**
- * Lance un actor Apify, attend le résultat, retourne les items du dataset.
- * Throw si l'actor fail ou si le budget mensuel est dépassé.
+ * Lance un actor Apify, attend la fin, retourne les items du dataset.
+ * Throw si l'actor fail ou si le run timeout côté worker.
  */
 export async function runApifyActor<T>(
   opts: ApifyRunOptions,
 ): Promise<ApifyRunResult<T>> {
-  if (!apify) {
-    throw new Error("Apify client non initialisé (APIFY_TOKEN manquant)");
+  if (!APIFY_TOKEN) {
+    throw new Error("APIFY_TOKEN manquant — Apify ne fonctionnera pas");
   }
 
   const startMs = Date.now();
-  const run = await pRetry(
-    async () =>
-      apify.actor(opts.actorId).call(opts.runInput, {
-        timeout: opts.timeoutSecs ?? 480,
-        memory: opts.memoryMbytes ?? 2048,
-      }),
-    { retries: 2, minTimeout: 5000 },
+  const actorId = normalizeActorId(opts.actorId);
+  const timeoutSecs = opts.timeoutSecs ?? 480;
+  const memoryMbytes = opts.memoryMbytes ?? 2048;
+
+  // 1. Démarrage du run (avec retry sur erreurs réseau transitoires)
+  const startRes = await pRetry(
+    () =>
+      apifyFetch<RunMeta>(
+        `/acts/${actorId}/runs?timeout=${timeoutSecs}&memory=${memoryMbytes}`,
+        {
+          method: "POST",
+          body: JSON.stringify(opts.runInput),
+        },
+      ),
+    { retries: 2, minTimeout: 5_000 },
+  );
+  const runId = startRes.data.id;
+
+  // 2. Poll status jusqu'à terminaison
+  const deadline = Date.now() + timeoutSecs * 1000 + 30_000; // marge 30s
+  let runMeta: RunMeta = startRes;
+  while (runMeta.data.status === "READY" || runMeta.data.status === "RUNNING") {
+    if (Date.now() > deadline) {
+      throw new Error(`Apify run ${runId} timeout côté worker après ${timeoutSecs}s`);
+    }
+    await new Promise((r) => setTimeout(r, 5_000));
+    runMeta = await apifyFetch<RunMeta>(`/actor-runs/${runId}`);
+  }
+
+  if (runMeta.data.status !== "SUCCEEDED") {
+    throw new Error(
+      `Apify run ${runId} terminé en status=${runMeta.data.status}`,
+    );
+  }
+
+  // 3. Récupère les items du dataset par défaut
+  const items = await apifyFetch<T[]>(
+    `/datasets/${runMeta.data.defaultDatasetId}/items?clean=true&format=json`,
   );
 
-  const dataset = await apify.dataset(run.defaultDatasetId).listItems();
-  const items = dataset.items as T[];
-
-  const durationMs = Date.now() - startMs;
-  // Conversion grossière compute units → coût (Apify facture ~0.25$/CU).
-  // À calibrer quand on aura les vrais factures.
-  const computeUnits = (run.usage as Record<string, number> | undefined)
-    ?.COMPUTE_UNITS ?? 0;
-  const estimatedCostEur = computeUnits * 0.22; // EUR
+  const computeUnits = runMeta.data.usage?.COMPUTE_UNITS ?? 0;
+  // Conversion grossière (Apify facture ~0.25$/CU, ~0.22€). À calibrer.
+  const estimatedCostEur = computeUnits * 0.22;
 
   return {
-    runId: run.id,
-    status: run.status,
+    runId,
+    status: runMeta.data.status,
     items,
-    stats: { durationMs, computeUnits, estimatedCostEur },
+    stats: {
+      durationMs: Date.now() - startMs,
+      computeUnits,
+      estimatedCostEur,
+    },
   };
 }
 
 /**
- * Lit le coût Apify cumulé du mois courant (somme estimatedCost des
- * `analyses.apify_run_id` du mois) et retourne `true` si on dépasse
- * le budget mensuel.
+ * Construit l'input JSON à passer à un actor selon ses conventions.
  *
- * À appeler avant chaque run pour décider de skip + alerter BetterStack.
- * Pas câblé sur BetterStack dans ce commit — TODO PR3.5.
+ * Chaque actor Apify a son propre schema d'input. On dispatch ici sur
+ * l'actorId connu. Si tu changes d'actor, ajoute un case ici.
+ * Si on ne reconnaît pas l'actor, on tombe sur le format Apify "standard"
+ * (`startUrls` array) — ça marche pour la plupart des scrapers
+ * communautaires basés sur le SDK Apify officiel.
+ */
+export function buildApifyRunInput(
+  actorId: string,
+  sourceUrl: string,
+): Record<string, unknown> {
+  const id = actorId.toLowerCase();
+
+  // azzouzana/* : `startUrl` (string singulier) + `maxItems`
+  if (id.includes("azzouzana")) {
+    return { startUrl: sourceUrl, maxItems: 1000 };
+  }
+
+  // Format standard Apify (la plupart des scrapers communautaires)
+  return {
+    startUrls: [{ url: sourceUrl }],
+    maxItems: 1000,
+  };
+}
+
+/**
+ * Skeleton : on retourne false en attendant une table `apify_run_costs`
+ * pour calculer le cumul mensuel. À câbler avec BetterStack en PR3.5.
  */
 export async function isBudgetExceeded(_supabaseApp: unknown): Promise<boolean> {
-  // Skeleton : pour calculer le cumul, on aurait besoin d'une table
-  // dédiée `apify_run_costs` ou d'un champ `estimated_cost_eur` dans
-  // `analyses`. Migration séparée à prévoir.
-  // En attendant, on retourne false (= jamais bloqué).
   return false;
 }

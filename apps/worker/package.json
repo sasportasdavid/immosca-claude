@@ -19,7 +19,6 @@
     "@sentry/node": "^8.30.0",
     "@supabase/supabase-js": "^2.45.4",
     "@trigger.dev/sdk": "4.4.6",
-    "apify-client": "^2.23.3",
     "csv-parse": "^6.2.1",
     "p-queue": "^9.3.0",
     "p-retry": "^6.2.0",
