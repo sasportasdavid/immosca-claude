@@ -12,20 +12,14 @@
 // /dashboard ; le succès Google se fait via le callback.
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { Mail } from "lucide-react";
+import posthog from "posthog-js";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
-import { mapAuthError } from "@/features/auth/auth-error";
-import {
-  type LoginInput,
-  type MagicLinkInput,
-  loginSchema,
-  magicLinkSchema,
-} from "@/features/auth/schemas";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -36,8 +30,14 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { mapAuthError } from "@/features/auth/auth-error";
+import {
+  type LoginInput,
+  type MagicLinkInput,
+  loginSchema,
+  magicLinkSchema,
+} from "@/features/auth/schemas";
 import { useAuth } from "@/hooks/use-auth";
-import posthog from "posthog-js";
 
 function Divider({ label }: { label: string }) {
   return (

@@ -1,5 +1,5 @@
-import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import type { StrategyType } from "@immoscan/shared";
+import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 
 import { cn } from "@/lib/utils";
 

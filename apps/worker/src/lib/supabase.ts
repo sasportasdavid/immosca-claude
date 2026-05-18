@@ -1,6 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
 import type { Database as AppDatabase } from "@immoscan/db/app";
 import type { Database as DataDatabase } from "@immoscan/db/data";
+import { createClient } from "@supabase/supabase-js";
 
 function requireEnv(key: string): string {
   const value = process.env[key];

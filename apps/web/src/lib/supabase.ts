@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@immoscan/db/app";
+import { createClient } from "@supabase/supabase-js";
 
 // Client Supabase pour le projet IMMOSCAN-APP (transactionnel).
 // Ne JAMAIS instancier de client pour immoscan-data côté frontend.

@@ -9,6 +9,7 @@
 // soient enrichis du plan courant. Conforme à la politique PII (plan =
 // pas une PII, c'est une property utile pour la segmentation produit).
 
+import type { Database } from "@immoscan/db/app";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 
@@ -16,7 +17,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { setUserProperties } from "@/lib/posthog";
 import { supabase } from "@/lib/supabase";
 
-import type { Database } from "@immoscan/db/app";
 
 export type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 

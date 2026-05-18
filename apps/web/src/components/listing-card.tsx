@@ -1,8 +1,8 @@
 import { Lock, Pin } from "lucide-react";
 
+import { ScoreBadge } from "@/components/score-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { ScoreBadge } from "@/components/score-badge";
 import { cn } from "@/lib/utils";
 
 type DpeClass = "A" | "B" | "C" | "D" | "E" | "F" | "G";

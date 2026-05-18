@@ -25,9 +25,9 @@ import {
   createFileRoute,
   useNavigate,
 } from "@tanstack/react-router";
+import posthog from "posthog-js";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import posthog from "posthog-js";
 
 import { OnboardingLayout } from "@/components/onboarding-layout";
 import {

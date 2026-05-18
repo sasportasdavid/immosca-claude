@@ -1,10 +1,10 @@
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   OnboardingStepper,
   type OnboardingStepperProps,
 } from "@/components/onboarding-stepper";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 // Coquille pour les routes /onboarding/step-*. Header avec logo + stepper,

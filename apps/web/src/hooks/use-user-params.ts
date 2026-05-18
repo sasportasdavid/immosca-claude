@@ -13,13 +13,13 @@
 // l'upsert (defense-in-depth — les forms RHF utilisent déjà zodResolver,
 // mais on re-parse au cas où on appelle la mutation hors form).
 
+import type { Database } from "@immoscan/db/app";
 import { type UserParamsInput, userParamsInputSchema } from "@immoscan/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
 
-import type { Database } from "@immoscan/db/app";
 
 export type UserParamsRow = Database["public"]["Tables"]["user_params"]["Row"];
 

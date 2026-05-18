@@ -14,14 +14,13 @@
 // - signup_completed → après signup réussi (avec method)
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import posthog from "posthog-js";
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 
-import { mapAuthError } from "@/features/auth/auth-error";
-import { type SignupInput, signupSchema } from "@/features/auth/schemas";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -33,8 +32,10 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { mapAuthError } from "@/features/auth/auth-error";
+import { type SignupInput, signupSchema } from "@/features/auth/schemas";
 import { useAuth } from "@/hooks/use-auth";
-import posthog from "posthog-js";
+
 
 function Divider({ label }: { label: string }) {
   return (

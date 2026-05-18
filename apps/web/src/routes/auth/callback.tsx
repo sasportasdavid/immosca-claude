@@ -11,9 +11,9 @@
 // pas là, on bascule sur /auth/login avec un toast d'erreur.
 
 import { Navigate, createFileRoute, useNavigate } from "@tanstack/react-router";
+import posthog from "posthog-js";
 import { useEffect } from "react";
 import { toast } from "sonner";
-import posthog from "posthog-js";
 
 import { useAuth } from "@/hooks/use-auth";
 
