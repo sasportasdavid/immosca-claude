@@ -100,6 +100,28 @@ export function piiBeforeSend(event: ErrorEvent, _hint?: EventHint): ErrorEvent 
  * No-op si VITE_SENTRY_DSN_WEB est absente (dev sans Sentry configuré).
  * Idempotent : si déjà initialisée, Sentry.init() écrase la config.
  */
+/**
+ * Identifie l'utilisateur courant pour Sentry.
+ *
+ * Politique PII (cf piiBeforeSend) : on passe UNIQUEMENT le `userId`.
+ * Sentry stocke `event.user.id` mais jamais email/username/ip_address
+ * (filtrés par notre beforeSend de toute façon).
+ *
+ * À appeler depuis le listener `supabase.auth.onAuthStateChange` sur
+ * l'événement SIGNED_IN. No-op si Sentry non initialisé.
+ */
+export function setSentryUser(userId: string): void {
+  Sentry.setUser({ id: userId });
+}
+
+/**
+ * Reset Sentry user à la déconnexion. Les événements ultérieurs
+ * n'auront plus de `user.id` rattaché.
+ */
+export function clearSentryUser(): void {
+  Sentry.setUser(null);
+}
+
 export function initSentry(): void {
   const dsn = import.meta.env.VITE_SENTRY_DSN_WEB;
   if (!dsn) return;

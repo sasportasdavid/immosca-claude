@@ -51,6 +51,44 @@ export function initPostHog(): void {
 }
 
 /**
+ * Identifie l'utilisateur courant pour PostHog.
+ *
+ * Politique PII : on passe UNIQUEMENT le `userId` (UUID Supabase),
+ * jamais l'email/le nom. Les person properties optionnelles peuvent
+ * contenir le plan, mais PAS de PII (email, adresse, téléphone).
+ *
+ * À appeler depuis le listener `supabase.auth.onAuthStateChange` sur
+ * l'événement SIGNED_IN. No-op si PostHog non initialisé.
+ */
+export function identifyUser(
+  userId: string,
+  personProperties?: Record<string, unknown>,
+): void {
+  if (!initialized) return;
+  posthog.identify(userId, personProperties);
+}
+
+/**
+ * Met à jour les person properties PostHog (`$set`) sans changer
+ * l'identifiant. Typique : update du plan après upgrade Stripe.
+ *
+ * Même politique PII : pas d'email, pas d'adresse, etc.
+ */
+export function setUserProperties(properties: Record<string, unknown>): void {
+  if (!initialized) return;
+  posthog.setPersonProperties(properties);
+}
+
+/**
+ * Reset PostHog à la déconnexion : oublie le distinct_id user et
+ * regénère un anonyme. À appeler sur SIGNED_OUT.
+ */
+export function resetUser(): void {
+  if (!initialized) return;
+  posthog.reset();
+}
+
+/**
  * Capture un pageview PostHog avec scrub PII sur l'URL.
  *
  * Construit `$current_url` à partir de pathname + searchStr (si fourni),
