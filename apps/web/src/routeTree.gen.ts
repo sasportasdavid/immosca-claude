@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OnboardingStep2RouteImport } from './routes/onboarding/step-2'
 import { Route as OnboardingStep1RouteImport } from './routes/onboarding/step-1'
 import { Route as DevComponentsRouteImport } from './routes/dev/components'
 import { Route as AuthSignupRouteImport } from './routes/auth/signup'
@@ -28,6 +29,11 @@ const DashboardRoute = DashboardRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingStep2Route = OnboardingStep2RouteImport.update({
+  id: '/onboarding/step-2',
+  path: '/onboarding/step-2',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OnboardingStep1Route = OnboardingStep1RouteImport.update({
@@ -80,6 +86,7 @@ export interface FileRoutesByFullPath {
   '/auth/signup': typeof AuthSignupRoute
   '/dev/components': typeof DevComponentsRoute
   '/onboarding/step-1': typeof OnboardingStep1Route
+  '/onboarding/step-2': typeof OnboardingStep2Route
   '/dev/preview/app-shell': typeof DevPreviewAppShellRoute
   '/dev/preview/auth-layout': typeof DevPreviewAuthLayoutRoute
   '/dev/preview/onboarding-layout': typeof DevPreviewOnboardingLayoutRoute
@@ -92,6 +99,7 @@ export interface FileRoutesByTo {
   '/auth/signup': typeof AuthSignupRoute
   '/dev/components': typeof DevComponentsRoute
   '/onboarding/step-1': typeof OnboardingStep1Route
+  '/onboarding/step-2': typeof OnboardingStep2Route
   '/dev/preview/app-shell': typeof DevPreviewAppShellRoute
   '/dev/preview/auth-layout': typeof DevPreviewAuthLayoutRoute
   '/dev/preview/onboarding-layout': typeof DevPreviewOnboardingLayoutRoute
@@ -105,6 +113,7 @@ export interface FileRoutesById {
   '/auth/signup': typeof AuthSignupRoute
   '/dev/components': typeof DevComponentsRoute
   '/onboarding/step-1': typeof OnboardingStep1Route
+  '/onboarding/step-2': typeof OnboardingStep2Route
   '/dev/preview/app-shell': typeof DevPreviewAppShellRoute
   '/dev/preview/auth-layout': typeof DevPreviewAuthLayoutRoute
   '/dev/preview/onboarding-layout': typeof DevPreviewOnboardingLayoutRoute
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
     | '/auth/signup'
     | '/dev/components'
     | '/onboarding/step-1'
+    | '/onboarding/step-2'
     | '/dev/preview/app-shell'
     | '/dev/preview/auth-layout'
     | '/dev/preview/onboarding-layout'
@@ -131,6 +141,7 @@ export interface FileRouteTypes {
     | '/auth/signup'
     | '/dev/components'
     | '/onboarding/step-1'
+    | '/onboarding/step-2'
     | '/dev/preview/app-shell'
     | '/dev/preview/auth-layout'
     | '/dev/preview/onboarding-layout'
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '/auth/signup'
     | '/dev/components'
     | '/onboarding/step-1'
+    | '/onboarding/step-2'
     | '/dev/preview/app-shell'
     | '/dev/preview/auth-layout'
     | '/dev/preview/onboarding-layout'
@@ -156,6 +168,7 @@ export interface RootRouteChildren {
   AuthSignupRoute: typeof AuthSignupRoute
   DevComponentsRoute: typeof DevComponentsRoute
   OnboardingStep1Route: typeof OnboardingStep1Route
+  OnboardingStep2Route: typeof OnboardingStep2Route
   DevPreviewAppShellRoute: typeof DevPreviewAppShellRoute
   DevPreviewAuthLayoutRoute: typeof DevPreviewAuthLayoutRoute
   DevPreviewOnboardingLayoutRoute: typeof DevPreviewOnboardingLayoutRoute
@@ -175,6 +188,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding/step-2': {
+      id: '/onboarding/step-2'
+      path: '/onboarding/step-2'
+      fullPath: '/onboarding/step-2'
+      preLoaderRoute: typeof OnboardingStep2RouteImport
       parentRoute: typeof rootRouteImport
     }
     '/onboarding/step-1': {
@@ -244,6 +264,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthSignupRoute: AuthSignupRoute,
   DevComponentsRoute: DevComponentsRoute,
   OnboardingStep1Route: OnboardingStep1Route,
+  OnboardingStep2Route: OnboardingStep2Route,
   DevPreviewAppShellRoute: DevPreviewAppShellRoute,
   DevPreviewAuthLayoutRoute: DevPreviewAuthLayoutRoute,
   DevPreviewOnboardingLayoutRoute: DevPreviewOnboardingLayoutRoute,
