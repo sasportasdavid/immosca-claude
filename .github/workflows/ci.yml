@@ -1,0 +1,169 @@
+# CI ImmoScan
+#
+# 2 jobs parallèles :
+# - quality : typecheck + lint + test (Vitest) sur tous les packages
+# - migrations-check : applique les migrations SQL sur une DB vierge
+#   Postgres 15 + PostGIS pour valider qu'aucune migration ne plante
+#   au déploiement initial (protection contre Bug 1 et Bug 6 de
+#   docs/07-bugs-ancien-starter-a-eviter.md).
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  quality:
+    name: Typecheck · Lint · Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
+
+  migrations-check:
+    name: Migrations sur DB vierge (Postgres 15 + PostGIS)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:15-3.4
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres; then exit 0; fi
+            sleep 1
+          done
+          echo "Postgres did not become ready" >&2
+          exit 1
+
+      # ─── immoscan-app ───
+      # Mock minimal du schema `auth` Supabase : table `users` (référencée
+      # en FK par `profiles`) + fonction `auth.uid()` (utilisée par toutes
+      # les RLS policies). On retourne NULL pour `uid()` — pas de session
+      # en CI, les RLS bloquent par défaut, c'est l'effet recherché pour
+      # valider que les policies sont bien posées sans erreur SQL.
+
+      - name: Create immoscan_app database
+        run: psql -d postgres -c 'CREATE DATABASE immoscan_app_test;'
+
+      - name: Mock auth schema (immoscan-app)
+        run: |
+          psql -d immoscan_app_test -v ON_ERROR_STOP=1 <<'SQL'
+          create schema if not exists auth;
+
+          create table if not exists auth.users (
+            id uuid primary key default gen_random_uuid(),
+            email text,
+            raw_user_meta_data jsonb default '{}'::jsonb,
+            created_at timestamptz default now()
+          );
+
+          create or replace function auth.uid() returns uuid
+            language sql stable as $$ select null::uuid $$;
+
+          create or replace function auth.role() returns text
+            language sql stable as $$ select 'authenticated'::text $$;
+
+          create or replace function auth.email() returns text
+            language sql stable as $$ select null::text $$;
+          SQL
+
+      - name: Apply immoscan-app migrations (lexicographic order)
+        run: |
+          shopt -s nullglob
+          migrations=( supabase-app/supabase/migrations/*.sql )
+          if [ ${#migrations[@]} -eq 0 ]; then
+            echo "Aucune migration immoscan-app trouvée"
+            exit 1
+          fi
+          IFS=$'\n' sorted=($(printf "%s\n" "${migrations[@]}" | sort))
+          for m in "${sorted[@]}"; do
+            echo "::group::Apply $(basename "$m")"
+            psql -d immoscan_app_test -v ON_ERROR_STOP=1 -f "$m"
+            echo "::endgroup::"
+          done
+
+      # ─── immoscan-data ───
+      # Pas de RLS, pas de schema `auth`. PostGIS déjà installé dans
+      # l'image postgis/postgis. Mock minimal : juste la DB vierge.
+
+      - name: Create immoscan_data database
+        run: psql -d postgres -c 'CREATE DATABASE immoscan_data_test;'
+
+      - name: Apply immoscan-data migrations (lexicographic order)
+        run: |
+          shopt -s nullglob
+          migrations=( supabase-data/supabase/migrations/*.sql )
+          if [ ${#migrations[@]} -eq 0 ]; then
+            echo "Aucune migration immoscan-data trouvée"
+            exit 0
+          fi
+          IFS=$'\n' sorted=($(printf "%s\n" "${migrations[@]}" | sort))
+          for m in "${sorted[@]}"; do
+            echo "::group::Apply $(basename "$m")"
+            psql -d immoscan_data_test -v ON_ERROR_STOP=1 -f "$m"
+            echo "::endgroup::"
+          done
+
+      # Smoke check post-migrations
+      - name: Verify key objects exist (immoscan-app)
+        run: |
+          psql -d immoscan_app_test -v ON_ERROR_STOP=1 -c "
+            select 'profiles' where exists (select 1 from pg_tables where schemaname='public' and tablename='profiles');
+            select 'user_params' where exists (select 1 from pg_tables where schemaname='public' and tablename='user_params');
+            select 'listings_freemium_view' where exists (select 1 from pg_views where schemaname='public' and viewname='listings_freemium_view');
+            select 'is_user_paid' where exists (select 1 from pg_proc where proname='is_user_paid');
+          "
