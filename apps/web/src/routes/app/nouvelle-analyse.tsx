@@ -133,14 +133,25 @@ function NouvelleAnalysePage() {
       if (error) throw error;
 
       // Déclenche la task Trigger.dev `analyze` via l'Edge Function.
-      // Si l'Edge Function n'est pas déployée, l'analyse reste pending
-      // mais l'user peut la voir dans son dashboard (best-effort).
-      try {
-        await supabase.functions.invoke("trigger-analyze", {
-          body: { analysisId: data.id },
-        });
-      } catch (err) {
-        console.warn("trigger-analyze invoke failed (analyse créée quand même)", err);
+      // `supabase.functions.invoke` ne throw PAS sur erreur HTTP — il
+      // retourne `{ data, error }`. On inspecte les deux pour ne pas
+      // laisser l'user croire que l'analyse va démarrer alors que la
+      // task n'a jamais été déclenchée (zombie `pending`).
+      const invokeRes = await supabase.functions.invoke("trigger-analyze", {
+        body: { analysisId: data.id },
+      });
+      if (invokeRes.error) {
+        // Marque l'analyse failed côté DB pour éviter le zombie.
+        await supabase
+          .from("analyses")
+          .update({
+            status: "failed",
+            error_message: `trigger-analyze: ${invokeRes.error.message ?? "erreur inconnue"}`,
+          })
+          .eq("id", data.id);
+        throw new Error(
+          `Impossible de démarrer l'analyse: ${invokeRes.error.message ?? "Edge Function en erreur"}`,
+        );
       }
 
       return data;

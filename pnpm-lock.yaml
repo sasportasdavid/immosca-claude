@@ -214,7 +214,7 @@ importers:
         specifier: 4.4.6
         version: 4.4.6(zod@3.25.76)
       apify-client:
-        specifier: ^2.10.0
+        specifier: ^2.23.3
         version: 2.23.3
       csv-parse:
         specifier: ^6.2.1
