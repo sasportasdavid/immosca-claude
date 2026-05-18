@@ -11,6 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DevComponentsRouteImport } from './routes/dev/components'
+import { Route as DevPreviewOnboardingLayoutRouteImport } from './routes/dev/preview/onboarding-layout'
+import { Route as DevPreviewAuthLayoutRouteImport } from './routes/dev/preview/auth-layout'
+import { Route as DevPreviewAppShellRouteImport } from './routes/dev/preview/app-shell'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +25,75 @@ const DevComponentsRoute = DevComponentsRouteImport.update({
   path: '/dev/components',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DevPreviewOnboardingLayoutRoute =
+  DevPreviewOnboardingLayoutRouteImport.update({
+    id: '/dev/preview/onboarding-layout',
+    path: '/dev/preview/onboarding-layout',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DevPreviewAuthLayoutRoute = DevPreviewAuthLayoutRouteImport.update({
+  id: '/dev/preview/auth-layout',
+  path: '/dev/preview/auth-layout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevPreviewAppShellRoute = DevPreviewAppShellRouteImport.update({
+  id: '/dev/preview/app-shell',
+  path: '/dev/preview/app-shell',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dev/components': typeof DevComponentsRoute
+  '/dev/preview/app-shell': typeof DevPreviewAppShellRoute
+  '/dev/preview/auth-layout': typeof DevPreviewAuthLayoutRoute
+  '/dev/preview/onboarding-layout': typeof DevPreviewOnboardingLayoutRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dev/components': typeof DevComponentsRoute
+  '/dev/preview/app-shell': typeof DevPreviewAppShellRoute
+  '/dev/preview/auth-layout': typeof DevPreviewAuthLayoutRoute
+  '/dev/preview/onboarding-layout': typeof DevPreviewOnboardingLayoutRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dev/components': typeof DevComponentsRoute
+  '/dev/preview/app-shell': typeof DevPreviewAppShellRoute
+  '/dev/preview/auth-layout': typeof DevPreviewAuthLayoutRoute
+  '/dev/preview/onboarding-layout': typeof DevPreviewOnboardingLayoutRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dev/components'
+  fullPaths:
+    | '/'
+    | '/dev/components'
+    | '/dev/preview/app-shell'
+    | '/dev/preview/auth-layout'
+    | '/dev/preview/onboarding-layout'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dev/components'
-  id: '__root__' | '/' | '/dev/components'
+  to:
+    | '/'
+    | '/dev/components'
+    | '/dev/preview/app-shell'
+    | '/dev/preview/auth-layout'
+    | '/dev/preview/onboarding-layout'
+  id:
+    | '__root__'
+    | '/'
+    | '/dev/components'
+    | '/dev/preview/app-shell'
+    | '/dev/preview/auth-layout'
+    | '/dev/preview/onboarding-layout'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DevComponentsRoute: typeof DevComponentsRoute
+  DevPreviewAppShellRoute: typeof DevPreviewAppShellRoute
+  DevPreviewAuthLayoutRoute: typeof DevPreviewAuthLayoutRoute
+  DevPreviewOnboardingLayoutRoute: typeof DevPreviewOnboardingLayoutRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +112,36 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevComponentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dev/preview/onboarding-layout': {
+      id: '/dev/preview/onboarding-layout'
+      path: '/dev/preview/onboarding-layout'
+      fullPath: '/dev/preview/onboarding-layout'
+      preLoaderRoute: typeof DevPreviewOnboardingLayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/preview/auth-layout': {
+      id: '/dev/preview/auth-layout'
+      path: '/dev/preview/auth-layout'
+      fullPath: '/dev/preview/auth-layout'
+      preLoaderRoute: typeof DevPreviewAuthLayoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dev/preview/app-shell': {
+      id: '/dev/preview/app-shell'
+      path: '/dev/preview/app-shell'
+      fullPath: '/dev/preview/app-shell'
+      preLoaderRoute: typeof DevPreviewAppShellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DevComponentsRoute: DevComponentsRoute,
+  DevPreviewAppShellRoute: DevPreviewAppShellRoute,
+  DevPreviewAuthLayoutRoute: DevPreviewAuthLayoutRoute,
+  DevPreviewOnboardingLayoutRoute: DevPreviewOnboardingLayoutRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
