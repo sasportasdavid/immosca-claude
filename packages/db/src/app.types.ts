@@ -1,4 +1,3 @@
-
 export type Json =
   | string
   | number
@@ -88,6 +87,66 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      apify_listing_cache: {
+        Row: {
+          cached_at: string
+          expires_at: string
+          external_id: string
+          external_id_site: string
+          prix_at_cache: number
+          raw_data: Json
+          source_site: Database["public"]["Enums"]["listing_source"]
+        }
+        Insert: {
+          cached_at?: string
+          expires_at?: string
+          external_id: string
+          external_id_site: string
+          prix_at_cache: number
+          raw_data: Json
+          source_site: Database["public"]["Enums"]["listing_source"]
+        }
+        Update: {
+          cached_at?: string
+          expires_at?: string
+          external_id?: string
+          external_id_site?: string
+          prix_at_cache?: number
+          raw_data?: Json
+          source_site?: Database["public"]["Enums"]["listing_source"]
+        }
+        Relationships: []
+      }
+      apify_url_cache: {
+        Row: {
+          apify_run_id: string
+          cached_at: string
+          expires_at: string
+          source_site: Database["public"]["Enums"]["listing_source"]
+          source_url: string
+          total_listings: number
+          url_hash: string
+        }
+        Insert: {
+          apify_run_id: string
+          cached_at?: string
+          expires_at?: string
+          source_site: Database["public"]["Enums"]["listing_source"]
+          source_url: string
+          total_listings?: number
+          url_hash: string
+        }
+        Update: {
+          apify_run_id?: string
+          cached_at?: string
+          expires_at?: string
+          source_site?: Database["public"]["Enums"]["listing_source"]
+          source_url?: string
+          total_listings?: number
+          url_hash?: string
+        }
+        Relationships: []
       }
       listing_scores: {
         Row: {
