@@ -50,33 +50,83 @@ function inferBienType(raw: RawApifyListing): Database["public"]["Enums"]["bien_
  * Le schéma exact dépend de l'actor — ces clés sont des candidats
  * fréquents. Si certains restent null en pratique, ajuster.
  */
+/**
+ * Map un raw SeLoger Apify → row listings.
+ *
+ * Format actor `azzouzana/seloger-mass-products-scraper-by-search-url` :
+ * structure nested. Champs clés :
+ *  - `id` : externalId
+ *  - `url` : URL annonce
+ *  - `rawData.price` : prix (number direct)
+ *  - `rawData.propertyType` : FLAT / HOUSE / PROJECT (programme neuf)
+ *  - `rawData.propertySubType` : précision pour PROJECT
+ *  - `rawData.surface.main` : surface habitable (null pour PROJECT)
+ *  - `rawData.nbroom` / `rawData.nbbedroom`
+ *  - `location.address.city` / `.zipCode`
+ *  - `energyClass` : DPE (A-G, top-level)
+ *  - `hardFacts.title` : titre annonce
+ *  - `mainDescription` : description longue
+ *
+ * Fallback sur les clés génériques (raw.price, raw.title…) pour rester
+ * compatible si on change d'actor SeLoger un jour.
+ */
 export function mapSelogerRow(
   raw: RawApifyListing,
   analysisId: string,
 ): ListingInsert | null {
-  const prix = numOrNull(raw.prix ?? raw.price);
-  const externalId = strOrNull(raw.id ?? raw.idAnnonce ?? raw.reference);
+  const rawData = (raw.rawData ?? {}) as Record<string, unknown>;
+  const location = (raw.location ?? {}) as Record<string, unknown>;
+  const address = (location.address ?? {}) as Record<string, unknown>;
+  const hardFacts = (raw.hardFacts ?? {}) as Record<string, unknown>;
+  const surfaceObj = (rawData.surface ?? {}) as Record<string, unknown>;
+
+  const prix = numOrNull(rawData.price ?? raw.prix ?? raw.price);
+  const externalId = strOrNull(raw.id ?? rawData.legacy_id ?? raw.idAnnonce);
   const sourceUrl = strOrNull(raw.url ?? raw.permalink);
   if (!prix || !externalId || !sourceUrl) return null;
+
+  // Type bien : azzouzana retourne FLAT / HOUSE / PROJECT
+  const propertyType = String(rawData.propertyType ?? raw.type ?? "").toUpperCase();
+  const propertySubType = String(rawData.propertySubType ?? "").toUpperCase();
+  const inferredType =
+    propertyType === "FLAT" || propertyType === "APARTMENT"
+      ? ("appartement" as const)
+      : propertyType === "HOUSE"
+        ? ("maison" as const)
+        : propertyType === "LAND"
+          ? ("terrain" as const)
+          : propertyType === "BUILDING"
+            ? ("immeuble" as const)
+            : propertyType === "PROJECT"
+              ? propertySubType.includes("HOUSE")
+                ? ("maison" as const)
+                : ("appartement" as const)
+              : inferBienType(raw); // fallback heuristique
 
   return {
     analysis_id: analysisId,
     external_id: externalId,
     source_site: "seloger",
     source_url: sourceUrl,
-    title: strOrNull(raw.title ?? raw.titre ?? raw.descTitle) ?? "(Sans titre)",
-    description: strOrNull(raw.description ?? raw.fullDescription),
-    type: inferBienType(raw),
+    title:
+      strOrNull(hardFacts.title ?? raw.title ?? raw.titre) ?? "(Sans titre)",
+    description: strOrNull(raw.mainDescription ?? raw.description),
+    type: inferredType,
     prix,
-    surface: numOrNull(raw.surface ?? raw.surfaceHabitable),
-    pieces: numOrNull(raw.pieces ?? raw.nbPieces ?? raw.rooms),
-    chambres: numOrNull(raw.chambres ?? raw.nbChambres ?? raw.bedrooms),
-    ville: strOrNull(raw.ville ?? raw.city),
-    code_postal: strOrNull(raw.codePostal ?? raw.postalCode ?? raw.zipCode),
-    adresse_raw: strOrNull(raw.adresse ?? raw.address),
-    lat: numOrNull(raw.lat ?? raw.latitude),
-    lng: numOrNull(raw.lng ?? raw.longitude),
-    dpe: dpeOrNull(raw.dpe ?? raw.energyClass ?? raw.dpeLetter),
+    // azzouzana met la surface habitable dans rawData.surface.main (null
+    // pour les programmes neufs). On fallback sur les clés génériques.
+    surface: numOrNull(surfaceObj.main ?? raw.surface ?? raw.surfaceHabitable),
+    pieces: numOrNull(rawData.nbroom ?? raw.pieces ?? raw.nbPieces),
+    chambres: numOrNull(rawData.nbbedroom ?? raw.chambres ?? raw.nbChambres),
+    ville: strOrNull(address.city ?? raw.ville ?? raw.city),
+    code_postal: strOrNull(
+      address.zipCode ?? raw.codePostal ?? raw.postalCode,
+    ),
+    adresse_raw: strOrNull(address.street ?? raw.adresse ?? raw.address),
+    lat: numOrNull(location.lat ?? raw.lat ?? raw.latitude),
+    lng: numOrNull(location.lng ?? raw.lng ?? raw.longitude),
+    // azzouzana met le DPE en top-level `energyClass`
+    dpe: dpeOrNull(raw.energyClass ?? raw.dpe ?? raw.dpeLetter),
     ges: dpeOrNull(raw.ges ?? raw.gesLetter),
     etage: numOrNull(raw.etage ?? raw.floor),
     balcon: Boolean(raw.balcon ?? raw.balcony),
@@ -85,11 +135,16 @@ export function mapSelogerRow(
     ascenseur: Boolean(raw.ascenseur ?? raw.elevator),
     cave: Boolean(raw.cave ?? raw.cellar),
     annee_construction: numOrNull(raw.anneeConstruction ?? raw.yearBuilt),
-    photos_urls: Array.isArray(raw.photos)
-      ? (raw.photos as string[]).filter((p) => typeof p === "string")
-      : null,
+    photos_urls: Array.isArray(raw.gallery)
+      ? (raw.gallery as Array<{ src?: string } | string>)
+          .map((g) => (typeof g === "string" ? g : g.src))
+          .filter((p): p is string => typeof p === "string")
+      : Array.isArray(raw.photos)
+        ? (raw.photos as string[]).filter((p) => typeof p === "string")
+        : null,
     is_exclusive: Boolean(raw.exclusivite ?? raw.isExclusive),
-    is_new_construction: Boolean(raw.neuf ?? raw.isNew),
+    is_new_construction:
+      propertyType === "PROJECT" || Boolean(raw.neuf ?? raw.isNew),
   };
 }
 
