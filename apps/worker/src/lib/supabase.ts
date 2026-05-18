@@ -8,6 +8,7 @@
 import type { Database as AppDatabase } from "@immoscan/db/app";
 import type { Database as DataDatabase } from "@immoscan/db/data";
 import { type SupabaseClient, createClient } from "@supabase/supabase-js";
+import ws from "ws";
 
 function requireEnv(key: string): string {
   const value = process.env[key];
@@ -15,13 +16,28 @@ function requireEnv(key: string): string {
   return value;
 }
 
+// Trigger.dev cloud tourne sur Node 21 (pas de WebSocket natif avant Node
+// 22). Le client Supabase init un RealtimeClient au boot et fail sans
+// transport explicite. On n'utilise pas Realtime côté worker, mais
+// `createClient` l'initialise quand même → on passe `ws` pour éviter le
+// crash. À supprimer quand Trigger.dev passera à Node 22+.
+//
+// `ws` implémente l'interface WebSocket runtime mais les types ne matchent
+// pas exactement (ErrorEvent vs Event) → cast en any.
+// any: ws est compatible runtime mais pas typage exact
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const realtimeOpts = { transport: ws as any };
+
 let _supabaseApp: SupabaseClient<AppDatabase> | null = null;
 function getSupabaseApp(): SupabaseClient<AppDatabase> {
   if (!_supabaseApp) {
     _supabaseApp = createClient<AppDatabase>(
       requireEnv("SUPABASE_APP_URL"),
       requireEnv("SUPABASE_APP_SERVICE_ROLE_KEY"),
-      { auth: { persistSession: false, autoRefreshToken: false } },
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+        realtime: realtimeOpts,
+      },
     );
   }
   return _supabaseApp;
@@ -33,7 +49,10 @@ function getSupabaseData(): SupabaseClient<DataDatabase> {
     _supabaseData = createClient<DataDatabase>(
       requireEnv("SUPABASE_DATA_URL"),
       requireEnv("SUPABASE_DATA_SERVICE_ROLE_KEY"),
-      { auth: { persistSession: false, autoRefreshToken: false } },
+      {
+        auth: { persistSession: false, autoRefreshToken: false },
+        realtime: realtimeOpts,
+      },
     );
   }
   return _supabaseData;
