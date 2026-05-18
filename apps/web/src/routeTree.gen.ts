@@ -9,20 +9,50 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OnboardingStep1RouteImport } from './routes/onboarding/step-1'
 import { Route as DevComponentsRouteImport } from './routes/dev/components'
+import { Route as AuthSignupRouteImport } from './routes/auth/signup'
+import { Route as AuthLoginRouteImport } from './routes/auth/login'
+import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as DevPreviewOnboardingLayoutRouteImport } from './routes/dev/preview/onboarding-layout'
 import { Route as DevPreviewAuthLayoutRouteImport } from './routes/dev/preview/auth-layout'
 import { Route as DevPreviewAppShellRouteImport } from './routes/dev/preview/app-shell'
 
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OnboardingStep1Route = OnboardingStep1RouteImport.update({
+  id: '/onboarding/step-1',
+  path: '/onboarding/step-1',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DevComponentsRoute = DevComponentsRouteImport.update({
   id: '/dev/components',
   path: '/dev/components',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSignupRoute = AuthSignupRouteImport.update({
+  id: '/auth/signup',
+  path: '/auth/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthLoginRoute = AuthLoginRouteImport.update({
+  id: '/auth/login',
+  path: '/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevPreviewOnboardingLayoutRoute =
@@ -44,14 +74,24 @@ const DevPreviewAppShellRoute = DevPreviewAppShellRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/signup': typeof AuthSignupRoute
   '/dev/components': typeof DevComponentsRoute
+  '/onboarding/step-1': typeof OnboardingStep1Route
   '/dev/preview/app-shell': typeof DevPreviewAppShellRoute
   '/dev/preview/auth-layout': typeof DevPreviewAuthLayoutRoute
   '/dev/preview/onboarding-layout': typeof DevPreviewOnboardingLayoutRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/signup': typeof AuthSignupRoute
   '/dev/components': typeof DevComponentsRoute
+  '/onboarding/step-1': typeof OnboardingStep1Route
   '/dev/preview/app-shell': typeof DevPreviewAppShellRoute
   '/dev/preview/auth-layout': typeof DevPreviewAuthLayoutRoute
   '/dev/preview/onboarding-layout': typeof DevPreviewOnboardingLayoutRoute
@@ -59,7 +99,12 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/signup': typeof AuthSignupRoute
   '/dev/components': typeof DevComponentsRoute
+  '/onboarding/step-1': typeof OnboardingStep1Route
   '/dev/preview/app-shell': typeof DevPreviewAppShellRoute
   '/dev/preview/auth-layout': typeof DevPreviewAuthLayoutRoute
   '/dev/preview/onboarding-layout': typeof DevPreviewOnboardingLayoutRoute
@@ -68,21 +113,36 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/dashboard'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/signup'
     | '/dev/components'
+    | '/onboarding/step-1'
     | '/dev/preview/app-shell'
     | '/dev/preview/auth-layout'
     | '/dev/preview/onboarding-layout'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/dashboard'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/signup'
     | '/dev/components'
+    | '/onboarding/step-1'
     | '/dev/preview/app-shell'
     | '/dev/preview/auth-layout'
     | '/dev/preview/onboarding-layout'
   id:
     | '__root__'
     | '/'
+    | '/dashboard'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/signup'
     | '/dev/components'
+    | '/onboarding/step-1'
     | '/dev/preview/app-shell'
     | '/dev/preview/auth-layout'
     | '/dev/preview/onboarding-layout'
@@ -90,7 +150,12 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthLoginRoute: typeof AuthLoginRoute
+  AuthSignupRoute: typeof AuthSignupRoute
   DevComponentsRoute: typeof DevComponentsRoute
+  OnboardingStep1Route: typeof OnboardingStep1Route
   DevPreviewAppShellRoute: typeof DevPreviewAppShellRoute
   DevPreviewAuthLayoutRoute: typeof DevPreviewAuthLayoutRoute
   DevPreviewOnboardingLayoutRoute: typeof DevPreviewOnboardingLayoutRoute
@@ -98,6 +163,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -105,11 +177,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/onboarding/step-1': {
+      id: '/onboarding/step-1'
+      path: '/onboarding/step-1'
+      fullPath: '/onboarding/step-1'
+      preLoaderRoute: typeof OnboardingStep1RouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/components': {
       id: '/dev/components'
       path: '/dev/components'
       fullPath: '/dev/components'
       preLoaderRoute: typeof DevComponentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/signup': {
+      id: '/auth/signup'
+      path: '/auth/signup'
+      fullPath: '/auth/signup'
+      preLoaderRoute: typeof AuthSignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/login': {
+      id: '/auth/login'
+      path: '/auth/login'
+      fullPath: '/auth/login'
+      preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dev/preview/onboarding-layout': {
@@ -138,7 +238,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
+  AuthLoginRoute: AuthLoginRoute,
+  AuthSignupRoute: AuthSignupRoute,
   DevComponentsRoute: DevComponentsRoute,
+  OnboardingStep1Route: OnboardingStep1Route,
   DevPreviewAppShellRoute: DevPreviewAppShellRoute,
   DevPreviewAuthLayoutRoute: DevPreviewAuthLayoutRoute,
   DevPreviewOnboardingLayoutRoute: DevPreviewOnboardingLayoutRoute,
