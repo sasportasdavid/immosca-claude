@@ -18,6 +18,8 @@ import { Route as OnboardingStep1RouteImport } from './routes/onboarding/step-1'
 import { Route as AuthSignupRouteImport } from './routes/auth/signup'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as AppNouvelleAnalyseRouteImport } from './routes/app/nouvelle-analyse'
+import { Route as AppAnalysesIdRouteImport } from './routes/app/analyses/$id'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
@@ -64,28 +66,42 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppNouvelleAnalyseRoute = AppNouvelleAnalyseRouteImport.update({
+  id: '/app/nouvelle-analyse',
+  path: '/app/nouvelle-analyse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAnalysesIdRoute = AppAnalysesIdRouteImport.update({
+  id: '/app/analyses/$id',
+  path: '/app/analyses/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cgu': typeof CguRoute
   '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
+  '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/signup': typeof AuthSignupRoute
   '/onboarding/step-1': typeof OnboardingStep1Route
   '/onboarding/step-2': typeof OnboardingStep2Route
+  '/app/analyses/$id': typeof AppAnalysesIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cgu': typeof CguRoute
   '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
+  '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/signup': typeof AuthSignupRoute
   '/onboarding/step-1': typeof OnboardingStep1Route
   '/onboarding/step-2': typeof OnboardingStep2Route
+  '/app/analyses/$id': typeof AppAnalysesIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -93,11 +109,13 @@ export interface FileRoutesById {
   '/cgu': typeof CguRoute
   '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
+  '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/signup': typeof AuthSignupRoute
   '/onboarding/step-1': typeof OnboardingStep1Route
   '/onboarding/step-2': typeof OnboardingStep2Route
+  '/app/analyses/$id': typeof AppAnalysesIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -106,33 +124,39 @@ export interface FileRouteTypes {
     | '/cgu'
     | '/confidentialite'
     | '/dashboard'
+    | '/app/nouvelle-analyse'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/signup'
     | '/onboarding/step-1'
     | '/onboarding/step-2'
+    | '/app/analyses/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/cgu'
     | '/confidentialite'
     | '/dashboard'
+    | '/app/nouvelle-analyse'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/signup'
     | '/onboarding/step-1'
     | '/onboarding/step-2'
+    | '/app/analyses/$id'
   id:
     | '__root__'
     | '/'
     | '/cgu'
     | '/confidentialite'
     | '/dashboard'
+    | '/app/nouvelle-analyse'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/signup'
     | '/onboarding/step-1'
     | '/onboarding/step-2'
+    | '/app/analyses/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -140,11 +164,13 @@ export interface RootRouteChildren {
   CguRoute: typeof CguRoute
   ConfidentialiteRoute: typeof ConfidentialiteRoute
   DashboardRoute: typeof DashboardRoute
+  AppNouvelleAnalyseRoute: typeof AppNouvelleAnalyseRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthSignupRoute: typeof AuthSignupRoute
   OnboardingStep1Route: typeof OnboardingStep1Route
   OnboardingStep2Route: typeof OnboardingStep2Route
+  AppAnalysesIdRoute: typeof AppAnalysesIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -212,6 +238,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/nouvelle-analyse': {
+      id: '/app/nouvelle-analyse'
+      path: '/app/nouvelle-analyse'
+      fullPath: '/app/nouvelle-analyse'
+      preLoaderRoute: typeof AppNouvelleAnalyseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/analyses/$id': {
+      id: '/app/analyses/$id'
+      path: '/app/analyses/$id'
+      fullPath: '/app/analyses/$id'
+      preLoaderRoute: typeof AppAnalysesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -220,11 +260,13 @@ const rootRouteChildren: RootRouteChildren = {
   CguRoute: CguRoute,
   ConfidentialiteRoute: ConfidentialiteRoute,
   DashboardRoute: DashboardRoute,
+  AppNouvelleAnalyseRoute: AppNouvelleAnalyseRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthSignupRoute: AuthSignupRoute,
   OnboardingStep1Route: OnboardingStep1Route,
   OnboardingStep2Route: OnboardingStep2Route,
+  AppAnalysesIdRoute: AppAnalysesIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

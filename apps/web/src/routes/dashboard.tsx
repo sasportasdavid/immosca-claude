@@ -9,7 +9,7 @@
 // seulement quand auth + onboarding sont OK — c'est l'écran que voit
 // un user juste après son signup + 2 steps.
 
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -29,6 +29,7 @@ export const Route = createFileRoute("/dashboard")({
 function DashboardPage() {
   const auth = useAuth();
   const profile = useProfile();
+  const navigate = useNavigate();
   const email = auth.user?.email ?? "—";
   const plan = profile.data?.subscription_plan ?? "free";
 
@@ -38,6 +39,7 @@ function DashboardPage() {
       userPlan={plan}
       currentRoute="dashboard"
       onLogout={() => auth.signOut()}
+      onNewAnalysis={() => navigate({ to: "/app/nouvelle-analyse" })}
     >
       <div className="mx-auto max-w-[960px] px-6 py-12">
         {/* Greeting */}
@@ -70,13 +72,13 @@ function DashboardPage() {
             Géorisques en 8 minutes. Tu obtiens un Top 5 avec thèse Claude.
           </p>
           <div className="mt-6">
-            <Button size="lg" disabled>
-              Nouvelle analyse — disponible bientôt
+            <Button
+              size="lg"
+              onClick={() => navigate({ to: "/app/nouvelle-analyse" })}
+            >
+              Lancer une analyse
             </Button>
           </div>
-          <p className="mt-3 text-[12px] text-muted-foreground">
-            Disponible en PR3 (ingestion Apify).
-          </p>
         </div>
 
         {/* Help / next steps */}
