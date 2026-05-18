@@ -131,6 +131,18 @@ function NouvelleAnalysePage() {
         .select("id")
         .single();
       if (error) throw error;
+
+      // Déclenche la task Trigger.dev `analyze` via l'Edge Function.
+      // Si l'Edge Function n'est pas déployée, l'analyse reste pending
+      // mais l'user peut la voir dans son dashboard (best-effort).
+      try {
+        await supabase.functions.invoke("trigger-analyze", {
+          body: { analysisId: data.id },
+        });
+      } catch (err) {
+        console.warn("trigger-analyze invoke failed (analyse créée quand même)", err);
+      }
+
       return data;
     },
     onSuccess: (data) => {

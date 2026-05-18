@@ -14,12 +14,12 @@ import { z } from "zod";
 
 import { Sentry } from "@/lib/sentry";
 import { supabaseApp } from "@/lib/supabase";
+import { runApifyActor } from "@/services/apify";
 import {
   APIFY_MAPPERS,
   type ListingInsert,
   type RawApifyListing,
 } from "@/services/apify-mappers";
-import { runApifyActor } from "@/services/apify";
 import { banGeocode } from "@/services/ban";
 
 const payloadSchema = z.object({

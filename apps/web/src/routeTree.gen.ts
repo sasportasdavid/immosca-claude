@@ -19,6 +19,7 @@ import { Route as AuthSignupRouteImport } from './routes/auth/signup'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AppNouvelleAnalyseRouteImport } from './routes/app/nouvelle-analyse'
+import { Route as AppAnalysesIndexRouteImport } from './routes/app/analyses/index'
 import { Route as AppAnalysesIdRouteImport } from './routes/app/analyses/$id'
 
 const DashboardRoute = DashboardRouteImport.update({
@@ -71,6 +72,11 @@ const AppNouvelleAnalyseRoute = AppNouvelleAnalyseRouteImport.update({
   path: '/app/nouvelle-analyse',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppAnalysesIndexRoute = AppAnalysesIndexRouteImport.update({
+  id: '/app/analyses/',
+  path: '/app/analyses/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppAnalysesIdRoute = AppAnalysesIdRouteImport.update({
   id: '/app/analyses/$id',
   path: '/app/analyses/$id',
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/onboarding/step-1': typeof OnboardingStep1Route
   '/onboarding/step-2': typeof OnboardingStep2Route
   '/app/analyses/$id': typeof AppAnalysesIdRoute
+  '/app/analyses/': typeof AppAnalysesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -102,6 +109,7 @@ export interface FileRoutesByTo {
   '/onboarding/step-1': typeof OnboardingStep1Route
   '/onboarding/step-2': typeof OnboardingStep2Route
   '/app/analyses/$id': typeof AppAnalysesIdRoute
+  '/app/analyses': typeof AppAnalysesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -116,6 +124,7 @@ export interface FileRoutesById {
   '/onboarding/step-1': typeof OnboardingStep1Route
   '/onboarding/step-2': typeof OnboardingStep2Route
   '/app/analyses/$id': typeof AppAnalysesIdRoute
+  '/app/analyses/': typeof AppAnalysesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,6 +140,7 @@ export interface FileRouteTypes {
     | '/onboarding/step-1'
     | '/onboarding/step-2'
     | '/app/analyses/$id'
+    | '/app/analyses/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -144,6 +154,7 @@ export interface FileRouteTypes {
     | '/onboarding/step-1'
     | '/onboarding/step-2'
     | '/app/analyses/$id'
+    | '/app/analyses'
   id:
     | '__root__'
     | '/'
@@ -157,6 +168,7 @@ export interface FileRouteTypes {
     | '/onboarding/step-1'
     | '/onboarding/step-2'
     | '/app/analyses/$id'
+    | '/app/analyses/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -171,6 +183,7 @@ export interface RootRouteChildren {
   OnboardingStep1Route: typeof OnboardingStep1Route
   OnboardingStep2Route: typeof OnboardingStep2Route
   AppAnalysesIdRoute: typeof AppAnalysesIdRoute
+  AppAnalysesIndexRoute: typeof AppAnalysesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -245,6 +258,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNouvelleAnalyseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/analyses/': {
+      id: '/app/analyses/'
+      path: '/app/analyses'
+      fullPath: '/app/analyses/'
+      preLoaderRoute: typeof AppAnalysesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/analyses/$id': {
       id: '/app/analyses/$id'
       path: '/app/analyses/$id'
@@ -267,6 +287,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingStep1Route: OnboardingStep1Route,
   OnboardingStep2Route: OnboardingStep2Route,
   AppAnalysesIdRoute: AppAnalysesIdRoute,
+  AppAnalysesIndexRoute: AppAnalysesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

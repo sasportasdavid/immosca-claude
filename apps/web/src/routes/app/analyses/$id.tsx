@@ -13,8 +13,10 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Lock } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { ScoreBadge } from "@/components/score-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -160,24 +162,193 @@ function AnalysisPage() {
               </div>
             ) : null}
 
-            {analysis.data.status === "done" ? (
-              <div className="rounded-lg border border-success bg-success-soft p-5 text-[13px] text-success-soft-foreground">
-                <div className="font-medium">Analyse terminée.</div>
-                <p className="mt-1">
-                  La vue rapport complet (tableau 14 colonnes, Top 10,
-                  synthèse marché, carte) sera disponible en PR3.5.
-                </p>
-              </div>
+            {/* Tableau listings : visible dès qu'on a quelque chose */}
+            {(analysis.data.total_listings_filtered ?? 0) > 0 ? (
+              <ListingsSection analysisId={id} status={analysis.data.status} />
             ) : null}
 
             <div>
               <Button asChild variant="outline" size="sm">
-                <a href="/dashboard">← Retour dashboard</a>
+                <a href="/app/analyses">← Toutes mes analyses</a>
               </Button>
             </div>
           </div>
         ) : null}
       </div>
     </AppShell>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Tableau listings (lecture via listings_freemium_view — RLS + masque
+// côté serveur, le frontend reçoit déjà du null pour les champs PII
+// des biens >70/100 si l'user est Free).
+// ──────────────────────────────────────────────────────────────────
+
+type ListingRow = {
+  id: string;
+  title: string | null;
+  type: string;
+  surface: number | null;
+  pieces: number | null;
+  code_postal: string | null;
+  ville: string | null;
+  dpe: "A" | "B" | "C" | "D" | "E" | "F" | "G" | null;
+  prix: number | null;
+  adresse_raw: string | null;
+  source_url: string | null;
+  lat: number | null;
+  lng: number | null;
+  score_total: number | null;
+  these_claude: string | null;
+  is_masked: boolean;
+};
+
+function ListingsSection({
+  analysisId,
+  status,
+}: {
+  analysisId: string;
+  status: string;
+}) {
+  const listings = useQuery({
+    queryKey: ["listings", analysisId],
+    queryFn: async (): Promise<ListingRow[]> => {
+      const { data, error } = await supabase
+        .from("listings_freemium_view")
+        .select(
+          "id, title, type, surface, pieces, code_postal, ville, dpe, prix, adresse_raw, source_url, lat, lng, score_total, these_claude, is_masked",
+        )
+        .eq("analysis_id", analysisId)
+        .order("score_total", { ascending: false, nullsFirst: false })
+        .limit(50);
+      if (error) throw error;
+      return (data ?? []) as ListingRow[];
+    },
+    refetchInterval:
+      status === "done" || status === "failed" ? false : 5000,
+  });
+
+  if (listings.isLoading) {
+    return (
+      <p className="text-[13px] text-muted-foreground">Chargement des biens…</p>
+    );
+  }
+  if (!listings.data || listings.data.length === 0) {
+    return null;
+  }
+
+  const maskedCount = listings.data.filter((l) => l.is_masked).length;
+
+  return (
+    <section>
+      <div className="mb-4 flex items-baseline justify-between">
+        <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
+          Top {listings.data.length}{" "}
+          {listings.data.length > 1 ? "biens" : "bien"}
+        </h2>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+          Triés par score
+        </span>
+      </div>
+
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <table className="w-full text-[13px]">
+          <thead className="border-b border-border bg-secondary/50">
+            <tr>
+              <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                Score
+              </th>
+              <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                Bien
+              </th>
+              <th className="text-right px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                Prix
+              </th>
+              <th className="text-right px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                Surface
+              </th>
+              <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                DPE
+              </th>
+              <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                CP
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {listings.data.map((l) => (
+              <tr
+                key={l.id}
+                className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors"
+              >
+                <td className="px-3 py-3">
+                  {l.score_total !== null ? (
+                    <ScoreBadge score={l.score_total} size="md" />
+                  ) : (
+                    <span className="text-tertiary-foreground">—</span>
+                  )}
+                </td>
+                <td className="px-3 py-3">
+                  <div
+                    className={
+                      l.is_masked
+                        ? "select-none blur-sm pointer-events-none"
+                        : ""
+                    }
+                  >
+                    <div className="font-medium line-clamp-1">
+                      {l.title ?? "Sans titre"}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground line-clamp-1">
+                      {l.pieces ? `${l.pieces}P · ` : ""}
+                      {l.ville ?? "—"}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-3 py-3 text-right font-mono tabular-nums font-medium">
+                  {l.prix !== null && !l.is_masked
+                    ? `${Math.round(l.prix).toLocaleString("fr-FR")} €`
+                    : null}
+                  {l.is_masked ? (
+                    <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <Lock className="h-3 w-3 text-primary" />
+                      Pro
+                    </span>
+                  ) : null}
+                </td>
+                <td className="px-3 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                  {l.surface ? `${l.surface} m²` : "—"}
+                </td>
+                <td className="px-3 py-3">
+                  {l.dpe ? (
+                    <span
+                      className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold bg-dpe-${l.dpe.toLowerCase()} ${
+                        ["A", "B", "F", "G"].includes(l.dpe)
+                          ? "text-white"
+                          : "text-foreground"
+                      }`}
+                    >
+                      {l.dpe}
+                    </span>
+                  ) : (
+                    <span className="text-tertiary-foreground">—</span>
+                  )}
+                </td>
+                <td className="px-3 py-3 text-muted-foreground">
+                  {l.code_postal ?? "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {maskedCount > 0 ? (
+        <p className="mt-3 text-[12px] text-muted-foreground">
+          {maskedCount} bien{maskedCount > 1 ? "s" : ""} à fort score
+          masqué{maskedCount > 1 ? "s" : ""} — passe Pro pour les débloquer.
+        </p>
+      ) : null}
+    </section>
   );
 }
