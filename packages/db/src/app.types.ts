@@ -34,6 +34,7 @@ export type Database = {
           total_listings_filtered: number | null
           total_listings_raw: number | null
           trigger_run_id: string | null
+          updated_at: string
           ville: string | null
         }
         Insert: {
@@ -55,6 +56,7 @@ export type Database = {
           total_listings_filtered?: number | null
           total_listings_raw?: number | null
           trigger_run_id?: string | null
+          updated_at?: string
           ville?: string | null
         }
         Update: {
@@ -76,6 +78,7 @@ export type Database = {
           total_listings_filtered?: number | null
           total_listings_raw?: number | null
           trigger_run_id?: string | null
+          updated_at?: string
           ville?: string | null
         }
         Relationships: [

@@ -62,10 +62,17 @@ async function setAnalysisStatus(
     started_at: string;
   }>,
 ): Promise<void> {
-  await supabaseApp
+  const { error } = await supabaseApp
     .from("analyses")
     .update({ status, progress_pct: progressPct, ...extra })
     .eq("id", analysisId);
+  if (error) {
+    // Throw plutôt que swallow : sans ce check on a eu des analyses
+    // zombi "pending" malgré la task qui tournait sans erreur.
+    throw new Error(
+      `setAnalysisStatus(${analysisId}, ${status}) DB error: ${error.message}`,
+    );
+  }
 }
 
 export const analyzeTask = task({
