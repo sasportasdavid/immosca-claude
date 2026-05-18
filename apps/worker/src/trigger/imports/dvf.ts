@@ -13,7 +13,7 @@
 import { Readable } from "node:stream";
 import { createGunzip } from "node:zlib";
 
-import { logger, schedules, task } from "@trigger.dev/sdk/v3";
+import { logger, schedules, task } from "@trigger.dev/sdk";
 import { parse } from "csv-parse";
 import { z } from "zod";
 

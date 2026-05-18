@@ -10,7 +10,7 @@
 //   `dvf_mutations.code_commune` distinct) via PQueue rate-limited.
 
 import type { Json } from "@immoscan/db/data";
-import { task } from "@trigger.dev/sdk/v3";
+import { task } from "@trigger.dev/sdk";
 import PQueue from "p-queue";
 import { z } from "zod";
 

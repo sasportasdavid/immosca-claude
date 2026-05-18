@@ -17,7 +17,7 @@ import {
   computeScore,
   verdictFromScore,
 } from "@immoscan/shared";
-import { logger, task } from "@trigger.dev/sdk/v3";
+import { logger, task } from "@trigger.dev/sdk";
 import { z } from "zod";
 
 import { Sentry } from "@/lib/sentry";

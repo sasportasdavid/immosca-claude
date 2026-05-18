@@ -11,7 +11,7 @@
 // brute (PDF/Webstat) reste manuelle ou via un script séparé jusqu'à
 // stabilisation d'une API stable.
 
-import { schedules, task } from "@trigger.dev/sdk/v3";
+import { schedules, task } from "@trigger.dev/sdk";
 import { z } from "zod";
 
 import { withImportRun } from "@/lib/import-runs";

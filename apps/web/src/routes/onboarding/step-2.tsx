@@ -80,9 +80,10 @@ function OnboardingStep2Page() {
 
   // Guard métier (le guard auth est dans beforeLoad) : si l'user arrive
   // direct sur /onboarding/step-2 sans avoir choisi sa stratégie, retour
-  // au step 1. Reste un <Navigate> en JSX (pas un redirect serveur)
-  // parce que la donnée vient du store Zustand côté client.
-  if (!draft.strategy) {
+  // au step 1. On exclut le cas où la mutation vient de succeed —
+  // reset() vide draft.strategy juste avant navigate() vers /dashboard,
+  // et sans cet exclude on redirect vers step-1 pendant la nav.
+  if (!draft.strategy && !upsertParams.isSuccess) {
     return <Navigate to="/onboarding/step-1" replace />;
   }
 

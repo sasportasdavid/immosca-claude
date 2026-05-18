@@ -9,7 +9,7 @@
 // tasks paramétrables où l'URL exacte est passée en payload pour ne pas
 // hardcoder une URL qui peut casser.
 
-import { logger, task } from "@trigger.dev/sdk/v3";
+import { logger, task } from "@trigger.dev/sdk";
 import { z } from "zod";
 
 import { withImportRun } from "@/lib/import-runs";
