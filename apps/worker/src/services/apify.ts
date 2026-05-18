@@ -137,6 +137,40 @@ export async function runApifyActor<T>(
 }
 
 /**
+ * Récupère les items d'un run Apify déjà terminé (sans relancer un run).
+ * Utilisé pour rejouer une analyse à partir d'un cache, ou pour tester
+ * le pipeline en dev sans consommer de budget / contourner les rate
+ * limits des actors free tier.
+ *
+ * Throw si le run n'a pas SUCCEEDED ou n'existe pas.
+ */
+export async function fetchApifyRunResult<T>(
+  runId: string,
+): Promise<ApifyRunResult<T>> {
+  const startMs = Date.now();
+  const runMeta = await apifyFetch<RunMeta>(`/actor-runs/${runId}`);
+  if (runMeta.data.status !== "SUCCEEDED") {
+    throw new Error(
+      `Apify run ${runId} status=${runMeta.data.status} (attendu SUCCEEDED)`,
+    );
+  }
+  const items = await apifyFetch<T[]>(
+    `/datasets/${runMeta.data.defaultDatasetId}/items?clean=true&format=json`,
+  );
+  const computeUnits = runMeta.data.usage?.COMPUTE_UNITS ?? 0;
+  return {
+    runId,
+    status: runMeta.data.status,
+    items,
+    stats: {
+      durationMs: Date.now() - startMs,
+      computeUnits,
+      estimatedCostEur: 0, // re-run d'un cache : pas de coût additionnel
+    },
+  };
+}
+
+/**
  * Construit l'input JSON à passer à un actor selon ses conventions.
  *
  * Chaque actor Apify a son propre schema d'input. On dispatch ici sur

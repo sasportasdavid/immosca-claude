@@ -22,7 +22,11 @@ import { z } from "zod";
 
 import { Sentry } from "@/lib/sentry";
 import { supabaseApp, supabaseData } from "@/lib/supabase";
-import { buildApifyRunInput, runApifyActor } from "@/services/apify";
+import {
+  buildApifyRunInput,
+  fetchApifyRunResult,
+  runApifyActor,
+} from "@/services/apify";
 import {
   APIFY_MAPPERS,
   type ListingInsert,
@@ -39,6 +43,13 @@ const payloadSchema = z.object({
   analysisId: z.string().uuid(),
   /** Override de l'actor Apify pour tests. Defaut : env APIFY_ACTOR_SELOGER / _LEBONCOIN. */
   actorId: z.string().optional(),
+  /**
+   * Override : ré-utilise un run Apify déjà existant au lieu d'en lancer
+   * un nouveau. Utile pour rejouer une analyse depuis un cache, ou pour
+   * tester le pipeline en dev sans dépenser du budget Apify ni se faire
+   * rate-limit par les free tiers d'actors.
+   */
+  apifyRunIdOverride: z.string().optional(),
 });
 
 async function setAnalysisStatus(
@@ -80,8 +91,9 @@ export const analyzeTask = task({
   maxDuration: 600, // 10 min
   retry: { maxAttempts: 1 }, // pas de retry auto : on a Sentry pour debug
   run: async (payload: unknown) => {
-    const { analysisId, actorId } = payloadSchema.parse(payload);
-    logger.info("Analyze start", { analysisId });
+    const { analysisId, actorId, apifyRunIdOverride } =
+      payloadSchema.parse(payload);
+    logger.info("Analyze start", { analysisId, apifyRunIdOverride });
 
     // 1. Lire l'analyse
     const { data: analysis, error: readErr } = await supabaseApp
@@ -98,24 +110,34 @@ export const analyzeTask = task({
     });
 
     try {
-      // 2. Apify run
-      const resolvedActorId =
-        actorId ??
-        (analysis.source_site === "seloger"
-          ? process.env.APIFY_ACTOR_SELOGER
-          : analysis.source_site === "leboncoin"
-            ? process.env.APIFY_ACTOR_LEBONCOIN
-            : undefined);
-      if (!resolvedActorId) {
-        throw new Error(
-          `Aucun APIFY_ACTOR_${analysis.source_site.toUpperCase()} dans l'env.`,
+      // 2. Apify : soit on lance un nouveau run, soit on rejoue un run
+      // existant (override pour tests / replay depuis cache).
+      let apifyResult;
+      if (apifyRunIdOverride) {
+        logger.info("Réutilisation d'un run Apify existant", {
+          apifyRunIdOverride,
+        });
+        apifyResult = await fetchApifyRunResult<RawApifyListing>(
+          apifyRunIdOverride,
         );
+      } else {
+        const resolvedActorId =
+          actorId ??
+          (analysis.source_site === "seloger"
+            ? process.env.APIFY_ACTOR_SELOGER
+            : analysis.source_site === "leboncoin"
+              ? process.env.APIFY_ACTOR_LEBONCOIN
+              : undefined);
+        if (!resolvedActorId) {
+          throw new Error(
+            `Aucun APIFY_ACTOR_${analysis.source_site.toUpperCase()} dans l'env.`,
+          );
+        }
+        apifyResult = await runApifyActor<RawApifyListing>({
+          actorId: resolvedActorId,
+          runInput: buildApifyRunInput(resolvedActorId, analysis.source_url),
+        });
       }
-
-      const apifyResult = await runApifyActor<RawApifyListing>({
-        actorId: resolvedActorId,
-        runInput: buildApifyRunInput(resolvedActorId, analysis.source_url),
-      });
 
       logger.info("Apify done", {
         runId: apifyResult.runId,
@@ -143,12 +165,15 @@ export const analyzeTask = task({
         filtered: mapped.length,
       });
 
-      // 4. Upsert listings (idempotent via external_id × analysis_id)
-      // On batche par 500 pour rester sous les limites Supabase.
+      // 4. Upsert listings : idempotent via la contrainte unique
+      // (analysis_id, external_id, source_site). On peut donc re-trigger
+      // un run sans dupliquer.
       const BATCH = 500;
       for (let i = 0; i < mapped.length; i += BATCH) {
         const slice = mapped.slice(i, i + BATCH);
-        const { error } = await supabaseApp.from("listings").insert(slice);
+        const { error } = await supabaseApp
+          .from("listings")
+          .upsert(slice, { onConflict: "analysis_id,external_id,source_site" });
         if (error) throw error;
       }
 
@@ -297,13 +322,30 @@ type DbListing = {
  * listing_scores.
  */
 async function scoreListings(
-  _analysisId: string,
+  analysisId: string,
   listings: DbListing[],
   params: Record<string, unknown>,
 ): Promise<number> {
   let scored = 0;
+  logger.info("scoreListings: input", {
+    listingsCount: listings.length,
+    firstSurfaces: listings.slice(0, 5).map((l) => ({
+      id: l.id,
+      surface: l.surface,
+      surfaceType: typeof l.surface,
+    })),
+  });
   for (const l of listings) {
-    if (!l.surface || l.surface <= 0) continue;
+    // surface peut être string ("138.00") car Postgres retourne numeric en
+    // string par défaut côté postgrest. Convertir avant comparaison.
+    const surfaceNum = Number(l.surface);
+    if (!Number.isFinite(surfaceNum) || surfaceNum <= 0) {
+      logger.info("Skip listing (surface invalide)", {
+        id: l.id,
+        surface: l.surface,
+      });
+      continue;
+    }
 
     // Lookup médians DVF côté immoscan-data
     let prixMedianCommune: number | null = null;
@@ -381,6 +423,7 @@ async function scoreListings(
 
     const { error } = await supabaseApp.from("listing_scores").upsert(
       {
+        analysis_id: analysisId,
         listing_id: l.id,
         score_total: result.score_total,
         score_prix: result.sub_scores.prix,
@@ -410,12 +453,17 @@ async function scoreListings(
       { onConflict: "listing_id" },
     );
     if (error) {
+      // Avant on swallow vers Sentry → 0 scores et on ne savait pas
+      // pourquoi. Throw pour qu'on voie dans les logs Trigger.dev.
       Sentry.captureException(error, {
         tags: { listing_id: l.id, context: "scoreListings upsert" },
       });
-      continue;
+      throw new Error(
+        `listing_scores upsert failed for listing ${l.id}: ${error.message} (code=${error.code} hint=${error.hint})`,
+      );
     }
     scored++;
+    logger.info("Listing scoré", { id: l.id, score: result.score_total });
   }
   return scored;
 }
@@ -542,10 +590,20 @@ async function generateThesesForTop(
         .eq("listing_id", row.listing_id as string);
 
       generated++;
+      logger.info("Thèse Claude générée", {
+        listing_id: row.listing_id,
+        tokens: result.tokensUsed,
+      });
     } catch (err) {
       Sentry.captureException(err, {
         tags: { listing_id: row.listing_id as string, context: "claude thesis" },
       });
+      // Throw pour surfacer l'erreur Claude au lieu de générer 0 thèses
+      // silencieusement.
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Claude thesis failed for listing ${row.listing_id}: ${msg}`,
+      );
     }
   }
   return generated;
