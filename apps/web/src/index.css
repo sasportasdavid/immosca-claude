@@ -18,8 +18,10 @@
     --font-display: "Inter", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 
-    /* Radius (8px = cards, 6px = inputs/buttons, 4px = badges) */
+    /* Radius. Échelle handoff : 4 (badges) / 6 (inputs, buttons) / 8 (cards)
+       / 12 (modals, sheets). --radius est la base "lg" des cards. */
     --radius: 0.5rem;
+    --radius-xl: 0.75rem;           /* 12px — modals, sheets */
 
     /* Surfaces & texte — stone warm-neutral */
     --background: 60 9% 98%;        /* #FAFAF9 */
@@ -36,25 +38,55 @@
     --primary-foreground: 0 0% 100%;
     --primary-hover: 250 56% 50%;   /* #4A38C7 */
     --primary-soft: 251 67% 95%;    /* #EEEBFB */
+    /* Gradient CTA primary subtil (handoff écran 1, seul gradient autorisé).
+       Utilitaire `.bg-primary-gradient` ci-dessous le consomme.
+       Activation différée : pour l'instant `bg-primary` reste plat sur le
+       Button default — basculer plus tard sur décision Design. */
+    --primary-gradient-from: 246 73% 60%; /* #6452E3 */
+    --primary-gradient-to:   248 71% 58%; /* #5B47E0 (= --primary) */
 
     --secondary: 60 5% 96%;         /* stone-100 */
     --secondary-foreground: 28 6% 25%; /* stone-700 #44403C */
 
     --muted: 60 5% 96%;
     --muted-foreground: 33 5% 32%;  /* #57534E */
+    --tertiary-foreground: 28 6% 64%; /* stone-400 #A8A29E — captions discrètes */
 
     /* Shadcn convention : accent = surface douce hover/focus, pas la brand */
     --accent: 60 5% 96%;
     --accent-foreground: 28 6% 25%;
 
-    --destructive: 0 73% 50%;       /* #DC2626 */
-    --destructive-foreground: 0 0% 100%;
+    /* Sémantique d'état — couleur principale + foreground (pour bg plein,
+       typiquement blanc) + variante soft (bg doux) + soft-foreground (texte
+       sur soft, teinte sombre de la couleur principale). */
+    --success: 142 76% 36%;             /* #16A34A */
+    --success-foreground: 0 0% 100%;
+    --success-soft: 141 84% 93%;        /* #DCFCE7 */
+    --success-soft-foreground: 142 76% 29%; /* #15803D */
 
-    --border: 20 6% 90%;            /* #E7E5E4 */
-    --input: 20 6% 90%;
+    --warning: 21 90% 48%;              /* #EA580C */
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 32 100% 92%;        /* #FFEDD5 */
+    --warning-soft-foreground: 17 80% 34%; /* #9A3412 */
+
+    --destructive: 0 73% 50%;           /* #DC2626 */
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 0 93% 94%;      /* #FEE2E2 */
+    --destructive-soft-foreground: 0 73% 35%; /* #991B1B */
+
+    --info: 217 91% 53%;                /* #2563EB */
+    --info-foreground: 0 0% 100%;
+    --info-soft: 213 97% 92%;           /* #DBEAFE */
+    --info-soft-foreground: 220 71% 40%; /* #1E40AF */
+
+    --border: 20 6% 90%;            /* stone-200 #E7E5E4 — bordures fines */
+    --input: 20 6% 83%;             /* stone-300 #D6D3D1 — bordure inputs (plus contrasté) */
     --ring: 28 6% 25%;              /* #44403C focus border */
 
-    /* Scoring couleurs sémantiques */
+    /* Scoring couleurs sémantiques. Identiques à --success/--warning/
+       --destructive mais conservées comme tokens dédiés : le scoring a
+       sa propre échelle (75/50) et pourrait diverger plus tard
+       (palette dédiée pour daltoniens, etc.). */
     --score-excellent: 142 76% 36%; /* #16A34A — score >= 75 */
     --score-good: 21 90% 48%;       /* #EA580C — score 50-74 */
     --score-poor: 0 73% 50%;        /* #DC2626 — score < 50 */
@@ -83,5 +115,15 @@
 @layer utilities {
   .tnum {
     font-variant-numeric: tabular-nums;
+  }
+  /* Gradient subtil CTA primary (seul gradient autorisé par la DA). Pas
+     consommé par défaut sur <Button variant="default"> — basculer
+     manuellement quand le PO valide l'activation. */
+  .bg-primary-gradient {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--primary-gradient-from)) 0%,
+      hsl(var(--primary-gradient-to)) 100%
+    );
   }
 }
