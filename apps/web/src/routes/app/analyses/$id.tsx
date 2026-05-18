@@ -162,6 +162,11 @@ function AnalysisPage() {
               </div>
             ) : null}
 
+            {/* Top N avec thèse Claude (PR4) — visible quand done */}
+            {analysis.data.status === "done" ? (
+              <TopThesesSection analysisId={id} />
+            ) : null}
+
             {/* Tableau listings : visible dès qu'on a quelque chose */}
             {(analysis.data.total_listings_filtered ?? 0) > 0 ? (
               <ListingsSection analysisId={id} status={analysis.data.status} />
@@ -201,7 +206,14 @@ type ListingRow = {
   lng: number | null;
   score_total: number | null;
   these_claude: string | null;
+  verdict: "a_visiter" | "sous_reserve" | "no_go" | null;
   is_masked: boolean;
+};
+
+const VERDICT_LABEL: Record<string, { label: string; variant: "success" | "warning" | "danger" }> = {
+  a_visiter: { label: "À visiter", variant: "success" },
+  sous_reserve: { label: "Sous réserve", variant: "warning" },
+  no_go: { label: "No-go", variant: "danger" },
 };
 
 function ListingsSection({
@@ -217,7 +229,7 @@ function ListingsSection({
       const { data, error } = await supabase
         .from("listings_freemium_view")
         .select(
-          "id, title, type, surface, pieces, code_postal, ville, dpe, prix, adresse_raw, source_url, lat, lng, score_total, these_claude, is_masked",
+          "id, title, type, surface, pieces, code_postal, ville, dpe, prix, adresse_raw, source_url, lat, lng, score_total, these_claude, verdict, is_masked",
         )
         .eq("analysis_id", analysisId)
         .order("score_total", { ascending: false, nullsFirst: false })
@@ -349,6 +361,109 @@ function ListingsSection({
           masqué{maskedCount > 1 ? "s" : ""} — passe Pro pour les débloquer.
         </p>
       ) : null}
+    </section>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Top N avec thèse Claude (PR4) — affiche les biens qui ont une
+// `these_claude` non nulle dans la vue freemium.
+// ──────────────────────────────────────────────────────────────────
+
+function TopThesesSection({ analysisId }: { analysisId: string }) {
+  const tops = useQuery({
+    queryKey: ["listings_with_these", analysisId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("listings_freemium_view")
+        .select(
+          "id, title, ville, code_postal, prix, surface, pieces, dpe, score_total, these_claude, verdict, is_masked",
+        )
+        .eq("analysis_id", analysisId)
+        .not("these_claude", "is", null)
+        .order("score_total", { ascending: false, nullsFirst: false })
+        .limit(10);
+      if (error) throw error;
+      return (data ?? []) as ListingRow[];
+    },
+  });
+
+  if (tops.isLoading || !tops.data || tops.data.length === 0) return null;
+
+  return (
+    <section>
+      <div className="mb-4 flex items-baseline gap-3">
+        <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
+          Top {tops.data.length} avec thèse Claude
+        </h2>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+          Analyse argumentée par Claude Sonnet
+        </span>
+      </div>
+      <div className="space-y-4">
+        {tops.data.map((l, idx) => {
+          const verdict = l.verdict ? VERDICT_LABEL[l.verdict] : null;
+          return (
+            <details
+              key={l.id}
+              className="group rounded-lg border border-border bg-card open:shadow-lvl-1"
+              open={idx === 0}
+            >
+              <summary className="flex cursor-pointer items-center gap-3 px-5 py-4 list-none">
+                <span className="font-mono text-[12px] uppercase tracking-[0.16em] text-muted-foreground">
+                  #{idx + 1}
+                </span>
+                {l.score_total !== null ? (
+                  <ScoreBadge score={l.score_total} size="md" />
+                ) : null}
+                <div className="min-w-0 flex-1">
+                  <div className={l.is_masked ? "blur-sm select-none" : ""}>
+                    <div className="text-[15px] font-semibold line-clamp-1">
+                      {l.title ?? "Sans titre"}
+                    </div>
+                    <div className="text-[12px] text-muted-foreground line-clamp-1">
+                      {l.ville ?? "—"}
+                      {l.code_postal ? ` · ${l.code_postal}` : ""}
+                      {l.surface ? ` · ${l.surface} m²` : ""}
+                      {l.pieces ? ` · ${l.pieces}P` : ""}
+                      {l.dpe ? ` · DPE ${l.dpe}` : ""}
+                    </div>
+                  </div>
+                </div>
+                {verdict ? (
+                  <Badge variant={verdict.variant}>{verdict.label}</Badge>
+                ) : null}
+                <span className="font-mono tabular-nums text-[14px] font-medium">
+                  {l.prix !== null && !l.is_masked
+                    ? `${Math.round(l.prix).toLocaleString("fr-FR")} €`
+                    : "🔒"}
+                </span>
+              </summary>
+              <div className="border-t border-border px-5 py-5">
+                {l.is_masked ? (
+                  <div className="text-center py-8">
+                    <Lock className="mx-auto h-6 w-6 text-primary" />
+                    <p className="mt-3 text-[14px] font-medium">
+                      Cette opportunité est masquée.
+                    </p>
+                    <p className="mt-1 text-[13px] text-muted-foreground">
+                      Passe Pro pour lire la thèse Claude complète + plan
+                      de financement + stratégie de négociation chiffrée.
+                    </p>
+                    <Button className="mt-4" size="sm">
+                      Passer Pro — 7 jours offerts
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="prose prose-sm max-w-none text-[13.5px] leading-[1.65] text-secondary-foreground whitespace-pre-wrap">
+                    {l.these_claude}
+                  </div>
+                )}
+              </div>
+            </details>
+          );
+        })}
+      </div>
     </section>
   );
 }

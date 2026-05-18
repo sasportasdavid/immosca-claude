@@ -1,19 +1,27 @@
 // Task d'analyse principale : scrape Apify → normalise → enrichit
-// (géocodage BAN, DPE, Géorisques) → met à jour le row `analyses` et
-// les `listings` côté immoscan-app.
+// (géocodage BAN, DPE, Géorisques) → score → thèse Claude pour le top
+// N → met à jour le row `analyses` et les `listings` + `listing_scores`
+// côté immoscan-app.
 //
 // Étapes (progress_pct) :
-//   pending (0) → scraping (20%) → enriching (50%) → done (100%)
-// PR4 ajoutera scoring (70%) + generating (90%).
+//   pending (0) → scraping (20%) → enriching (50%) → scoring (70%)
+//   → generating (90%) → done (100%)
 //
 // Idempotent : si on relance avec le même analysis_id, on UPSERT par
 // (analysis_id, external_id) — pas de duplicates.
 
+import {
+  PLANS,
+  type PlanId,
+  claudeThesisOutputSchema,
+  computeScore,
+  verdictFromScore,
+} from "@immoscan/shared";
 import { logger, task } from "@trigger.dev/sdk/v3";
 import { z } from "zod";
 
 import { Sentry } from "@/lib/sentry";
-import { supabaseApp } from "@/lib/supabase";
+import { supabaseApp, supabaseData } from "@/lib/supabase";
 import { runApifyActor } from "@/services/apify";
 import {
   APIFY_MAPPERS,
@@ -21,6 +29,11 @@ import {
   type RawApifyListing,
 } from "@/services/apify-mappers";
 import { banGeocode } from "@/services/ban";
+import { callClaudeStructured } from "@/services/claude";
+import {
+  THESIS_SYSTEM_PROMPT,
+  buildThesisUserPrompt,
+} from "@/services/prompts/thesis";
 
 const payloadSchema = z.object({
   analysisId: z.string().uuid(),
@@ -175,7 +188,61 @@ export const analyzeTask = task({
           ? prixM2List[Math.floor(prixM2List.length / 2)] ?? null
           : null;
 
-      // 7. Done
+      // 7. SCORING (PR4) — pour chaque listing on enrichit avec les
+      //    référentiels marché côté immoscan-data puis on calcule le score.
+      await setAnalysisStatus(analysisId, "scoring", 70);
+      logger.info("Scoring listings", { count: mapped.length });
+
+      const paramsSnapshot = analysis.params_snapshot as Record<
+        string,
+        unknown
+      > & {
+        strategy?: string;
+        apport?: number;
+        taux_credit_pct?: number;
+        duree_credit_ans?: number;
+        tmi_pct?: number;
+        rendement_min_pct?: number;
+        tolerance_travaux?: string;
+      };
+
+      // Re-read listings depuis la DB pour avoir les id générés + geom
+      const { data: dbListings, error: readErr } = await supabaseApp
+        .from("listings")
+        .select(
+          "id, external_id, prix, surface, type, dpe, etage, balcon, terrasse, parking, is_new_construction, code_insee, code_postal",
+        )
+        .eq("analysis_id", analysisId);
+      if (readErr) throw readErr;
+
+      const scoredCount = await scoreListings(
+        analysisId,
+        dbListings ?? [],
+        paramsSnapshot,
+      );
+      logger.info("Scored", { scoredCount });
+
+      // 8. GENERATING — thèse Claude pour le top N selon plan
+      await setAnalysisStatus(analysisId, "generating", 90);
+
+      // Récupère le plan du user via profile
+      const { data: profile } = await supabaseApp
+        .from("profiles")
+        .select("subscription_plan")
+        .eq("id", analysis.profile_id)
+        .single();
+      const plan = (profile?.subscription_plan ?? "free") as PlanId;
+      const topN = PLANS[plan].topN ?? 5;
+
+      const generatedCount = await generateThesesForTop(
+        analysisId,
+        topN,
+        plan,
+        paramsSnapshot,
+      );
+      logger.info("Theses generated", { generatedCount, plan, topN });
+
+      // 9. Done
       await setAnalysisStatus(analysisId, "done", 100, {
         median_price_per_sqm: median,
         completed_at: new Date().toISOString(),
@@ -186,6 +253,8 @@ export const analyzeTask = task({
         scraped: apifyResult.items.length,
         normalized: mapped.length,
         geocoded: toGeocode.length,
+        scored: scoredCount,
+        thesesGenerated: generatedCount,
         medianPriceM2: median,
       };
     } catch (err) {
@@ -198,3 +267,283 @@ export const analyzeTask = task({
     }
   },
 });
+
+// ──────────────────────────────────────────────────────────────────
+// PR4 — Helpers scoring + génération thèses
+// ──────────────────────────────────────────────────────────────────
+
+type DbListing = {
+  id: string;
+  external_id: string;
+  prix: number;
+  surface: number | null;
+  type: string;
+  dpe: string | null;
+  etage: number | null;
+  balcon: boolean | null;
+  terrasse: boolean | null;
+  parking: boolean | null;
+  is_new_construction: boolean | null;
+  code_insee: string | null;
+  code_postal: string | null;
+};
+
+/**
+ * Score chaque listing : enrichit avec médians DVF + risques Géorisques,
+ * appelle computeScore (logique pure shared/scoring), INSERT dans
+ * listing_scores.
+ */
+async function scoreListings(
+  _analysisId: string,
+  listings: DbListing[],
+  params: Record<string, unknown>,
+): Promise<number> {
+  let scored = 0;
+  for (const l of listings) {
+    if (!l.surface || l.surface <= 0) continue;
+
+    // Lookup médians DVF côté immoscan-data
+    let prixMedianCommune: number | null = null;
+    let prixMedianIris: number | null = null;
+    if (l.code_insee) {
+      const { data } = await supabaseData
+        .from("dvf_medians_commune")
+        .select("median_prix_m2")
+        .eq("code_commune", l.code_insee)
+        .eq("type_local", l.type === "maison" ? "Maison" : "Appartement")
+        .order("annee", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      prixMedianCommune = data?.median_prix_m2
+        ? Number(data.median_prix_m2)
+        : null;
+    }
+
+    // Risques Géorisques
+    let hasPpri = false;
+    let argile: "nul" | "faible" | "moyen" | "fort" | null = null;
+    let sismicite: number | null = null;
+    let radon: number | null = null;
+    if (l.code_insee) {
+      const { data } = await supabaseData
+        .from("georisques_communes")
+        .select(
+          "has_ppri, retrait_argile_niveau, sismicite, radon",
+        )
+        .eq("code_commune", l.code_insee)
+        .maybeSingle();
+      if (data) {
+        hasPpri = data.has_ppri ?? false;
+        argile = (data.retrait_argile_niveau as typeof argile) ?? null;
+        sismicite = data.sismicite;
+        radon = data.radon;
+      }
+    }
+
+    const dpe = l.dpe as "A" | "B" | "C" | "D" | "E" | "F" | "G" | null;
+
+    const result = computeScore({
+      prix: Number(l.prix),
+      surface: Number(l.surface),
+      type:
+        l.type === "maison"
+          ? "maison"
+          : l.type === "terrain"
+            ? "terrain"
+            : l.type === "immeuble"
+              ? "immeuble"
+              : "appartement",
+      dpe,
+      etage: l.etage,
+      balcon: !!l.balcon,
+      terrasse: !!l.terrasse,
+      parking: !!l.parking,
+      is_new_construction: !!l.is_new_construction,
+      prix_m2_median_commune: prixMedianCommune,
+      prix_m2_median_iris: prixMedianIris,
+      loyer_m2_median_zone: null, // PR5 ajoutera OLL
+      strategy: ((params.strategy as string) ?? "locatif_nu") as never,
+      apport: Number(params.apport ?? 200_000),
+      taux_credit_pct: Number(params.taux_credit_pct ?? 3),
+      duree_credit_ans: Number(params.duree_credit_ans ?? 25),
+      tmi_pct: Number(params.tmi_pct ?? 30),
+      rendement_min_pct: Number(params.rendement_min_pct ?? 6),
+      tolerance_travaux: ((params.tolerance_travaux as string) ??
+        "leger") as never,
+      has_ppri: hasPpri,
+      retrait_argile_niveau: argile,
+      sismicite,
+      radon,
+    });
+
+    const { error } = await supabaseApp.from("listing_scores").upsert(
+      {
+        listing_id: l.id,
+        score_total: result.score_total,
+        score_prix: result.sub_scores.prix,
+        score_rendement: result.sub_scores.rendement,
+        score_cashflow: result.sub_scores.cashflow,
+        score_dpe: result.sub_scores.dpe,
+        score_quartier: result.sub_scores.quartier,
+        score_risques: result.sub_scores.risques,
+        prix_marche_estime: result.financial.prix_marche_estime,
+        ecart_prix_pct: result.financial.ecart_prix_pct,
+        loyer_estime: result.financial.loyer_estime,
+        loyer_m2_estime: result.financial.loyer_m2_estime,
+        rendement_brut_pct: result.financial.rendement_brut_pct,
+        rendement_net_pct: result.financial.rendement_net_pct,
+        rendement_net_net_pct: result.financial.rendement_net_net_pct,
+        cashflow_mensuel: result.financial.cashflow_mensuel,
+        mensualite_credit: result.financial.mensualite_credit,
+        frais_notaire: result.financial.frais_notaire,
+        cout_total_acquisition: result.financial.cout_total_acquisition,
+        is_passoire_dpe: result.climate.is_passoire_dpe,
+        risque_climat_2025: result.climate.risque_climat_2025,
+        risque_climat_2028: result.climate.risque_climat_2028,
+        risque_climat_2034: result.climate.risque_climat_2034,
+        scoring_version: "v1.0",
+        verdict: verdictFromScore(result.score_total),
+      } as never,
+      { onConflict: "listing_id" },
+    );
+    if (error) {
+      Sentry.captureException(error, {
+        tags: { listing_id: l.id, context: "scoreListings upsert" },
+      });
+      continue;
+    }
+    scored++;
+  }
+  return scored;
+}
+
+/**
+ * Génère une thèse Claude pour le top N listings (par score_total DESC).
+ * Cache 30j (via clé hash listing_id + scoring_version) — pas implémenté
+ * ici, à ajouter en PR4.5 si on voit des re-générations fréquentes.
+ */
+async function generateThesesForTop(
+  analysisId: string,
+  topN: number,
+  plan: PlanId,
+  params: Record<string, unknown>,
+): Promise<number> {
+  // Récupère les N meilleurs scores avec leurs listings
+  const { data: tops, error } = await supabaseApp
+    .from("listing_scores")
+    .select(
+      "listing_id, score_total, score_prix, score_rendement, score_cashflow, score_dpe, score_quartier, score_risques, prix_marche_estime, ecart_prix_pct, loyer_estime, loyer_m2_estime, rendement_brut_pct, rendement_net_pct, rendement_net_net_pct, cashflow_mensuel, mensualite_credit, frais_notaire, cout_total_acquisition, is_passoire_dpe, risque_climat_2025, risque_climat_2028, risque_climat_2034, listing:listings!inner(id, analysis_id, title, type, surface, pieces, prix, dpe, ville, code_postal, annee_construction, etage, is_new_construction, code_insee)",
+    )
+    .order("score_total", { ascending: false, nullsFirst: false })
+    .limit(topN);
+  if (error) {
+    Sentry.captureException(error, { tags: { context: "generateThesesForTop" } });
+    return 0;
+  }
+
+  let generated = 0;
+  for (const row of tops ?? []) {
+    const l = (row as unknown as { listing: Record<string, unknown> }).listing;
+    if (!l || (l.analysis_id as string) !== analysisId) continue;
+
+    let hasPpri = false;
+    if (l.code_insee) {
+      const { data } = await supabaseData
+        .from("georisques_communes")
+        .select("has_ppri")
+        .eq("code_commune", l.code_insee as string)
+        .maybeSingle();
+      hasPpri = data?.has_ppri ?? false;
+    }
+
+    try {
+      const result = await callClaudeStructured({
+        plan,
+        schema: claudeThesisOutputSchema,
+        toolName: "rediger_these_investissement",
+        toolDescription:
+          "Rédige une thèse d'investissement pour un bien immobilier",
+        system: THESIS_SYSTEM_PROMPT,
+        user: buildThesisUserPrompt({
+          bien: {
+            title: (l.title as string) ?? "(Sans titre)",
+            type: l.type as string,
+            surface: l.surface as number | null,
+            pieces: l.pieces as number | null,
+            prix: l.prix as number,
+            dpe: l.dpe as string | null,
+            ville: l.ville as string | null,
+            code_postal: l.code_postal as string | null,
+            annee_construction: l.annee_construction as number | null,
+            etage: l.etage as number | null,
+            is_new_construction: !!l.is_new_construction,
+          },
+          marche: {
+            prix_m2_median_commune: null,
+            prix_m2_median_iris: null,
+            loyer_m2_median_zone: null,
+          },
+          scoring: {
+            score_total: row.score_total ?? 0,
+            sub_scores: {
+              prix: row.score_prix ?? 0,
+              rendement: row.score_rendement ?? 0,
+              cashflow: row.score_cashflow ?? 0,
+              dpe: row.score_dpe ?? 0,
+              quartier: row.score_quartier ?? 0,
+              risques: row.score_risques ?? 0,
+            },
+            financial: {
+              prix_marche_estime: row.prix_marche_estime,
+              ecart_prix_pct: row.ecart_prix_pct,
+              loyer_estime: row.loyer_estime,
+              loyer_m2_estime: row.loyer_m2_estime,
+              rendement_brut_pct: row.rendement_brut_pct,
+              rendement_net_pct: row.rendement_net_pct,
+              rendement_net_net_pct: row.rendement_net_net_pct,
+              cashflow_mensuel: row.cashflow_mensuel,
+              mensualite_credit: row.mensualite_credit,
+              frais_notaire: row.frais_notaire,
+              cout_total_acquisition: row.cout_total_acquisition,
+            },
+          },
+          user_params: {
+            strategy: (params.strategy as string) ?? "locatif_nu",
+            apport: Number(params.apport ?? 200_000),
+            taux_credit_pct: Number(params.taux_credit_pct ?? 3),
+            duree_credit_ans: Number(params.duree_credit_ans ?? 25),
+            tmi_pct: Number(params.tmi_pct ?? 30),
+            rendement_min_pct: Number(params.rendement_min_pct ?? 6),
+          },
+          risques: {
+            is_passoire_dpe: row.is_passoire_dpe ?? false,
+            risque_climat_2025: row.risque_climat_2025 ?? false,
+            risque_climat_2028: row.risque_climat_2028 ?? false,
+            risque_climat_2034: row.risque_climat_2034 ?? false,
+            has_ppri: hasPpri,
+          },
+        }),
+      });
+
+      await supabaseApp
+        .from("listing_scores")
+        .update({
+          these_claude: result.data.these,
+          financement_claude: result.data.financement,
+          negociation_claude: result.data.negociation,
+          prix_negociation_cible: result.data.prix_negociation_cible,
+          verdict: result.data.verdict,
+          claude_model: result.model,
+          claude_tokens_used: result.tokensUsed,
+        } as never)
+        .eq("listing_id", row.listing_id as string);
+
+      generated++;
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { listing_id: row.listing_id as string, context: "claude thesis" },
+      });
+    }
+  }
+  return generated;
+}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+
 import { listingSourceSchema } from "./analysis.js";
 
 export const watchFrequencySchema = z.enum(["daily", "three_days", "weekly"]);

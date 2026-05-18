@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+
 import { SCORING_WEIGHTS_DEFAULT } from "../constants.js";
+
+import type { ScoringInput } from "./types.js";
+
 import {
   ajustementLoyerDpe,
   cashflowMensuel,
@@ -16,7 +20,6 @@ import {
   scoreRisques,
   verdictFromScore,
 } from "./index.js";
-import type { ScoringInput } from "./types.js";
 
 // ────────── Helpers ──────────
 
