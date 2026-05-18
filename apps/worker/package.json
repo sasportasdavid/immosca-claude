@@ -13,13 +13,15 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@immoscan/shared": "workspace:*",
-    "@immoscan/db": "workspace:*",
     "@anthropic-ai/sdk": "^0.32.0",
+    "@immoscan/db": "workspace:*",
+    "@immoscan/shared": "workspace:*",
     "@sentry/node": "^8.30.0",
     "@supabase/supabase-js": "^2.45.4",
     "@trigger.dev/sdk": "3.3.17",
     "apify-client": "^2.10.0",
+    "csv-parse": "^6.2.1",
+    "p-queue": "^9.3.0",
     "p-retry": "^6.2.0",
     "resend": "^4.0.0",
     "stripe": "^17.0.0",
