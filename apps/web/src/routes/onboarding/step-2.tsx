@@ -48,17 +48,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useOnboardingDraft } from "@/features/onboarding/onboarding-store";
-import { useAuth } from "@/hooks/use-auth";
 import { useUpsertUserParams } from "@/hooks/use-user-params";
+import { requireAuth } from "@/lib/auth-guards";
 
 export const Route = createFileRoute("/onboarding/step-2")({
+  beforeLoad: ({ location }) => requireAuth({ from: location.pathname }),
   component: OnboardingStep2Page,
 });
 
 const STEP_LABELS = ["Stratégie", "Paramètres"] as const;
 
 function OnboardingStep2Page() {
-  const auth = useAuth();
   const draft = useOnboardingDraft();
   const setStep2 = useOnboardingDraft((s) => s.setStep2);
   const reset = useOnboardingDraft((s) => s.reset);
@@ -78,10 +78,10 @@ function OnboardingStep2Page() {
     },
   });
 
-  // Guards APRÈS les hooks (rules of hooks).
-  if (!auth.isLoading && !auth.isAuthenticated) {
-    return <Navigate to="/auth/login" replace />;
-  }
+  // Guard métier (le guard auth est dans beforeLoad) : si l'user arrive
+  // direct sur /onboarding/step-2 sans avoir choisi sa stratégie, retour
+  // au step 1. Reste un <Navigate> en JSX (pas un redirect serveur)
+  // parce que la donnée vient du store Zustand côté client.
   if (!draft.strategy) {
     return <Navigate to="/onboarding/step-1" replace />;
   }

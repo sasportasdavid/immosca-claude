@@ -1,18 +1,15 @@
-import { Navigate, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 
 import { AuthLayout } from "@/components/auth-layout";
 import { SignupForm } from "@/features/auth/signup-form";
-import { useAuth } from "@/hooks/use-auth";
+import { redirectIfAuthenticated } from "@/lib/auth-guards";
 
 export const Route = createFileRoute("/auth/signup")({
+  beforeLoad: redirectIfAuthenticated,
   component: SignupPage,
 });
 
 function SignupPage() {
-  const auth = useAuth();
-  if (auth.isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
   return (
     <AuthLayout
       title="Crée ton compte."

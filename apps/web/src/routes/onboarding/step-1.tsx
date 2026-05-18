@@ -9,30 +9,24 @@
 // si un user signed-out arrive ici, l'écran est visible mais le step-2
 // ne pourra pas upsert (RLS bloquera). Acceptable pour PR1.
 
-import { Navigate, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 
 import { OnboardingLayout } from "@/components/onboarding-layout";
 import { StrategyCardGroup } from "@/components/strategy-card";
 import { useOnboardingDraft } from "@/features/onboarding/onboarding-store";
-import { useAuth } from "@/hooks/use-auth";
+import { requireAuth } from "@/lib/auth-guards";
 
 export const Route = createFileRoute("/onboarding/step-1")({
+  beforeLoad: ({ location }) => requireAuth({ from: location.pathname }),
   component: OnboardingStep1Page,
 });
 
 const STEP_LABELS = ["Stratégie", "Paramètres"] as const;
 
 function OnboardingStep1Page() {
-  const auth = useAuth();
   const strategy = useOnboardingDraft((s) => s.strategy);
   const setStrategy = useOnboardingDraft((s) => s.setStrategy);
   const navigate = useNavigate();
-
-  // Guard léger : si pas de session, retour vers login. Le vrai guard
-  // beforeLoad viendra en étape 6.
-  if (!auth.isLoading && !auth.isAuthenticated) {
-    return <Navigate to="/auth/login" replace />;
-  }
 
   return (
     <OnboardingLayout
