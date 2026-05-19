@@ -437,11 +437,43 @@ export function detectSiteFromUrl(
 
 export type SitePlan = {
   actorId: string;
-  /** Construit l'input JSON spécifique à cet actor à partir de l'URL. */
-  buildInput: (url: string) => Record<string, unknown>;
+  /**
+   * Construit l'input JSON spécifique à cet actor à partir de l'URL.
+   * Async pour permettre des lookups externes (ex. LBC : résoudre CP →
+   * nom de commune via geo.api.gouv.fr car leadsbrary refuse les CP
+   * non-arrondissement).
+   */
+  buildInput: (url: string) => Promise<Record<string, unknown>> | Record<string, unknown>;
   /** Clé du mapper dans MULTI_URL_MAPPERS. */
   mapperKey: string;
 };
+
+/**
+ * Résout un code postal en nom de commune (la plus peuplée si plusieurs).
+ * Utilise l'API gouv geo.api.gouv.fr — gratuite, sans clé, 50 req/s.
+ * Cache module-scope pour éviter de re-fetch sur la même session.
+ */
+const cpToCityCache = new Map<string, string | null>();
+async function resolveCpToCityName(cp: string): Promise<string | null> {
+  if (!/^\d{5}$/.test(cp)) return null;
+  if (cpToCityCache.has(cp)) return cpToCityCache.get(cp)!;
+  try {
+    const res = await fetch(
+      `https://geo.api.gouv.fr/communes?codePostal=${cp}&fields=nom,population&boost=population&limit=1`,
+    );
+    if (!res.ok) {
+      cpToCityCache.set(cp, null);
+      return null;
+    }
+    const data = (await res.json()) as Array<{ nom: string }>;
+    const name = data[0]?.nom ?? null;
+    cpToCityCache.set(cp, name);
+    return name;
+  } catch {
+    cpToCityCache.set(cp, null);
+    return null;
+  }
+}
 
 /**
  * Mapping site → actor par défaut + builder d'input + mapper.
@@ -456,12 +488,18 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
   },
   leboncoin: {
     actorId: "leadsbrary~leboncoin-real-estate-scraper",
-    buildInput: (url) => {
+    buildInput: async (url) => {
       // L'actor leadsbrary attend des filtres JSON (pas une URL). Schéma
       // exact récupéré via Apify API le 2026-05-19 :
       //   keywords (str), city (str — "75015" ou "Paris 15"), radius (int, m),
       //   priceMin/Max, surfaceMin/Max, roomsMin, maxAds, delay.
       // Pas de `latitude`/`longitude`/`category` supportés.
+      //
+      // IMPORTANT : `city` doit être un NOM de ville (ex. "Saint-Maur-des-
+      // Fossés") ou un CP d'arrondissement Paris/Lyon/Marseille (75015,
+      // 69003, 13008). Pour les autres CP (94210, 33000, …), l'actor
+      // renvoie "City not found" — on doit donc résoudre le CP → nom via
+      // geo.api.gouv.fr avant d'appeler.
       //
       // Sans `city`, l'actor scrape toute la France (test du 2026-05-19 →
       // 100 maisons aléatoires, 0 retenue). On parse les 2 formats LBC :
@@ -476,10 +514,15 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
         return filters;
       }
 
+      // Extrait CP + (optionnel) slug ville depuis l'URL.
+      let cp: string | null = null;
+      let slugCity: string | null = null;
+
       // Format A : path `/c/<categorie>/<ville>_<cp>`
       const mA = parsed.pathname.match(/\/c\/[^/]+\/([a-z-]+)_(\d{5})/i);
       if (mA) {
-        filters.city = mA[2]!; // CP — plus fiable que le slug
+        slugCity = mA[1]!.replace(/-/g, " "); // gagny-93220 → "gagny"
+        cp = mA[2]!;
       }
 
       // Format B : ?locations=ZIP__lat_lng_radiusMeters (peut être liste ,)
@@ -488,15 +531,33 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
         const first = locs.split(",")[0]!;
         const m = first.match(/^(\d{5})(?:__[\d.-]+_[\d.-]+_(\d+))?/);
         if (m) {
-          filters.city = m[1]!; // CP
+          cp = m[1]!;
           if (m[2]) {
             // radius LBC déjà en mètres, dans la borne [500, 100000]
             const r = Number(m[2]);
             filters.radius = Math.max(500, Math.min(100_000, r));
           }
         } else if (/^\d{5}$/.test(first)) {
-          filters.city = first;
+          cp = first;
         }
+      }
+
+      // Résolution CP → nom de commune via geo.api.gouv.fr.
+      // Cas particuliers : Paris (75001-75020), Lyon (69001-69009),
+      // Marseille (13001-13016) — l'actor accepte le CP directement
+      // car il le mappe en arrondissement.
+      if (cp) {
+        const isParisArr = /^750[0-2]\d$/.test(cp);
+        const isLyonArr = /^6900[1-9]$/.test(cp);
+        const isMarseilleArr = /^130(0[1-9]|1[0-6])$/.test(cp);
+        if (isParisArr || isLyonArr || isMarseilleArr) {
+          filters.city = cp;
+        } else {
+          const name = await resolveCpToCityName(cp);
+          filters.city = name ?? slugCity ?? cp;
+        }
+      } else if (slugCity) {
+        filters.city = slugCity;
       }
 
       // real_estate_type : 1=maison, 2=appartement, 3=terrain

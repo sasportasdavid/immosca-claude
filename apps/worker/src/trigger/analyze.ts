@@ -281,9 +281,13 @@ export const analyzeTask = task({
               return [];
             }
             return g.urls.map(async (url) => {
+              // buildInput peut être async (ex. LBC : lookup CP → ville
+              // via geo.api.gouv.fr). On await pour le résoudre avant
+              // de lancer l'actor.
+              const runInput = await plan.buildInput(url);
               const result = await runApifyActor<RawApifyListing>({
                 actorId: plan.actorId,
-                runInput: plan.buildInput(url),
+                runInput,
                 timeoutSecs: 900,
                 memoryMbytes: 2048,
                 // Persiste le runId dès création — `cancel-analysis` peut
