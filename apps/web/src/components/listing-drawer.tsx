@@ -12,6 +12,7 @@ import { Bookmark, BookmarkCheck, ExternalLink, Lock, MapPin } from "lucide-reac
 import * as React from "react";
 import { toast } from "sonner";
 
+import { ListingMap } from "@/components/listing-map";
 import { ListingSimulator } from "@/components/listing-simulator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,10 @@ export type ListingDrawerData = {
   financement_claude: string | null;
   negociation_claude: string | null;
   prix_negociation_cible: number | null;
+
+  // localisation
+  lat: number | null;
+  lng: number | null;
 
   // freemium
   is_masked: boolean;
@@ -298,6 +303,31 @@ export function ListingDrawer({
                   {listing.is_new_construction ? <Tag>Neuf</Tag> : null}
                 </div>
               </section>
+
+              {/* Localisation — mini carte avec marker du bien.
+                  On affiche que si on a des coords ET que le bien n'est
+                  pas masqué (freemium : la position précise est PII). */}
+              {!listing.is_masked && listing.lat !== null && listing.lng !== null ? (
+                <section>
+                  <h3 className="mb-3 flex items-baseline justify-between font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                    <span>Localisation</span>
+                    {listing.adresse_raw ? (
+                      <span className="font-mono text-[11px] normal-case text-foreground/80">
+                        {listing.adresse_raw}
+                      </span>
+                    ) : null}
+                  </h3>
+                  <ListingMap
+                    lat={listing.lat}
+                    lng={listing.lng}
+                    address={
+                      listing.adresse_raw ??
+                      (`${listing.ville ?? ""} ${listing.code_postal ?? ""}`.trim() || null)
+                    }
+                    verdict={listing.verdict}
+                  />
+                </section>
+              ) : null}
 
               {/* Scoring détaillé */}
               {listing.score_total !== null ? (

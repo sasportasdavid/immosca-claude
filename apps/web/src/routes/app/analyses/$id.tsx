@@ -293,14 +293,10 @@ function AnalysisPage() {
 // `ListingRow` étend `ListingDrawerData` : tous les champs que le tableau
 // affiche ou que le drawer affiche au click. La query SELECT doit lister
 // tous les champs ci-dessous (cf. `LISTING_FREEMIUM_COLS` plus bas).
-type ListingRow = ListingDrawerData & {
-  chambres: number | null;
-  ges: "A" | "B" | "C" | "D" | "E" | "F" | "G" | null;
-  source_url: string | null;
-  adresse_raw: string | null;
-  lat: number | null;
-  lng: number | null;
-};
+// Tous les champs sont déjà dans `ListingDrawerData` (lat/lng inclus
+// pour la mini-carte du drawer). On garde le wrapper pour pouvoir
+// l'étendre sans toucher le contrat du drawer.
+type ListingRow = ListingDrawerData;
 
 const LISTING_FREEMIUM_COLS = [
   "id",
