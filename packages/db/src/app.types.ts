@@ -17,6 +17,7 @@ export type Database = {
       analyses: {
         Row: {
           apify_run_id: string | null
+          apify_run_ids: string[]
           archived_at: string | null
           code_postal: string | null
           completed_at: string | null
@@ -43,6 +44,7 @@ export type Database = {
         }
         Insert: {
           apify_run_id?: string | null
+          apify_run_ids?: string[]
           archived_at?: string | null
           code_postal?: string | null
           completed_at?: string | null
@@ -69,6 +71,7 @@ export type Database = {
         }
         Update: {
           apify_run_id?: string | null
+          apify_run_ids?: string[]
           archived_at?: string | null
           code_postal?: string | null
           completed_at?: string | null
@@ -803,6 +806,10 @@ export type Database = {
       }
     }
     Functions: {
+      append_apify_run_id: {
+        Args: { p_analysis_id: string; p_run_id: string }
+        Returns: undefined
+      }
       current_month_analyses_count: {
         Args: { p_profile_id: string }
         Returns: number
@@ -822,6 +829,7 @@ export type Database = {
         | "generating"
         | "done"
         | "failed"
+        | "canceled"
       bien_type: "appartement" | "maison" | "terrain" | "immeuble" | "autre"
       listing_source: "seloger" | "leboncoin" | "bienici" | "pap" | "logic_immo"
       pipeline_stage: "a_visiter" | "visite" | "offre" | "compromis" | "signe"
@@ -978,6 +986,7 @@ export const Constants = {
         "generating",
         "done",
         "failed",
+        "canceled",
       ],
       bien_type: ["appartement", "maison", "terrain", "immeuble", "autre"],
       listing_source: ["seloger", "leboncoin", "bienici", "pap", "logic_immo"],

@@ -24,7 +24,34 @@ export type ApifyRunOptions = {
   timeoutSecs?: number;
   /** Memory MB (defaut 2048). */
   memoryMbytes?: number;
+  /**
+   * Callback appelée dès que le runId est connu (juste après la création
+   * du run Apify, avant le polling). Utilisée par `analyze.ts` pour
+   * persister l'id en base — ainsi le edge fn `cancel-analysis` peut
+   * appeler `abortApifyRun` même si le run est encore en cours.
+   */
+  onStart?: (runId: string) => Promise<void> | void;
+  /**
+   * Callback async appelée à chaque tick de polling (toutes les 5s).
+   * Si elle retourne `true`, on abort le run côté Apify et on throw
+   * `ApifyRunCanceledError`. Permet à l'user d'arrêter immédiatement
+   * un scraping en cours sans payer le crédit complet.
+   */
+  shouldAbort?: () => Promise<boolean> | boolean;
 };
+
+/**
+ * Erreur levée quand `shouldAbort()` a renvoyé true pendant le polling.
+ * `analyze.ts` la catch et termine proprement (status=canceled).
+ */
+export class ApifyRunCanceledError extends Error {
+  readonly runId: string;
+  constructor(runId: string) {
+    super(`Apify run ${runId} aborted (cancel par user)`);
+    this.name = "ApifyRunCanceledError";
+    this.runId = runId;
+  }
+}
 
 export type ApifyRunResult<T = unknown> = {
   runId: string;
@@ -98,12 +125,39 @@ export async function runApifyActor<T>(
   );
   const runId = startRes.data.id;
 
+  // Notifie le caller du runId (pour persistance en base avant polling).
+  // On swallow toute erreur — c'est un side-channel, pas critique.
+  if (opts.onStart) {
+    try {
+      await opts.onStart(runId);
+    } catch (e) {
+      console.warn(`onStart callback failed for run ${runId}:`, e);
+    }
+  }
+
   // 2. Poll status jusqu'à terminaison
   const deadline = Date.now() + timeoutSecs * 1000 + 30_000; // marge 30s
   let runMeta: RunMeta = startRes;
   while (runMeta.data.status === "READY" || runMeta.data.status === "RUNNING") {
     if (Date.now() > deadline) {
       throw new Error(`Apify run ${runId} timeout côté worker après ${timeoutSecs}s`);
+    }
+    // Check cancellation avant de dormir, pour répondre vite.
+    if (opts.shouldAbort) {
+      try {
+        const cancel = await opts.shouldAbort();
+        if (cancel) {
+          // Abort côté Apify pour stopper la facturation immédiatement,
+          // puis throw pour que le caller termine proprement.
+          await abortApifyRun(runId);
+          throw new ApifyRunCanceledError(runId);
+        }
+      } catch (e) {
+        // Si shouldAbort throw, on log mais on continue. Si c'est notre
+        // ApifyRunCanceledError, on la re-throw.
+        if (e instanceof ApifyRunCanceledError) throw e;
+        console.warn(`shouldAbort check failed for run ${runId}:`, e);
+      }
     }
     await new Promise((r) => setTimeout(r, 5_000));
     runMeta = await apifyFetch<RunMeta>(`/actor-runs/${runId}`);
@@ -134,6 +188,33 @@ export async function runApifyActor<T>(
       estimatedCostEur,
     },
   };
+}
+
+/**
+ * Annule un run Apify en cours via l'endpoint POST /actor-runs/{id}/abort.
+ * Idempotent : 200 si abort accepté, 404/410 si run déjà terminal. On
+ * tolère tous les codes "déjà fini" car notre objectif est juste de
+ * stopper la facturation.
+ *
+ * Utilisé par :
+ *  - le polling de `runApifyActor` quand `shouldAbort()` renvoie true
+ *  - le edge fn `cancel-analysis` quand l'user click "Arrêter"
+ */
+export async function abortApifyRun(runId: string): Promise<boolean> {
+  if (!APIFY_TOKEN) return false;
+  try {
+    const res = await fetch(`${APIFY_BASE}/actor-runs/${runId}/abort`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${APIFY_TOKEN}` },
+    });
+    // 200 = abort OK
+    // 400 = déjà ABORTED/TIMED-OUT/etc (state inválido pour abort)
+    // 404 = inconnu (ou pas accessible avec ce token)
+    return res.ok || res.status === 400 || res.status === 404;
+  } catch (err) {
+    console.warn(`abortApifyRun(${runId}) failed:`, err);
+    return false;
+  }
 }
 
 /**

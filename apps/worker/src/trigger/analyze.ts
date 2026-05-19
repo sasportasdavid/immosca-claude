@@ -24,6 +24,7 @@ import { Sentry } from "@/lib/sentry";
 import { supabaseApp, supabaseData } from "@/lib/supabase";
 import {
   ACTOR_BY_SITE,
+  ApifyRunCanceledError,
   buildApifyRunInput,
   buildPigeImmoRunInput,
   detectSiteFromUrl,
@@ -148,6 +149,45 @@ async function setAnalysisStatus(
   }
 }
 
+/**
+ * Push un runId Apify dans la colonne `analyses.apify_run_ids[]` dès
+ * que le run est créé (avant polling). Permet à `cancel-analysis`
+ * d'abort tous les runs même si la task worker n'a pas eu le temps de
+ * finir son écriture finale.
+ */
+async function trackApifyRunStart(
+  analysisId: string,
+  runId: string,
+): Promise<void> {
+  const { error } = await supabaseApp.rpc("append_apify_run_id", {
+    p_analysis_id: analysisId,
+    p_run_id: runId,
+  });
+  if (error) {
+    // Side-channel — on log mais on ne fait pas tomber le run pour ça.
+    logger.warn("append_apify_run_id RPC failed", {
+      analysisId,
+      runId,
+      error: error.message,
+    });
+  }
+}
+
+/**
+ * Renvoie `true` si l'analyse a été annulée côté DB (par l'edge fn
+ * `cancel-analysis`). Appelée par `shouldAbort` de chaque run Apify
+ * pour stopper le polling et abort les runs en cours.
+ */
+async function isAnalysisCanceled(analysisId: string): Promise<boolean> {
+  const { data, error } = await supabaseApp
+    .from("analyses")
+    .select("status")
+    .eq("id", analysisId)
+    .single();
+  if (error || !data) return false;
+  return data.status === "canceled";
+}
+
 export const analyzeTask = task({
   id: "analyze",
   maxDuration: 600, // 10 min
@@ -246,6 +286,11 @@ export const analyzeTask = task({
                 runInput: plan.buildInput(url),
                 timeoutSecs: 900,
                 memoryMbytes: 2048,
+                // Persiste le runId dès création — `cancel-analysis` peut
+                // ensuite l'abort même si on n'a pas fini de polling.
+                onStart: (runId) => trackApifyRunStart(analysisId, runId),
+                // Check toutes les 5s si l'user a click "Arrêter".
+                shouldAbort: () => isAnalysisCanceled(analysisId),
               });
               return {
                 site: g.site,
@@ -311,6 +356,8 @@ export const analyzeTask = task({
           // L'actor multi-source est plus lent (5 sources × pagination)
           timeoutSecs: 1500,
           memoryMbytes: 2048,
+          onStart: (runId) => trackApifyRunStart(analysisId, runId),
+          shouldAbort: () => isAnalysisCanceled(analysisId),
         });
         mapperIsMulti = true;
       } else {
@@ -338,6 +385,8 @@ export const analyzeTask = task({
         apifyResult = await runApifyActor<RawApifyListing>({
           actorId: resolvedActorId,
           runInput: buildApifyRunInput(resolvedActorId, analysis.source_url),
+          onStart: (runId) => trackApifyRunStart(analysisId, runId),
+          shouldAbort: () => isAnalysisCanceled(analysisId),
         });
       }
 
@@ -537,6 +586,25 @@ export const analyzeTask = task({
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+
+      // Cas cancel : `shouldAbort` a renvoyé true (l'edge fn cancel-analysis
+      // a déjà set status=canceled). Inutile de surcharger en "failed",
+      // et on ne signale pas à Sentry — c'est une action volontaire user.
+      if (err instanceof ApifyRunCanceledError) {
+        logger.info("Analyze canceled by user", { analysisId, runId: err.runId });
+        return { status: "canceled" as const };
+      }
+      // Pareil si la cancel a eu lieu entre deux étapes (pas dans le poll
+      // Apify). On detect via la DB pour ne pas écraser le status canceled.
+      try {
+        if (await isAnalysisCanceled(analysisId)) {
+          logger.info("Analyze canceled (mid-step)", { analysisId });
+          return { status: "canceled" as const };
+        }
+      } catch {
+        // ignore — fallback en failed ci-dessous
+      }
+
       await setAnalysisStatus(analysisId, "failed", 0, {
         error_message: message,
       });

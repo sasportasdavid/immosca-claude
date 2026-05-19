@@ -3,20 +3,24 @@
 // L'utilisateur appelle cette function pour annuler une analyse en
 // cours. On :
 //   1. Vérifie l'auth + ownership (RLS Supabase fait le filtre)
-//   2. Lit `trigger_run_id` de l'analyse
-//   3. Appelle l'API Trigger.dev pour cancel le run
-//   4. Update analyses.status = 'canceled'
+//   2. Update analyses.status = 'canceled' EN PREMIER (signal pour le
+//      worker via `shouldAbort` qui poll cette colonne)
+//   3. Appelle l'API Apify pour abort tous les runs en cours
+//      (`apify_run_ids[]` — multi-URL peut avoir 4+ runs en parallèle)
+//   4. Appelle l'API Trigger.dev pour cancel la task worker
 //
-// L'utilisateur reçoit `{ ok: true }` immédiatement. Le worker, s'il
-// reçoit le signal de cancel à temps, va terminer proprement. Sinon
-// la DB est déjà en `canceled` et les updates suivantes du worker
-// échoueront silencieusement (status final déjà set).
+// Ordre important : on set canceled AVANT d'appeler Apify, comme ça
+// même si l'edge fn timeout sur les calls Apify, le worker verra
+// `status=canceled` à son prochain poll (5s max) et s'arrêtera tout
+// seul. L'abort Apify est juste pour accélérer l'arrêt facturation.
 
 // deno-lint-ignore-file no-explicit-any
 
 const TRIGGER_API_URL =
   Deno.env.get("TRIGGER_API_URL") ?? "https://api.trigger.dev";
 const TRIGGER_API_KEY = Deno.env.get("TRIGGER_API_KEY");
+const APIFY_TOKEN = Deno.env.get("APIFY_TOKEN");
+const APIFY_API_BASE = "https://api.apify.com/v2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
@@ -50,6 +54,24 @@ async function cancelTriggerRun(runId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Abort un run Apify en cours pour stopper la facturation immédiatement.
+ * POST /v2/actor-runs/{id}/abort, code 200 si OK, 400/404 si déjà terminal.
+ */
+async function abortApifyRun(runId: string): Promise<boolean> {
+  if (!APIFY_TOKEN) return false;
+  try {
+    const res = await fetch(`${APIFY_API_BASE}/actor-runs/${runId}/abort`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${APIFY_TOKEN}` },
+    });
+    return res.ok || res.status === 400 || res.status === 404;
+  } catch (err) {
+    console.error(`abort apify run ${runId} failed`, err);
+    return false;
+  }
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders, status: 204 });
@@ -76,8 +98,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   // Lookup l'analyse avec le JWT user (RLS filtrera si pas owner).
+  // On récupère :
+  //  - trigger_run_id : pour cancel la task Trigger.dev
+  //  - apify_run_id (legacy) + apify_run_ids[] (multi-URL) : pour
+  //    abort tous les runs Apify en cours et arrêter la facturation
   const lookupRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/analyses?id=eq.${analysisId}&select=id,status,trigger_run_id`,
+    `${SUPABASE_URL}/rest/v1/analyses?id=eq.${analysisId}&select=id,status,trigger_run_id,apify_run_id,apify_run_ids`,
     {
       headers: {
         apikey: SUPABASE_SERVICE_ROLE_KEY,
@@ -92,6 +118,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     id: string;
     status: string;
     trigger_run_id: string | null;
+    apify_run_id: string | null;
+    apify_run_ids: string[] | null;
   }>;
   if (rows.length === 0) {
     return jsonResponse(404, { error: "Analyse introuvable" });
@@ -111,14 +139,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   }
 
-  // 1) Cancel côté Trigger.dev si on a un run_id
-  let triggerCanceled = false;
-  if (analysis.trigger_run_id) {
-    triggerCanceled = await cancelTriggerRun(analysis.trigger_run_id);
-  }
-
-  // 2) Update analysis status (service_role pour bypass RLS — c'est OK
-  //    car on a déjà vérifié ownership via le lookup avec JWT user).
+  // 1) Update status='canceled' EN PREMIER. C'est le signal que le worker
+  //    poll via `shouldAbort` toutes les 5s — même si nos appels Apify/
+  //    Trigger.dev ci-dessous timeout, le worker s'arrêtera tout seul.
   const updateRes = await fetch(
     `${SUPABASE_URL}/rest/v1/analyses?id=eq.${analysisId}`,
     {
@@ -142,5 +165,33 @@ Deno.serve(async (req: Request): Promise<Response> => {
     });
   }
 
-  return jsonResponse(200, { ok: true, analysisId, triggerCanceled });
+  // 2) Abort tous les runs Apify en parallèle pour stopper la facturation.
+  //    Union de `apify_run_id` (legacy) + `apify_run_ids[]` (multi-URL),
+  //    dédup au cas où le legacy a été dupliqué dans le tableau.
+  const apifyRunIds = Array.from(
+    new Set(
+      [
+        ...(analysis.apify_run_ids ?? []),
+        ...(analysis.apify_run_id ? [analysis.apify_run_id] : []),
+      ].filter((s): s is string => !!s),
+    ),
+  );
+  const apifyResults = await Promise.all(apifyRunIds.map(abortApifyRun));
+  const apifyAborted = apifyResults.filter(Boolean).length;
+
+  // 3) Cancel la task worker côté Trigger.dev. Le worker peut très bien
+  //    déjà être en train de s'arrêter via `shouldAbort` — cet appel
+  //    finit de tuer la task si elle est encore en cours.
+  let triggerCanceled = false;
+  if (analysis.trigger_run_id) {
+    triggerCanceled = await cancelTriggerRun(analysis.trigger_run_id);
+  }
+
+  return jsonResponse(200, {
+    ok: true,
+    analysisId,
+    triggerCanceled,
+    apifyRunsAborted: apifyAborted,
+    apifyRunsAttempted: apifyRunIds.length,
+  });
 });
