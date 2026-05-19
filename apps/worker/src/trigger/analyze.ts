@@ -41,6 +41,7 @@ import {
   type MultiUrlMapperKey,
   type RawApifyListing,
 } from "@/services/apify-mappers";
+import { findAdemeDpe } from "@/services/ademe";
 import { banGeocode, banReverse } from "@/services/ban";
 import { callClaudeStructured } from "@/services/claude";
 import {
@@ -481,6 +482,94 @@ export const analyzeTask = task({
 
       await setAnalysisStatus(analysisId, "enriching", 50, {
         total_listings_filtered: mapped.length,
+      });
+
+      // 5pre. Enrichissement ADEME DPE — adresse EXACTE (numéro + rue)
+      // pour les listings qui ont (surface + code_postal + dpe) mais
+      // pas d'adresse_raw. C'est le seul moyen de récupérer la vraie
+      // adresse d'une annonce LBC/PAP/Bien'ici dont les coords sont
+      // floutées par anti-anonymat.
+      //
+      // On query l'API Koumoul ADEME pour le DPE le plus récent matchant
+      // (CP, classe DPE, surface ±5m²). Match unique ou top-1 du tri par
+      // date DESC. Refus si > 20 candidats (immeuble ambigu).
+      //
+      // Cette étape vient AVANT le reverse-BAN car ADEME est plus précis
+      // (rue + numéro, vs reverse-BAN qui donne juste la rue voisine).
+      const toAdemeMatch = mapped.filter(
+        (l) =>
+          !l.adresse_raw &&
+          l.surface &&
+          l.surface > 10 &&
+          l.code_postal &&
+          /^\d{5}$/.test(l.code_postal) &&
+          l.dpe &&
+          /^[A-G]$/.test(l.dpe),
+      );
+      logger.info("Enrichissement ADEME DPE", {
+        count: toAdemeMatch.length,
+      });
+      let ademeMatchCount = 0;
+      for (const listing of toAdemeMatch) {
+        if (!listing.surface || !listing.code_postal || !listing.dpe) continue;
+        try {
+          const match = await findAdemeDpe({
+            codePostal: listing.code_postal,
+            classeDpe: listing.dpe as "A" | "B" | "C" | "D" | "E" | "F" | "G",
+            surface: listing.surface,
+          });
+          if (!match) continue;
+          // On re-géocode l'adresse ADEME via BAN forward pour avoir
+          // lat/lng cohérents avec le texte qu'on affiche. Sinon la
+          // carte montrerait les coords (floutées) du listing tandis
+          // que le texte donnerait l'adresse exacte → incohérence.
+          let preciseLat: number | null = null;
+          let preciseLng: number | null = null;
+          try {
+            const geo = await banGeocode(match.adresse_ban);
+            preciseLat = geo.latitude;
+            preciseLng = geo.longitude;
+          } catch {
+            // Si BAN ne géocode pas l'adresse ADEME (rare car ADEME
+            // utilise déjà BAN en amont), on garde les coords originales.
+          }
+
+          await supabaseApp
+            .from("listings")
+            .update({
+              adresse_raw: match.adresse_ban,
+              adresse_geocoded: match.adresse_ban,
+              code_insee: match.code_insee_ban ?? listing.code_insee,
+              ...(preciseLat !== null && preciseLng !== null
+                ? { lat: preciseLat, lng: preciseLng }
+                : {}),
+            })
+            .eq("analysis_id", analysisId)
+            .eq("external_id", listing.external_id);
+          // On met aussi à jour `mapped` en mémoire pour que le filtre
+          // reverse-BAN ci-dessous skip correctement ce listing.
+          listing.adresse_raw = match.adresse_ban;
+          if (preciseLat !== null) listing.lat = preciseLat;
+          if (preciseLng !== null) listing.lng = preciseLng;
+          ademeMatchCount++;
+        } catch (err) {
+          Sentry.captureException(err, {
+            extra: {
+              context: "ademe lookup",
+              cp: listing.code_postal,
+              dpe: listing.dpe,
+              surface: listing.surface,
+            },
+          });
+        }
+      }
+      logger.info("ADEME matches", {
+        attempted: toAdemeMatch.length,
+        matched: ademeMatchCount,
+        matchRate:
+          toAdemeMatch.length > 0
+            ? `${Math.round((ademeMatchCount / toAdemeMatch.length) * 100)}%`
+            : "n/a",
       });
 
       // 5a. Enrichissement géocodage FORWARD (BAN) — sur listings avec
