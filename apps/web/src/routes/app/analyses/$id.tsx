@@ -14,8 +14,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Lock } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import {
+  ListingDrawer,
+  type ListingDrawerData,
+} from "@/components/listing-drawer";
+import { MarketSummary } from "@/components/market-summary";
 import { ScoreBadge } from "@/components/score-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -190,31 +196,107 @@ function AnalysisPage() {
 // des biens >70/100 si l'user est Free).
 // ──────────────────────────────────────────────────────────────────
 
-type ListingRow = {
-  id: string;
-  title: string | null;
-  type: string;
-  surface: number | null;
-  pieces: number | null;
-  code_postal: string | null;
-  ville: string | null;
-  dpe: "A" | "B" | "C" | "D" | "E" | "F" | "G" | null;
-  prix: number | null;
-  adresse_raw: string | null;
+// `ListingRow` étend `ListingDrawerData` : tous les champs que le tableau
+// affiche ou que le drawer affiche au click. La query SELECT doit lister
+// tous les champs ci-dessous (cf. `LISTING_FREEMIUM_COLS` plus bas).
+type ListingRow = ListingDrawerData & {
+  chambres: number | null;
+  ges: "A" | "B" | "C" | "D" | "E" | "F" | "G" | null;
   source_url: string | null;
+  adresse_raw: string | null;
   lat: number | null;
   lng: number | null;
-  score_total: number | null;
-  these_claude: string | null;
-  verdict: "a_visiter" | "sous_reserve" | "no_go" | null;
-  is_masked: boolean;
 };
+
+const LISTING_FREEMIUM_COLS = [
+  "id",
+  "title",
+  "type",
+  "surface",
+  "pieces",
+  "chambres",
+  "code_postal",
+  "ville",
+  "dpe",
+  "ges",
+  "prix",
+  "adresse_raw",
+  "source_url",
+  "lat",
+  "lng",
+  "description",
+  "annee_construction",
+  "etage",
+  "is_new_construction",
+  "ascenseur",
+  "balcon",
+  "terrasse",
+  "parking",
+  "cave",
+  "photos_urls",
+  "score_total",
+  "score_prix",
+  "score_rendement",
+  "score_cashflow",
+  "score_dpe",
+  "score_quartier",
+  "score_risques",
+  "verdict",
+  "prix_marche_estime",
+  "ecart_prix_pct",
+  "loyer_estime",
+  "rendement_brut_pct",
+  "rendement_net_pct",
+  "cashflow_mensuel",
+  "these_claude",
+  "financement_claude",
+  "negociation_claude",
+  "prix_negociation_cible",
+  "is_masked",
+].join(", ");
 
 const VERDICT_LABEL: Record<string, { label: string; variant: "success" | "warning" | "danger" }> = {
   a_visiter: { label: "À visiter", variant: "success" },
   sous_reserve: { label: "Sous réserve", variant: "warning" },
   no_go: { label: "No-go", variant: "danger" },
 };
+
+// Configuration des colonnes triables. Mémoise le getter pour pouvoir
+// trier la liste sans re-fetch.
+type SortKey =
+  | "score_total"
+  | "prix"
+  | "prix_m2"
+  | "surface"
+  | "rendement_brut_pct"
+  | "dpe";
+
+type SortDir = "asc" | "desc";
+
+function prixM2(l: ListingRow): number | null {
+  if (l.prix === null || !l.surface || l.surface <= 0) return null;
+  return l.prix / l.surface;
+}
+
+function getSortValue(l: ListingRow, key: SortKey): number | null {
+  switch (key) {
+    case "score_total":
+      return l.score_total;
+    case "prix":
+      return l.prix;
+    case "prix_m2":
+      return prixM2(l);
+    case "surface":
+      return l.surface;
+    case "rendement_brut_pct":
+      return l.rendement_brut_pct;
+    case "dpe": {
+      // A=1, G=7 — plus bas = mieux. On stocke en number pour comparer.
+      if (!l.dpe) return null;
+      return "ABCDEFG".indexOf(l.dpe);
+    }
+  }
+}
 
 function ListingsSection({
   analysisId,
@@ -228,18 +310,47 @@ function ListingsSection({
     queryFn: async (): Promise<ListingRow[]> => {
       const { data, error } = await supabase
         .from("listings_freemium_view")
-        .select(
-          "id, title, type, surface, pieces, code_postal, ville, dpe, prix, adresse_raw, source_url, lat, lng, score_total, these_claude, verdict, is_masked",
-        )
+        .select(LISTING_FREEMIUM_COLS)
         .eq("analysis_id", analysisId)
         .order("score_total", { ascending: false, nullsFirst: false })
-        .limit(50);
+        .limit(500);
       if (error) throw error;
-      return (data ?? []) as ListingRow[];
+      return (data ?? []) as unknown as ListingRow[];
     },
     refetchInterval:
       status === "done" || status === "failed" ? false : 5000,
   });
+
+  // État du drawer (id du listing sélectionné).
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Tri local (côté client — on n'a au max ~500 lignes).
+  const [sortKey, setSortKey] = useState<SortKey>("score_total");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const sorted = useMemo(() => {
+    if (!listings.data) return [];
+    const rows = [...listings.data];
+    rows.sort((a, b) => {
+      const va = getSortValue(a, sortKey);
+      const vb = getSortValue(b, sortKey);
+      // null en dernier
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1;
+      if (vb === null) return -1;
+      return sortDir === "asc" ? va - vb : vb - va;
+    });
+    return rows;
+  }, [listings.data, sortKey, sortDir]);
+
+  function toggleSort(k: SortKey) {
+    if (k === sortKey) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(k);
+      setSortDir(k === "dpe" ? "asc" : "desc");
+    }
+  }
 
   if (listings.isLoading) {
     return (
@@ -251,109 +362,188 @@ function ListingsSection({
   }
 
   const maskedCount = listings.data.filter((l) => l.is_masked).length;
+  const selected = sorted.find((l) => l.id === selectedId) ?? null;
 
   return (
-    <section>
+    <div className="space-y-8">
+      {/* Synthèse marché : compact, calculée côté client */}
+      <MarketSummary listings={listings.data} />
+
+      <section>
       <div className="mb-4 flex items-baseline justify-between">
         <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
-          Top {listings.data.length}{" "}
-          {listings.data.length > 1 ? "biens" : "bien"}
+          {listings.data.length}{" "}
+          {listings.data.length > 1 ? "biens analysés" : "bien analysé"}
         </h2>
         <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-          Triés par score
+          Clique sur une ligne pour la fiche complète
         </span>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <table className="w-full text-[13px]">
-          <thead className="border-b border-border bg-secondary/50">
-            <tr>
-              <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                Score
-              </th>
-              <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                Bien
-              </th>
-              <th className="text-right px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                Prix
-              </th>
-              <th className="text-right px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                Surface
-              </th>
-              <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                DPE
-              </th>
-              <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                CP
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {listings.data.map((l) => (
-              <tr
-                key={l.id}
-                className="border-b border-border last:border-0 hover:bg-secondary/30 transition-colors"
-              >
-                <td className="px-3 py-3">
-                  {l.score_total !== null ? (
-                    <ScoreBadge score={l.score_total} size="md" />
-                  ) : (
-                    <span className="text-tertiary-foreground">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-3">
-                  <div
-                    className={
-                      l.is_masked
-                        ? "select-none blur-sm pointer-events-none"
-                        : ""
-                    }
-                  >
-                    <div className="font-medium line-clamp-1">
-                      {l.title ?? "Sans titre"}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground line-clamp-1">
-                      {l.pieces ? `${l.pieces}P · ` : ""}
-                      {l.ville ?? "—"}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-3 py-3 text-right font-mono tabular-nums font-medium">
-                  {l.prix !== null && !l.is_masked
-                    ? `${Math.round(l.prix).toLocaleString("fr-FR")} €`
-                    : null}
-                  {l.is_masked ? (
-                    <span className="inline-flex items-center gap-1 text-muted-foreground">
-                      <Lock className="h-3 w-3 text-primary" />
-                      Pro
-                    </span>
-                  ) : null}
-                </td>
-                <td className="px-3 py-3 text-right font-mono tabular-nums text-muted-foreground">
-                  {l.surface ? `${l.surface} m²` : "—"}
-                </td>
-                <td className="px-3 py-3">
-                  {l.dpe ? (
-                    <span
-                      className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold bg-dpe-${l.dpe.toLowerCase()} ${
-                        ["A", "B", "F", "G"].includes(l.dpe)
-                          ? "text-white"
-                          : "text-foreground"
-                      }`}
-                    >
-                      {l.dpe}
-                    </span>
-                  ) : (
-                    <span className="text-tertiary-foreground">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-3 text-muted-foreground">
-                  {l.code_postal ?? "—"}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead className="border-b border-border bg-secondary/50">
+              <tr>
+                <SortableTh
+                  label="Score"
+                  active={sortKey === "score_total"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("score_total")}
+                />
+                <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                  Bien
+                </th>
+                <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                  Type
+                </th>
+                <SortableTh
+                  label="Surface"
+                  active={sortKey === "surface"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("surface")}
+                  align="right"
+                />
+                <SortableTh
+                  label="Prix"
+                  active={sortKey === "prix"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("prix")}
+                  align="right"
+                />
+                <SortableTh
+                  label="€/m²"
+                  active={sortKey === "prix_m2"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("prix_m2")}
+                  align="right"
+                />
+                <SortableTh
+                  label="Rdt brut"
+                  active={sortKey === "rendement_brut_pct"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("rendement_brut_pct")}
+                  align="right"
+                />
+                <SortableTh
+                  label="DPE"
+                  active={sortKey === "dpe"}
+                  dir={sortDir}
+                  onClick={() => toggleSort("dpe")}
+                />
+                <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                  Verdict
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sorted.map((l) => {
+                const verdict = l.verdict ? VERDICT_LABEL[l.verdict] : null;
+                const p2 = prixM2(l);
+                return (
+                  <tr
+                    key={l.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedId(l.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedId(l.id);
+                      }
+                    }}
+                    className="cursor-pointer border-b border-border last:border-0 hover:bg-secondary/30 transition-colors focus:bg-secondary/40 focus:outline-none"
+                  >
+                    <td className="px-3 py-3">
+                      {l.score_total !== null ? (
+                        <ScoreBadge score={l.score_total} size="md" />
+                      ) : (
+                        <span className="text-tertiary-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div
+                        className={
+                          l.is_masked
+                            ? "select-none blur-sm pointer-events-none"
+                            : ""
+                        }
+                      >
+                        <div className="font-medium line-clamp-1">
+                          {l.title ?? "Sans titre"}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground line-clamp-1">
+                          {l.pieces ? `${l.pieces}P · ` : ""}
+                          {l.ville ?? "—"}
+                          {l.code_postal ? ` ${l.code_postal}` : ""}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 text-muted-foreground capitalize">
+                      {l.type ?? "—"}
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                      {l.surface ? `${l.surface} m²` : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums font-medium">
+                      {l.prix !== null && !l.is_masked
+                        ? `${Math.round(l.prix).toLocaleString("fr-FR")} €`
+                        : null}
+                      {l.is_masked ? (
+                        <span className="inline-flex items-center gap-1 text-muted-foreground">
+                          <Lock className="h-3 w-3 text-primary" />
+                          Pro
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                      {p2 !== null && !l.is_masked
+                        ? `${Math.round(p2).toLocaleString("fr-FR")}`
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono tabular-nums">
+                      {l.rendement_brut_pct !== null && l.rendement_brut_pct !== undefined ? (
+                        <span
+                          className={
+                            l.rendement_brut_pct >= 6
+                              ? "text-success-foreground font-medium"
+                              : "text-muted-foreground"
+                          }
+                        >
+                          {l.rendement_brut_pct.toFixed(2)} %
+                        </span>
+                      ) : (
+                        <span className="text-tertiary-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      {l.dpe ? (
+                        <span
+                          className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold bg-dpe-${l.dpe.toLowerCase()} ${
+                            ["A", "B", "F", "G"].includes(l.dpe)
+                              ? "text-white"
+                              : "text-foreground"
+                          }`}
+                        >
+                          {l.dpe}
+                        </span>
+                      ) : (
+                        <span className="text-tertiary-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      {verdict ? (
+                        <Badge variant={verdict.variant}>{verdict.label}</Badge>
+                      ) : (
+                        <span className="text-tertiary-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
       {maskedCount > 0 ? (
         <p className="mt-3 text-[12px] text-muted-foreground">
@@ -361,7 +551,48 @@ function ListingsSection({
           masqué{maskedCount > 1 ? "s" : ""} — passe Pro pour les débloquer.
         </p>
       ) : null}
-    </section>
+
+      <ListingDrawer
+        listing={selected}
+        onClose={() => setSelectedId(null)}
+      />
+      </section>
+    </div>
+  );
+}
+
+function SortableTh({
+  label,
+  active,
+  dir,
+  onClick,
+  align = "left",
+}: {
+  label: string;
+  active: boolean;
+  dir: SortDir;
+  onClick: () => void;
+  align?: "left" | "right";
+}) {
+  return (
+    <th
+      className={`${align === "right" ? "text-right" : "text-left"} px-3 py-2.5`}
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className={`inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors hover:text-foreground ${
+          active ? "text-foreground" : "text-muted-foreground"
+        }`}
+      >
+        {label}
+        {active ? (
+          <span className="text-[10px] leading-none">
+            {dir === "asc" ? "↑" : "↓"}
+          </span>
+        ) : null}
+      </button>
+    </th>
   );
 }
 
@@ -376,15 +607,13 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("listings_freemium_view")
-        .select(
-          "id, title, ville, code_postal, prix, surface, pieces, dpe, score_total, these_claude, verdict, is_masked",
-        )
+        .select(LISTING_FREEMIUM_COLS)
         .eq("analysis_id", analysisId)
         .not("these_claude", "is", null)
         .order("score_total", { ascending: false, nullsFirst: false })
         .limit(10);
       if (error) throw error;
-      return (data ?? []) as ListingRow[];
+      return (data ?? []) as unknown as ListingRow[];
     },
   });
 
