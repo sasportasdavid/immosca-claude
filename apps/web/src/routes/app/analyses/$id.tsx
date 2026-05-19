@@ -16,7 +16,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Lock } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { AnalysisProgress } from "@/components/analysis-progress";
 import { AppShell } from "@/components/app-shell";
+import { HelpDrawer } from "@/components/help-drawer";
 import {
   ListingDrawer,
   type ListingDrawerData,
@@ -40,11 +42,11 @@ export const Route = createFileRoute("/app/analyses/$id")({
 
 const STATUS_LABELS: Record<string, string> = {
   pending: "En attente",
-  scraping: "Scraping des annonces",
-  enriching: "Enrichissement DVF / DPE / Géorisques",
-  scoring: "Calcul des scores",
-  generating: "Génération de la thèse Claude",
-  done: "Terminé",
+  scraping: "Collecte des annonces en cours",
+  enriching: "Croisement avec les données de marché (DVF, DPE, risques)",
+  scoring: "Calcul des scores d'opportunité",
+  generating: "Rédaction des analyses Claude pour le Top 5",
+  done: "Analyse terminée",
   failed: "Échec",
 };
 
@@ -92,19 +94,24 @@ function AnalysisPage() {
       onLogout={() => auth.signOut()}
     >
       <div className="mx-auto max-w-[960px] px-6 py-12">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-          Analyse #{id.slice(0, 8)}
-        </span>
-        <div className="mt-2 flex items-baseline gap-3">
-          <h1 className="text-[28px] font-semibold leading-[1.1] tracking-[-0.02em]">
-            {analysis.data?.ville ?? "—"}
-            {analysis.data?.code_postal ? ` ${analysis.data.code_postal}` : ""}
-          </h1>
-          {analysis.data?.status ? (
-            <Badge variant={STATUS_BADGE[analysis.data.status] ?? "default"}>
-              {STATUS_LABELS[analysis.data.status] ?? analysis.data.status}
-            </Badge>
-          ) : null}
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              Analyse #{id.slice(0, 8)}
+            </span>
+            <div className="mt-2 flex items-baseline gap-3">
+              <h1 className="text-[28px] font-semibold leading-[1.1] tracking-[-0.02em]">
+                {analysis.data?.ville ?? "—"}
+                {analysis.data?.code_postal ? ` ${analysis.data.code_postal}` : ""}
+              </h1>
+              {analysis.data?.status ? (
+                <Badge variant={STATUS_BADGE[analysis.data.status] ?? "default"}>
+                  {STATUS_LABELS[analysis.data.status] ?? analysis.data.status}
+                </Badge>
+              ) : null}
+            </div>
+          </div>
+          <HelpDrawer />
         </div>
 
         {analysis.isLoading ? (
@@ -115,51 +122,46 @@ function AnalysisPage() {
 
         {analysis.data ? (
           <div className="mt-8 space-y-6">
-            {/* Progress bar */}
-            <div>
-              <div className="mb-2 flex items-center justify-between text-[12px] text-muted-foreground">
-                <span>{STATUS_LABELS[analysis.data.status] ?? analysis.data.status}</span>
-                <span className="font-mono tabular-nums">
-                  {analysis.data.progress_pct}%
-                </span>
-              </div>
-              <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                <div
-                  className="h-full bg-primary transition-all duration-500"
-                  style={{ width: `${analysis.data.progress_pct}%` }}
-                />
-              </div>
-            </div>
-
-            {/* KPI grid */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-lg border border-border bg-card p-5">
-                <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Annonces scrapées
+            {/* Si analyse pas terminée : timeline progressive parlante
+                (4 étapes : collecte → croisement → notation → analyses Claude).
+                Sinon : KPIs résumés. L'état failed affiche l'error_message
+                en dessous, peu importe le status visuel. */}
+            {analysis.data.status === "done" ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-lg border border-border bg-card p-5">
+                  <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                    Annonces analysées
+                  </div>
+                  <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
+                    {analysis.data.total_listings_raw ?? "—"}
+                  </div>
                 </div>
-                <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
-                  {analysis.data.total_listings_raw ?? "—"}
+                <div className="rounded-lg border border-border bg-card p-5">
+                  <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                    Retenues pour la notation
+                  </div>
+                  <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
+                    {analysis.data.total_listings_filtered ?? "—"}
+                  </div>
                 </div>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-5">
-                <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Normalisées
-                </div>
-                <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
-                  {analysis.data.total_listings_filtered ?? "—"}
-                </div>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-5">
-                <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Médian €/m²
-                </div>
-                <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
-                  {analysis.data.median_price_per_sqm
-                    ? `${Math.round(Number(analysis.data.median_price_per_sqm))}`
-                    : "—"}
+                <div className="rounded-lg border border-border bg-card p-5">
+                  <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                    Médian €/m²
+                  </div>
+                  <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
+                    {analysis.data.median_price_per_sqm
+                      ? `${Math.round(Number(analysis.data.median_price_per_sqm))}`
+                      : "—"}
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : (
+              <AnalysisProgress
+                status={analysis.data.status}
+                progressPct={analysis.data.progress_pct}
+                totalListings={analysis.data.total_listings_raw}
+              />
+            )}
 
             {analysis.data.status === "failed" && analysis.data.error_message ? (
               <div className="rounded-lg border border-destructive bg-destructive-soft p-5 text-[13px] text-destructive-soft-foreground">

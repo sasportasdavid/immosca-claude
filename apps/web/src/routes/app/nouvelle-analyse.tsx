@@ -181,9 +181,9 @@ function NouvelleAnalysePage() {
           Colle une URL SeLoger ou Leboncoin.
         </h1>
         <p className="mt-3 text-[14px] text-muted-foreground">
-          On scrape les 100 à 500 annonces de la recherche, on croise avec
-          DVF / DPE / Géorisques, et on te livre un rapport scoré en
-          8 minutes environ.
+          On collecte 100 à 500 annonces depuis ta recherche, on les croise
+          avec les ventes DVF, les DPE et les risques Géorisques, et on te
+          livre un rapport noté en 8 minutes environ.
         </p>
 
         <Form {...form}>

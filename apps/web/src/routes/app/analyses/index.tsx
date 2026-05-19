@@ -29,10 +29,10 @@ const STATUS_BADGE: Record<
   { variant: "success" | "warning" | "danger" | "info" | "default"; label: string }
 > = {
   pending: { variant: "info", label: "En attente" },
-  scraping: { variant: "info", label: "Scraping" },
-  enriching: { variant: "info", label: "Enrichissement" },
-  scoring: { variant: "info", label: "Scoring" },
-  generating: { variant: "info", label: "Thèse Claude" },
+  scraping: { variant: "info", label: "Collecte" },
+  enriching: { variant: "info", label: "Croisement marché" },
+  scoring: { variant: "info", label: "Notation" },
+  generating: { variant: "info", label: "Analyses Claude" },
   done: { variant: "success", label: "Terminée" },
   failed: { variant: "danger", label: "Échec" },
 };
