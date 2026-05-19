@@ -523,21 +523,34 @@ async function scrapeViaApify(
   url: string,
   site: "leboncoin" | "seloger" | "bienici",
 ): Promise<SingleListing | null> {
+  // Beaucoup d'actors crash sur les URLs avec query string + fragment.
+  // Ex: azzouzana/seloger-by-items-urls "uncaught exception" sur des URLs
+  // SeLoger avec ?serp_view=...&search=... + #ln=classified_search...
+  // On garde uniquement protocol + host + pathname.
+  const cleanUrl = (() => {
+    try {
+      const u = new URL(url);
+      // Pour LBC on conserve les query params utiles (search avec
+      // location/category), pour les autres on drop tout
+      if (site === "leboncoin") return url;
+      return `${u.protocol}//${u.host}${u.pathname}`;
+    } catch {
+      return url;
+    }
+  })();
+
   let actorId: string;
   let runInput: Record<string, unknown>;
 
   if (site === "leboncoin") {
-    // fatihtahta accepte les URLs detail LBC dans startUrls
     actorId = "fatihtahta~leboncoin-fr-scraper";
-    runInput = { startUrls: [{ url }], limit: 1 };
+    runInput = { startUrls: [{ url: cleanUrl }], limit: 1 };
   } else if (site === "seloger") {
-    // Variante "by-items-urls" — vs "by-search-url" qu'on utilise pour analyze
     actorId = "azzouzana~seloger-mass-products-scraper-by-items-urls";
-    runInput = { startUrls: [{ url }] };
+    runInput = { startUrls: [{ url: cleanUrl }] };
   } else {
-    // silentflow Bien'ici : adUrls dédié aux annonces individuelles
     actorId = "silentflow~bienici-scraper-ppr";
-    runInput = { adUrls: [url], maxItems: 1, deepScrape: true };
+    runInput = { adUrls: [cleanUrl], maxItems: 1, deepScrape: true };
   }
 
   logger.info("Apify detail-URL", { url, actorId });
