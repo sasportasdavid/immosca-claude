@@ -7,6 +7,7 @@ import {
   Folder,
   Home,
   KanbanSquare,
+  Link2,
   LogOut,
   Plus,
   Radar,
@@ -51,6 +52,7 @@ export type AppShellRoute =
   | "dashboard"
   | "analyses"
   | "pipeline"
+  | "adresse"
   | "veilles"
   | "plan";
 
@@ -84,6 +86,7 @@ type NavItem = {
 const NAV_ITEMS: readonly NavItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard", icon: Home, enabled: true },
   { id: "analyses", label: "Mes analyses", href: "/app/analyses", icon: Folder, enabled: true },
+  { id: "adresse", label: "Adresse d'un lien", href: "/app/adresse", icon: Link2, enabled: true },
   { id: "veilles", label: "Veilles", href: "/app/veilles", icon: Radar, enabled: false },
   { id: "pipeline", label: "Pipeline", href: "/app/pipeline", icon: KanbanSquare, enabled: true },
 ];

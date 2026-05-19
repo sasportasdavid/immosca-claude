@@ -20,6 +20,7 @@ import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
 import { Route as AppNouvelleAnalyseRouteImport } from './routes/app/nouvelle-analyse'
+import { Route as AppAdresseRouteImport } from './routes/app/adresse'
 import { Route as AppAnalysesIndexRouteImport } from './routes/app/analyses/index'
 import { Route as AppAnalysesIdRouteImport } from './routes/app/analyses/$id'
 
@@ -78,6 +79,11 @@ const AppNouvelleAnalyseRoute = AppNouvelleAnalyseRouteImport.update({
   path: '/app/nouvelle-analyse',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppAdresseRoute = AppAdresseRouteImport.update({
+  id: '/app/adresse',
+  path: '/app/adresse',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppAnalysesIndexRoute = AppAnalysesIndexRouteImport.update({
   id: '/app/analyses/',
   path: '/app/analyses/',
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/cgu': typeof CguRoute
   '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
+  '/app/adresse': typeof AppAdresseRoute
   '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/cgu': typeof CguRoute
   '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
+  '/app/adresse': typeof AppAdresseRoute
   '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/cgu': typeof CguRoute
   '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
+  '/app/adresse': typeof AppAdresseRoute
   '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
   '/app/pipeline': typeof AppPipelineRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/cgu'
     | '/confidentialite'
     | '/dashboard'
+    | '/app/adresse'
     | '/app/nouvelle-analyse'
     | '/app/pipeline'
     | '/auth/callback'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/cgu'
     | '/confidentialite'
     | '/dashboard'
+    | '/app/adresse'
     | '/app/nouvelle-analyse'
     | '/app/pipeline'
     | '/auth/callback'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/cgu'
     | '/confidentialite'
     | '/dashboard'
+    | '/app/adresse'
     | '/app/nouvelle-analyse'
     | '/app/pipeline'
     | '/auth/callback'
@@ -188,6 +200,7 @@ export interface RootRouteChildren {
   CguRoute: typeof CguRoute
   ConfidentialiteRoute: typeof ConfidentialiteRoute
   DashboardRoute: typeof DashboardRoute
+  AppAdresseRoute: typeof AppAdresseRoute
   AppNouvelleAnalyseRoute: typeof AppNouvelleAnalyseRoute
   AppPipelineRoute: typeof AppPipelineRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
@@ -278,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNouvelleAnalyseRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/adresse': {
+      id: '/app/adresse'
+      path: '/app/adresse'
+      fullPath: '/app/adresse'
+      preLoaderRoute: typeof AppAdresseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/analyses/': {
       id: '/app/analyses/'
       path: '/app/analyses'
@@ -300,6 +320,7 @@ const rootRouteChildren: RootRouteChildren = {
   CguRoute: CguRoute,
   ConfidentialiteRoute: ConfidentialiteRoute,
   DashboardRoute: DashboardRoute,
+  AppAdresseRoute: AppAdresseRoute,
   AppNouvelleAnalyseRoute: AppNouvelleAnalyseRoute,
   AppPipelineRoute: AppPipelineRoute,
   AuthCallbackRoute: AuthCallbackRoute,

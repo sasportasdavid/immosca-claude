@@ -14,6 +14,92 @@ export type Database = {
   }
   public: {
     Tables: {
+      address_lookups: {
+        Row: {
+          address: string | null
+          apify_run_id: string | null
+          city: string | null
+          completed_at: string | null
+          confidence: number | null
+          created_at: string
+          error_message: string | null
+          expires_at: string
+          id: string
+          lat: number | null
+          listing_dpe: string | null
+          listing_price: number | null
+          listing_surface: number | null
+          listing_title: string | null
+          lng: number | null
+          postal_code: string | null
+          profile_id: string
+          resolution_source: string | null
+          source_site: Database["public"]["Enums"]["listing_source"] | null
+          status: string
+          trigger_run_id: string | null
+          url: string
+          url_hash: string
+        }
+        Insert: {
+          address?: string | null
+          apify_run_id?: string | null
+          city?: string | null
+          completed_at?: string | null
+          confidence?: number | null
+          created_at?: string
+          error_message?: string | null
+          expires_at?: string
+          id?: string
+          lat?: number | null
+          listing_dpe?: string | null
+          listing_price?: number | null
+          listing_surface?: number | null
+          listing_title?: string | null
+          lng?: number | null
+          postal_code?: string | null
+          profile_id: string
+          resolution_source?: string | null
+          source_site?: Database["public"]["Enums"]["listing_source"] | null
+          status?: string
+          trigger_run_id?: string | null
+          url: string
+          url_hash: string
+        }
+        Update: {
+          address?: string | null
+          apify_run_id?: string | null
+          city?: string | null
+          completed_at?: string | null
+          confidence?: number | null
+          created_at?: string
+          error_message?: string | null
+          expires_at?: string
+          id?: string
+          lat?: number | null
+          listing_dpe?: string | null
+          listing_price?: number | null
+          listing_surface?: number | null
+          listing_title?: string | null
+          lng?: number | null
+          postal_code?: string | null
+          profile_id?: string
+          resolution_source?: string | null
+          source_site?: Database["public"]["Enums"]["listing_source"] | null
+          status?: string
+          trigger_run_id?: string | null
+          url?: string
+          url_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "address_lookups_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analyses: {
         Row: {
           apify_run_id: string | null
@@ -810,6 +896,7 @@ export type Database = {
         Args: { p_analysis_id: string; p_run_id: string }
         Returns: undefined
       }
+      can_lookup_address: { Args: { p_profile_id: string }; Returns: Json }
       current_month_analyses_count: {
         Args: { p_profile_id: string }
         Returns: number
