@@ -20,33 +20,59 @@
 //  Cost : ~$0.001-0.005 par lookup. Latence : 15-60s.
 
 import { logger } from "@trigger.dev/sdk";
-import { ProxyAgent } from "undici";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import * as https from "node:https";
 
 import { detectSiteFromUrl, runApifyActor } from "@/services/apify";
 
 /**
- * ProxyAgent réutilisé pour les fetchs via le proxy résidentiel Apify.
- * Apify expose un proxy HTTP qu'on peut utiliser depuis n'importe quel
- * client HTTP — ici undici/fetch via ProxyAgent.
+ * Fetch HTML routé via le proxy résidentiel Apify.
  *
+ * Apify expose un HTTP proxy qu'on utilise depuis n'importe quel client.
  * Endpoint : http://groups-RESIDENTIAL,country-FR:<TOKEN>@proxy.apify.com:8000
- * Coût : ~$8/GB de bande passante (une page HTML ~200KB = $0.0016).
+ * Coût : ~$8/GB (page HTML ~200KB ≈ $0.0016).
  *
- * Avantages vs lancer un actor générique :
- *  - Latence ~1-3s vs 30-60s (actor boot)
- *  - Coût similaire
- *  - On garde la maîtrise du parsing HTML côté worker
+ * On utilise `node:https` + `HttpsProxyAgent` plutôt que fetch+undici
+ * pour rester compatible avec le runtime Trigger.dev (Node 21 a une
+ * undici interne qui ne supporte pas tous les patches récents).
  */
-let apifyProxyAgent: ProxyAgent | null = null;
-function getApifyProxyAgent(): ProxyAgent {
-  if (apifyProxyAgent) return apifyProxyAgent;
-  const token = process.env.APIFY_TOKEN;
-  if (!token) throw new Error("APIFY_TOKEN manquant pour le proxy résidentiel");
-  // Format username : groups-RESIDENTIAL,country-FR (FR résidentiel)
-  apifyProxyAgent = new ProxyAgent(
-    `http://groups-RESIDENTIAL,country-FR:${token}@proxy.apify.com:8000`,
-  );
-  return apifyProxyAgent;
+function fetchViaApifyProxy(url: string, headers: Record<string, string>): Promise<{
+  status: number;
+  body: string;
+}> {
+  return new Promise((resolve, reject) => {
+    const token = process.env.APIFY_TOKEN;
+    if (!token) {
+      reject(new Error("APIFY_TOKEN manquant pour le proxy résidentiel"));
+      return;
+    }
+    const proxyUrl = `http://groups-RESIDENTIAL,country-FR:${token}@proxy.apify.com:8000`;
+    const agent = new HttpsProxyAgent(proxyUrl);
+
+    const req = https.request(
+      url,
+      {
+        agent,
+        method: "GET",
+        headers,
+        timeout: 30_000,
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          const body = Buffer.concat(chunks).toString("utf-8");
+          resolve({ status: res.statusCode ?? 0, body });
+        });
+        res.on("error", reject);
+      },
+    );
+    req.on("error", reject);
+    req.on("timeout", () => {
+      req.destroy(new Error("Apify proxy timeout après 30s"));
+    });
+    req.end();
+  });
 }
 
 /**
@@ -115,41 +141,39 @@ async function scrapePapDirect(
   // (Trigger.dev = AWS). Les headers ci-dessous miment Chrome desktop FR
   // pour passer la première check. Si 403 quand même, c'est du IP block
   // et il faut router via le proxy résidentiel Apify (opts.useProxy).
-  const fetchOpts: Parameters<typeof fetch>[1] = {
-    headers: {
-      "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-      "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
-      "accept-encoding": "gzip, deflate, br, zstd",
-      "cache-control": "no-cache",
-      pragma: "no-cache",
-      "sec-ch-ua":
-        '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"macOS"',
-      "sec-fetch-dest": "document",
-      "sec-fetch-mode": "navigate",
-      "sec-fetch-site": "none",
-      "sec-fetch-user": "?1",
-      "upgrade-insecure-requests": "1",
-    },
-    redirect: "follow",
+  const headers = {
+    "user-agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    accept:
+      "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
+    "cache-control": "no-cache",
+    pragma: "no-cache",
+    "sec-ch-ua":
+      '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": '"macOS"',
+    "sec-fetch-dest": "document",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-site": "none",
+    "sec-fetch-user": "?1",
+    "upgrade-insecure-requests": "1",
   };
-  if (opts.useProxy) {
-    // @ts-expect-error — `dispatcher` est un champ undici-spécifique
-    // non typé dans le DOM fetch officiel
-    fetchOpts.dispatcher = getApifyProxyAgent();
-  }
 
-  const res = await fetch(url, fetchOpts);
-  if (!res.ok) {
-    throw new Error(
-      `PAP fetch ${res.status}${opts.useProxy ? " (via proxy)" : ""} on ${url}`,
-    );
+  let html: string;
+  if (opts.useProxy) {
+    const r = await fetchViaApifyProxy(url, headers);
+    if (r.status < 200 || r.status >= 300) {
+      throw new Error(`PAP fetch ${r.status} (via proxy) on ${url}`);
+    }
+    html = r.body;
+  } else {
+    const res = await fetch(url, { headers, redirect: "follow" });
+    if (!res.ok) {
+      throw new Error(`PAP fetch ${res.status} on ${url}`);
+    }
+    html = await res.text();
   }
-  const html = await res.text();
 
   // Extract JSON-LD blocks
   const ldMatches = Array.from(
