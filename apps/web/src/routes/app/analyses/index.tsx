@@ -9,6 +9,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { SearchCriteriaChips } from "@/components/search-criteria-chips";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -132,8 +133,12 @@ function AnalysesListPage() {
                           ) : null}
                           <Badge variant="outline">{a.source_site}</Badge>
                         </div>
-                        <div className="mt-1 font-mono text-[11px] text-muted-foreground line-clamp-1">
-                          {a.source_url}
+                        <div className="mt-2">
+                          <SearchCriteriaChips
+                            sourceUrl={a.source_url}
+                            sourceSite={a.source_site}
+                            compact
+                          />
                         </div>
                       </div>
                       <div className="flex-shrink-0 text-right">

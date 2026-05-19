@@ -25,6 +25,7 @@ import {
 } from "@/components/listing-drawer";
 import { MarketSummary } from "@/components/market-summary";
 import { ScoreBadge } from "@/components/score-badge";
+import { SearchCriteriaChips } from "@/components/search-criteria-chips";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -119,6 +120,14 @@ function AnalysisPage() {
                 </Badge>
               ) : null}
             </div>
+            {analysis.data?.source_url ? (
+              <div className="mt-3">
+                <SearchCriteriaChips
+                  sourceUrl={analysis.data.source_url}
+                  sourceSite={analysis.data.source_site}
+                />
+              </div>
+            ) : null}
           </div>
           <HelpDrawer />
         </div>
@@ -339,9 +348,30 @@ function ListingsSection({
   const [sortKey, setSortKey] = useState<SortKey>("score_total");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  const sorted = useMemo(() => {
+  // Filtres locaux (client-side, instantanés).
+  const [filterType, setFilterType] = useState<
+    "all" | "appartement" | "maison" | "terrain" | "immeuble"
+  >("all");
+  const [filterVerdict, setFilterVerdict] = useState<
+    "all" | "a_visiter" | "sous_reserve" | "no_go"
+  >("all");
+  const [filterDpe, setFilterDpe] = useState<Set<string>>(new Set());
+  const [filterMinScore, setFilterMinScore] = useState<number>(0);
+
+  const filtered = useMemo(() => {
     if (!listings.data) return [];
-    const rows = [...listings.data];
+    return listings.data.filter((l) => {
+      if (filterType !== "all" && l.type !== filterType) return false;
+      if (filterVerdict !== "all" && l.verdict !== filterVerdict) return false;
+      if (filterDpe.size > 0 && (!l.dpe || !filterDpe.has(l.dpe))) return false;
+      if (filterMinScore > 0 && (l.score_total ?? 0) < filterMinScore)
+        return false;
+      return true;
+    });
+  }, [listings.data, filterType, filterVerdict, filterDpe, filterMinScore]);
+
+  const sorted = useMemo(() => {
+    const rows = [...filtered];
     rows.sort((a, b) => {
       const va = getSortValue(a, sortKey);
       const vb = getSortValue(b, sortKey);
@@ -352,7 +382,19 @@ function ListingsSection({
       return sortDir === "asc" ? va - vb : vb - va;
     });
     return rows;
-  }, [listings.data, sortKey, sortDir]);
+  }, [filtered, sortKey, sortDir]);
+
+  const filtersActive =
+    filterType !== "all" ||
+    filterVerdict !== "all" ||
+    filterDpe.size > 0 ||
+    filterMinScore > 0;
+  function clearFilters() {
+    setFilterType("all");
+    setFilterVerdict("all");
+    setFilterDpe(new Set());
+    setFilterMinScore(0);
+  }
 
   function toggleSort(k: SortKey) {
     if (k === sortKey) {
@@ -383,12 +425,98 @@ function ListingsSection({
       <section>
       <div className="mb-4 flex items-baseline justify-between">
         <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
-          {listings.data.length}{" "}
-          {listings.data.length > 1 ? "biens analysés" : "bien analysé"}
+          {sorted.length}{" "}
+          {sorted.length > 1 ? "biens" : "bien"}
+          {filtersActive ? (
+            <span className="ml-2 font-mono text-[12px] font-normal text-muted-foreground">
+              · filtrés sur {listings.data.length}
+            </span>
+          ) : (
+            <span className="ml-1 text-[14px] font-normal">analysés</span>
+          )}
         </h2>
         <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
           Clique sur une ligne pour la fiche complète
         </span>
+      </div>
+
+      {/* Filter bar : type / verdict / DPE / score min. Côté client. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-[12px]">
+        <FilterSelect
+          label="Type"
+          value={filterType}
+          options={[
+            { value: "all", label: "Tous" },
+            { value: "appartement", label: "Appartement" },
+            { value: "maison", label: "Maison" },
+            { value: "terrain", label: "Terrain" },
+            { value: "immeuble", label: "Immeuble" },
+          ]}
+          onChange={(v) => setFilterType(v as typeof filterType)}
+        />
+        <FilterSelect
+          label="Verdict"
+          value={filterVerdict}
+          options={[
+            { value: "all", label: "Tous" },
+            { value: "a_visiter", label: "À visiter" },
+            { value: "sous_reserve", label: "Sous réserve" },
+            { value: "no_go", label: "No-go" },
+          ]}
+          onChange={(v) => setFilterVerdict(v as typeof filterVerdict)}
+        />
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">DPE</span>
+          {(["A", "B", "C", "D", "E", "F", "G"] as const).map((letter) => {
+            const active = filterDpe.has(letter);
+            return (
+              <button
+                key={letter}
+                type="button"
+                onClick={() => {
+                  setFilterDpe((s) => {
+                    const next = new Set(s);
+                    if (next.has(letter)) next.delete(letter);
+                    else next.add(letter);
+                    return next;
+                  });
+                }}
+                className={`flex h-6 w-6 items-center justify-center rounded text-[11px] font-bold transition-opacity ${
+                  active ? "" : "opacity-40 hover:opacity-70"
+                } bg-dpe-${letter.toLowerCase()} ${
+                  ["A", "B", "F", "G"].includes(letter) ? "text-white" : "text-foreground"
+                }`}
+              >
+                {letter}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Score ≥</span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            step={5}
+            value={filterMinScore}
+            onChange={(e) =>
+              setFilterMinScore(
+                Math.max(0, Math.min(100, Number(e.target.value) || 0)),
+              )
+            }
+            className="h-7 w-16 rounded-md border border-border bg-background px-2 font-mono tabular-nums text-[12px] focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+        {filtersActive ? (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="ml-auto text-[12px] text-primary hover:underline"
+          >
+            Réinitialiser
+          </button>
+        ) : null}
       </div>
 
       <div className="overflow-hidden rounded-lg border border-border bg-card">
@@ -806,5 +934,34 @@ function RenameableTitle({
       {display}
       <Pencil className="h-3.5 w-3.5 self-center text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="flex items-center gap-1.5">
+      <span className="text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-7 rounded-md border border-border bg-background px-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-ring"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
