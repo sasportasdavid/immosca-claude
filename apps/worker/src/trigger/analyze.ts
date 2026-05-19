@@ -24,11 +24,15 @@ import { Sentry } from "@/lib/sentry";
 import { supabaseApp, supabaseData } from "@/lib/supabase";
 import {
   buildApifyRunInput,
+  buildPigeImmoRunInput,
   fetchApifyRunResult,
   runApifyActor,
+  selogerUrlToPigeImmoFilters,
+  type PigeImmoFilters,
 } from "@/services/apify";
 import {
   APIFY_MAPPERS,
+  PIGE_IMMO_MAPPER,
   type ListingInsert,
   type RawApifyListing,
 } from "@/services/apify-mappers";
@@ -72,6 +76,38 @@ const payloadSchema = z.object({
    * ont changé.
    */
   skipClaude: z.boolean().optional(),
+  /**
+   * Bascule sur l'actor multi-source `dltik/pige-immo-fr-scraper`
+   * (LBC + SeLoger + PAP + Bien'ici + Logic-immo dédupliqués, avec
+   * latitude/longitude précis adresse et district quartier).
+   *
+   * Sans ça, on garde le flow legacy azzouzana (SeLoger seul, sans
+   * lat/lng précis).
+   */
+  useMultiSource: z.boolean().optional(),
+  /**
+   * Filtres directs pour l'actor multi-source. Si fourni, écrase ce
+   * qu'on aurait pu déduire de l'URL SeLoger.
+   */
+  pigeImmoFilters: z
+    .object({
+      cities: z.array(z.string()).optional(),
+      postalCodes: z.array(z.string()).optional(),
+      departments: z.array(z.string()).optional(),
+      transaction: z.enum(["buy", "rent"]).optional(),
+      propertyTypes: z
+        .array(z.enum(["appartement", "maison", "terrain", "immeuble"]))
+        .optional(),
+      priceMin: z.number().optional(),
+      priceMax: z.number().optional(),
+      surfaceMin: z.number().optional(),
+      surfaceMax: z.number().optional(),
+      maxResultsPerSource: z.number().int().optional(),
+      sources: z
+        .array(z.enum(["leboncoin", "seloger", "pap", "bienici", "logic-immo"]))
+        .optional(),
+    })
+    .optional(),
 });
 
 async function setAnalysisStatus(
@@ -113,13 +149,21 @@ export const analyzeTask = task({
   maxDuration: 600, // 10 min
   retry: { maxAttempts: 1 }, // pas de retry auto : on a Sentry pour debug
   run: async (payload: unknown) => {
-    const { analysisId, actorId, apifyRunIdOverride, paramsOverride, skipClaude } =
-      payloadSchema.parse(payload);
+    const {
+      analysisId,
+      actorId,
+      apifyRunIdOverride,
+      paramsOverride,
+      skipClaude,
+      useMultiSource,
+      pigeImmoFilters,
+    } = payloadSchema.parse(payload);
     logger.info("Analyze start", {
       analysisId,
       apifyRunIdOverride,
       hasParamsOverride: !!paramsOverride,
       skipClaude,
+      useMultiSource,
     });
 
     // 1. Lire l'analyse
@@ -137,9 +181,14 @@ export const analyzeTask = task({
     });
 
     try {
-      // 2. Apify : soit on lance un nouveau run, soit on rejoue un run
-      // existant (override pour tests / replay depuis cache).
+      // 2. Apify : 3 chemins possibles selon le payload
+      //   - apifyRunIdOverride : rejoue un run existant (test / replay cache)
+      //   - useMultiSource : actor dltik multi-source (LBC+SeLoger+PAP+Bien'ici)
+      //   - default : actor legacy (azzouzana SeLoger) via APIFY_ACTOR_*
       let apifyResult;
+      // Flag pour le bloc mapping plus bas
+      let mapperIsMulti = false;
+
       if (apifyRunIdOverride) {
         logger.info("Réutilisation d'un run Apify existant", {
           apifyRunIdOverride,
@@ -147,6 +196,30 @@ export const analyzeTask = task({
         apifyResult = await fetchApifyRunResult<RawApifyListing>(
           apifyRunIdOverride,
         );
+        // Si on rejoue un run multi-source, l'appelant doit le signaler
+        mapperIsMulti = !!useMultiSource;
+      } else if (useMultiSource) {
+        const multiActorId =
+          actorId ?? process.env.APIFY_ACTOR_MULTI ?? "dltik~pige-immo-fr-scraper";
+        // Filtres : payload explicite > parse URL + fallback ville/CP
+        const filters: PigeImmoFilters =
+          pigeImmoFilters ??
+          selogerUrlToPigeImmoFilters(analysis.source_url, {
+            ville: analysis.ville,
+            codePostal: analysis.code_postal,
+          });
+        logger.info("Multi-source run (dltik)", {
+          actorId: multiActorId,
+          filters,
+        });
+        apifyResult = await runApifyActor<RawApifyListing>({
+          actorId: multiActorId,
+          runInput: buildPigeImmoRunInput(filters),
+          // L'actor multi-source est plus lent (5 sources × pagination)
+          timeoutSecs: 1500,
+          memoryMbytes: 2048,
+        });
+        mapperIsMulti = true;
       } else {
         const resolvedActorId =
           actorId ??
@@ -170,6 +243,7 @@ export const analyzeTask = task({
         runId: apifyResult.runId,
         items: apifyResult.items.length,
         costEur: apifyResult.stats.estimatedCostEur,
+        mapperIsMulti,
       });
 
       await setAnalysisStatus(analysisId, "scraping", 20, {
@@ -177,8 +251,14 @@ export const analyzeTask = task({
         total_listings_raw: apifyResult.items.length,
       });
 
-      // 3. Map raw → listings rows
-      const mapper = APIFY_MAPPERS[analysis.source_site as keyof typeof APIFY_MAPPERS];
+      // 3. Map raw → listings rows.
+      // En mode multi-source, on utilise PIGE_IMMO_MAPPER qui détermine
+      // le `source_site` depuis le champ `source` de chaque item (donc
+      // un même run peut produire des listings de plusieurs sources).
+      // Sinon dispatch legacy par source_site de l'analyse.
+      const mapper = mapperIsMulti
+        ? PIGE_IMMO_MAPPER
+        : APIFY_MAPPERS[analysis.source_site as keyof typeof APIFY_MAPPERS];
       if (!mapper) {
         throw new Error(`Pas de mapper pour source_site=${analysis.source_site}`);
       }

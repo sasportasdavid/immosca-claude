@@ -198,6 +198,148 @@ export function buildApifyRunInput(
 }
 
 /**
+ * Filtres "multi-source" pour l'actor `dltik/pige-immo-fr-scraper`.
+ * Format JSON propre à cet actor (cities/postalCodes/propertyTypes/...).
+ *
+ * Cet actor scrape LBC + SeLoger + PAP + Bien'ici + Logic-immo en un
+ * seul run avec déduplication. Coût $0.005/listing + $0.005 enrichDpe.
+ */
+export type PigeImmoFilters = {
+  cities?: string[];
+  postalCodes?: string[];
+  departments?: string[];
+  transaction?: "buy" | "rent";
+  propertyTypes?: Array<"appartement" | "maison" | "terrain" | "immeuble">;
+  priceMin?: number;
+  priceMax?: number;
+  surfaceMin?: number;
+  surfaceMax?: number;
+  roomsMin?: number;
+  roomsMax?: number;
+  bedroomsMin?: number;
+  onlyOwner?: boolean;
+  newOnly?: boolean;
+  onlyWithPhotos?: boolean;
+  enrichDpe?: boolean;
+  dedupAcrossSources?: boolean;
+  maxResultsPerSource?: number;
+  sources?: Array<"leboncoin" | "seloger" | "pap" | "bienici" | "logic-immo">;
+};
+
+export function buildPigeImmoRunInput(
+  filters: PigeImmoFilters,
+): Record<string, unknown> {
+  // Defaults raisonnables si l'appelant ne les fournit pas.
+  return {
+    transaction: filters.transaction ?? "buy",
+    propertyTypes: filters.propertyTypes ?? ["appartement", "maison"],
+    cities: filters.cities ?? [],
+    postalCodes: filters.postalCodes ?? [],
+    departments: filters.departments ?? [],
+    priceMin: filters.priceMin,
+    priceMax: filters.priceMax,
+    surfaceMin: filters.surfaceMin,
+    surfaceMax: filters.surfaceMax,
+    roomsMin: filters.roomsMin,
+    roomsMax: filters.roomsMax,
+    bedroomsMin: filters.bedroomsMin,
+    onlyOwner: filters.onlyOwner ?? false,
+    newOnly: filters.newOnly ?? false,
+    onlyWithPhotos: filters.onlyWithPhotos ?? false,
+    enrichDpe: filters.enrichDpe ?? true,
+    dedupAcrossSources: filters.dedupAcrossSources ?? true,
+    maxResultsPerSource: filters.maxResultsPerSource ?? 200,
+    sources: filters.sources ?? ["leboncoin", "seloger", "pap", "bienici"],
+  };
+}
+
+/**
+ * Tente d'extraire des filtres Pige Immo depuis une URL SeLoger.
+ * Best-effort — si certains champs ne matchent pas, on les laisse
+ * undefined (l'actor utilise alors ses defaults).
+ *
+ * On fallback sur ville/CP fournis en argument si l'URL ne les contient
+ * pas (typiquement issu de la table `analyses.ville` / `code_postal`).
+ */
+export function selogerUrlToPigeImmoFilters(
+  url: string,
+  fallback?: { ville?: string | null; codePostal?: string | null },
+): PigeImmoFilters {
+  const filters: PigeImmoFilters = {};
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    if (fallback?.ville) filters.cities = [fallback.ville];
+    if (fallback?.codePostal) filters.postalCodes = [fallback.codePostal];
+    return filters;
+  }
+  const params = parsed.searchParams;
+
+  // distributionTypes / projects
+  const dist = params.get("distributionTypes") ?? params.get("projects");
+  if (dist && /buy/i.test(dist) && !/rent/i.test(dist)) {
+    filters.transaction = "buy";
+  } else if (dist && /rent/i.test(dist)) {
+    filters.transaction = "rent";
+  }
+
+  // types / estateTypes
+  const types = params.get("types");
+  const estateTypes = params.get("estateTypes");
+  const list: PigeImmoFilters["propertyTypes"] = [];
+  if (estateTypes) {
+    if (/apartment/i.test(estateTypes)) list.push("appartement");
+    if (/house/i.test(estateTypes)) list.push("maison");
+    if (/land/i.test(estateTypes)) list.push("terrain");
+    if (/building/i.test(estateTypes)) list.push("immeuble");
+  } else if (types) {
+    // SeLoger : 1=appart, 2=maison, 3=terrain, 5=immeuble
+    types.split(",").forEach((t) => {
+      const c = t.trim();
+      if (c === "1") list.push("appartement");
+      else if (c === "2") list.push("maison");
+      else if (c === "3") list.push("terrain");
+      else if (c === "5") list.push("immeuble");
+    });
+  }
+  if (list.length > 0) filters.propertyTypes = list;
+
+  // places=[{cp:93220}] ou [{ci:930032}]
+  const places = params.get("places");
+  if (places) {
+    const cps = [...places.matchAll(/cp:(\d{4,5})/g)]
+      .map((m) => m[1])
+      .filter((v): v is string => !!v);
+    if (cps.length > 0) filters.postalCodes = cps;
+  }
+
+  // price=NaN/200000 ou priceMax
+  const price = params.get("price");
+  const priceMax = params.get("priceMax");
+  const priceMin = params.get("priceMin");
+  if (price) {
+    const m = price.match(/(\w+)\/(\w+)/);
+    if (m) {
+      if (m[1] !== "NaN") filters.priceMin = Number(m[1]);
+      if (m[2] !== "NaN") filters.priceMax = Number(m[2]);
+    }
+  }
+  if (priceMax) filters.priceMax = Number(priceMax);
+  if (priceMin) filters.priceMin = Number(priceMin);
+
+  // Fallback ville/CP depuis le contexte si l'URL ne les contient pas
+  if (!filters.postalCodes?.length && fallback?.codePostal) {
+    filters.postalCodes = [fallback.codePostal];
+  }
+  if (!filters.cities?.length && fallback?.ville) {
+    filters.cities = [fallback.ville];
+  }
+
+  return filters;
+}
+
+/**
  * Skeleton : on retourne false en attendant une table `apify_run_costs`
  * pour calculer le cumul mensuel. À câbler avec BetterStack en PR3.5.
  */

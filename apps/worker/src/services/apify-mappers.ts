@@ -221,7 +221,111 @@ export function mapLeboncoinRow(
   };
 }
 
+/**
+ * Map un raw Pige Immo FR (actor `dltik/pige-immo-fr-scraper`) → row listings.
+ *
+ * Cet actor agrège LBC + SeLoger + PAP + Bien'ici + Logic-immo et
+ * retourne un format unifié. Les champs clés (sans pseudonyme) :
+ *   - source : "leboncoin" / "seloger" / "pap" / "bienici" / "logic-immo"
+ *   - source_id : ID dans la source (=> external_id côté DB)
+ *   - latitude / longitude : précis adresse (top win vs azzouzana)
+ *   - address : adresse complète (parfois null pour les programmes neufs,
+ *     fallback alors sur raw_extra.ademe.ademe_adresse si DPE matché)
+ *   - district : quartier précis (ex. "Gagny - Parc Carette")
+ *   - energy_class / ghg_class : DPE / GES
+ *   - main_photo_url + photo_count : 1 photo principale seulement,
+ *     pas de galerie complète (régression vs azzouzana)
+ */
+export function mapPigeImmoRow(
+  raw: RawApifyListing,
+  analysisId: string,
+): ListingInsert | null {
+  const prix = numOrNull(raw.price);
+  const sourceId = strOrNull(raw.source_id);
+  const sourceUrl = strOrNull(raw.url);
+  const source = strOrNull(raw.source);
+  if (!prix || !sourceId || !sourceUrl || !source) return null;
+
+  // Source mapping vers notre enum listing_source
+  const sourceMap: Record<string, Database["public"]["Enums"]["listing_source"]> = {
+    leboncoin: "leboncoin",
+    seloger: "seloger",
+    pap: "pap",
+    bienici: "bienici",
+    "logic-immo": "logic_immo",
+    logic_immo: "logic_immo",
+  };
+  const sourceSite = sourceMap[source.toLowerCase()];
+  if (!sourceSite) {
+    // Source inconnue : on skip plutôt que d'insérer un type cassé.
+    return null;
+  }
+
+  // Adresse : top-level `address`, fallback ADEME enrich si dispo
+  const rawExtra = (raw.raw_extra ?? {}) as Record<string, unknown>;
+  const ademe = (rawExtra.ademe ?? {}) as Record<string, unknown>;
+  const adresseRaw =
+    strOrNull(raw.address) ??
+    strOrNull(ademe.ademe_adresse) ??
+    null;
+
+  // Type bien : property_type peut être "appartement", "maison",
+  // "programme" (neuf), "terrain", "immeuble"
+  const propertyType = String(raw.property_type ?? "").toLowerCase();
+  const inferredType =
+    propertyType === "maison" || propertyType === "house"
+      ? ("maison" as const)
+      : propertyType === "terrain" || propertyType === "land"
+        ? ("terrain" as const)
+        : propertyType === "immeuble" || propertyType === "building"
+          ? ("immeuble" as const)
+          : ("appartement" as const); // programme = neuf appartement par défaut
+
+  const mainPhoto = strOrNull(raw.main_photo_url);
+
+  return {
+    analysis_id: analysisId,
+    external_id: sourceId,
+    source_site: sourceSite,
+    source_url: sourceUrl,
+    title: strOrNull(raw.title) ?? "(Sans titre)",
+    description: strOrNull(raw.description),
+    type: inferredType,
+    prix,
+    surface: numOrNull(raw.surface),
+    pieces: numOrNull(raw.rooms),
+    chambres: numOrNull(raw.bedrooms),
+    ville: strOrNull(raw.city),
+    code_postal: strOrNull(raw.postal_code),
+    adresse_raw: adresseRaw,
+    lat: numOrNull(raw.latitude),
+    lng: numOrNull(raw.longitude),
+    dpe: dpeOrNull(raw.energy_class),
+    ges: dpeOrNull(raw.ghg_class),
+    etage: numOrNull(raw.floor),
+    balcon: Boolean(raw.has_balcony),
+    terrasse: Boolean(raw.has_terrace),
+    parking: Boolean(raw.has_parking),
+    ascenseur: Boolean(raw.has_elevator),
+    cave: false, // pas dans le schéma
+    annee_construction: numOrNull(ademe.ademe_annee_construction),
+    photos_urls: mainPhoto ? [mainPhoto] : null,
+    is_exclusive: false,
+    is_new_construction:
+      Boolean(raw.is_new_build) || propertyType === "programme",
+  };
+}
+
 export const APIFY_MAPPERS = {
   seloger: mapSelogerRow,
   leboncoin: mapLeboncoinRow,
 } as const;
+
+/**
+ * Mapper pour les runs multi-source dltik. Le `source_site` du listing
+ * est déterminé par le champ `source` de chaque item (pas le worker).
+ * On exporte directement la fonction — la dispatch par source_site
+ * d'APIFY_MAPPERS ne s'applique pas car ici tous les items passent
+ * par le même mapper.
+ */
+export const PIGE_IMMO_MAPPER = mapPigeImmoRow;
