@@ -656,8 +656,14 @@ function normalizeApifyItem(
   }
 
   if (site === "seloger") {
-    // azzouzana output (cf. mapSelogerRow)
-    const externalId = asStr(raw.id) ?? asStr(raw.identifier);
+    // silentflow/seloger-scraper-ppr renvoie : id (number), title, price,
+    // surface, rooms, city, propertyType, energyClass, url. Le `raw.id`
+    // est un NUMBER, donc asStr retourne null → on stringify explicite
+    // comme on a fait pour silentflow/leboncoin-scraper-ppr.
+    const externalId =
+      typeof raw.id === "number" || typeof raw.id === "string"
+        ? String(raw.id)
+        : asStr(raw.identifier);
     if (!externalId) return null;
 
     const address = (raw.address ?? {}) as Record<string, unknown>;
@@ -666,16 +672,21 @@ function normalizeApifyItem(
     return {
       sourceSite: "seloger",
       externalId,
-      title: asStr(raw.title) ?? asStr(raw.publishedTitle),
-      prix: asNum(raw.price ?? raw.prix),
-      surface: asNum(raw.surface ?? raw.area),
-      pieces: asNum(raw.rooms ?? raw.pieces),
-      codePostal: asStr(address.zipCode ?? raw.zipCode ?? raw.code_postal),
-      ville: asStr(address.city ?? raw.city ?? raw.ville),
-      adresseRaw: asStr(address.street ?? raw.adresse ?? raw.address),
-      lat: asNum(location.lat ?? raw.lat ?? raw.latitude),
-      lng: asNum(location.lng ?? raw.lng ?? raw.longitude),
-      dpe: asDpe(raw.energyClass ?? raw.dpe),
+      title: asStr(pick("title", "publishedTitle", "name")),
+      prix: asNum(pick("price", "prix", "priceEur")),
+      surface: asNum(pick("surface", "area", "livingArea")),
+      pieces: asNum(pick("rooms", "pieces", "numberOfRooms")),
+      codePostal: asStr(
+        pick("zipCode", "zipcode", "code_postal", "postalCode") ??
+          address.zipCode,
+      ),
+      ville: asStr(pick("city", "ville", "cityName") ?? address.city),
+      adresseRaw: asStr(
+        pick("address", "adresse", "streetAddress") ?? address.street,
+      ),
+      lat: asNum(pick("lat", "latitude") ?? location.lat),
+      lng: asNum(pick("lng", "lon", "longitude") ?? location.lng),
+      dpe: asDpe(pick("energyClass", "dpe", "energyRating")),
       url: asStr(raw.url) ?? url,
       photos: Array.isArray(raw.photos)
         ? (raw.photos as unknown[]).filter(
@@ -685,14 +696,21 @@ function normalizeApifyItem(
           ? (raw.pictures as unknown[]).filter(
               (s): s is string => typeof s === "string",
             )
-          : [],
+          : Array.isArray(raw.images)
+            ? (raw.images as unknown[]).filter(
+                (s): s is string => typeof s === "string",
+              )
+            : [],
       apifyRunId,
     };
   }
 
-  // bienici (silentflow ou stealth_mode — formats légèrement différents)
+  // bienici (silentflow ou stealth_mode — formats légèrement différents).
+  // silentflow renvoie id en number → stringify explicite.
   const externalId =
-    asStr(raw.id) ?? asStr(raw.adId) ?? asStr(raw.ad_id);
+    typeof raw.id === "number" || typeof raw.id === "string"
+      ? String(raw.id)
+      : asStr(raw.adId) ?? asStr(raw.ad_id);
   if (!externalId) return null;
 
   // stealth_mode utilise `blur_info.position`, silentflow utilise direct
