@@ -20,8 +20,34 @@
 //  Cost : ~$0.001-0.005 par lookup. Latence : 15-60s.
 
 import { logger } from "@trigger.dev/sdk";
+import { ProxyAgent } from "undici";
 
 import { detectSiteFromUrl, runApifyActor } from "@/services/apify";
+
+/**
+ * ProxyAgent réutilisé pour les fetchs via le proxy résidentiel Apify.
+ * Apify expose un proxy HTTP qu'on peut utiliser depuis n'importe quel
+ * client HTTP — ici undici/fetch via ProxyAgent.
+ *
+ * Endpoint : http://groups-RESIDENTIAL,country-FR:<TOKEN>@proxy.apify.com:8000
+ * Coût : ~$8/GB de bande passante (une page HTML ~200KB = $0.0016).
+ *
+ * Avantages vs lancer un actor générique :
+ *  - Latence ~1-3s vs 30-60s (actor boot)
+ *  - Coût similaire
+ *  - On garde la maîtrise du parsing HTML côté worker
+ */
+let apifyProxyAgent: ProxyAgent | null = null;
+function getApifyProxyAgent(): ProxyAgent {
+  if (apifyProxyAgent) return apifyProxyAgent;
+  const token = process.env.APIFY_TOKEN;
+  if (!token) throw new Error("APIFY_TOKEN manquant pour le proxy résidentiel");
+  // Format username : groups-RESIDENTIAL,country-FR (FR résidentiel)
+  apifyProxyAgent = new ProxyAgent(
+    `http://groups-RESIDENTIAL,country-FR:${token}@proxy.apify.com:8000`,
+  );
+  return apifyProxyAgent;
+}
 
 /**
  * Représentation normalisée d'un bien après scraping d'une URL detail.
@@ -81,12 +107,15 @@ function asStr(v: unknown): string | null {
  * PAP expose ses biens via JSON-LD `Product` ou `RealEstateListing` dans
  * la page HTML. Pas d'anti-bot lourd → fetch direct possible.
  */
-async function scrapePapDirect(url: string): Promise<SingleListing | null> {
+async function scrapePapDirect(
+  url: string,
+  opts: { useProxy?: boolean } = {},
+): Promise<SingleListing | null> {
   // PAP a un WAF Cloudflare/Akamai qui bloque les IPs datacenter
   // (Trigger.dev = AWS). Les headers ci-dessous miment Chrome desktop FR
   // pour passer la première check. Si 403 quand même, c'est du IP block
-  // et il faut passer par un proxy résidentiel (cf. fallback Apify).
-  const res = await fetch(url, {
+  // et il faut router via le proxy résidentiel Apify (opts.useProxy).
+  const fetchOpts: Parameters<typeof fetch>[1] = {
     headers: {
       "user-agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
@@ -107,9 +136,18 @@ async function scrapePapDirect(url: string): Promise<SingleListing | null> {
       "upgrade-insecure-requests": "1",
     },
     redirect: "follow",
-  });
+  };
+  if (opts.useProxy) {
+    // @ts-expect-error — `dispatcher` est un champ undici-spécifique
+    // non typé dans le DOM fetch officiel
+    fetchOpts.dispatcher = getApifyProxyAgent();
+  }
+
+  const res = await fetch(url, fetchOpts);
   if (!res.ok) {
-    throw new Error(`PAP fetch ${res.status} on ${url}`);
+    throw new Error(
+      `PAP fetch ${res.status}${opts.useProxy ? " (via proxy)" : ""} on ${url}`,
+    );
   }
   const html = await res.text();
 
@@ -595,16 +633,32 @@ export async function scrapeSingleListingFromUrl(
     // Tentative 1 : fetch HTML direct (gratuit, rapide ~500ms).
     // PAP a un WAF qui bloque souvent les IPs datacenter.
     try {
-      const result = await scrapePapDirect(url);
+      const result = await scrapePapDirect(url, { useProxy: false });
       if (result) return result;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.warn("PAP direct fetch failed, fallback to Apify", {
+      logger.warn("PAP direct fetch failed, retry via Apify proxy", {
         url,
         error: msg,
       });
     }
-    // Tentative 2 : Apify avec proxy résidentiel (abotapi)
+
+    // Tentative 2 : fetch HTML via proxy résidentiel Apify (~$0.002, 1-3s)
+    // C'est le même code de parsing JSON-LD que le fetch direct, juste
+    // routé via une IP résidentielle FR pour contourner le WAF PAP.
+    try {
+      const result = await scrapePapDirect(url, { useProxy: true });
+      if (result) return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn("PAP via proxy failed, fallback to URL extraction", {
+        url,
+        error: msg,
+      });
+    }
+
+    // Tentative 3 : extraction minimale depuis l'URL (CP, slug ville, ID).
+    // Permet au moins le fallback ville+CP du pipeline en aval.
     const result = await scrapePapViaApify(url);
     if (!result) throw new Error("PAP : aucune donnée extraite");
     return result;
