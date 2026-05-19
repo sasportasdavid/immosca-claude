@@ -238,7 +238,7 @@ export const analyzeTask = task({
       const { data: dbListings, error: readErr } = await supabaseApp
         .from("listings")
         .select(
-          "id, external_id, prix, surface, type, dpe, etage, balcon, terrasse, parking, is_new_construction, code_insee, code_postal",
+          "id, external_id, prix, surface, type, dpe, etage, pieces, balcon, terrasse, parking, is_new_construction, code_insee, code_postal",
         )
         .eq("analysis_id", analysisId);
       if (readErr) throw readErr;
@@ -308,6 +308,7 @@ type DbListing = {
   type: string;
   dpe: string | null;
   etage: number | null;
+  pieces: number | null;
   balcon: boolean | null;
   terrasse: boolean | null;
   parking: boolean | null;
@@ -364,6 +365,32 @@ async function scoreListings(
         : null;
     }
 
+    // Lookup loyer médian zone (OLL) côté immoscan-data.
+    // On bucket pieces : 1, 2, 3 ou "4_plus" (format OLL).
+    // En PR5 minimum on indexe par code_insee (code_zonage_oll = code_insee
+    // dans nos seeds). Quand on aura le vrai import OLL avec ses propres
+    // codes de zonage, on aura besoin d'une table de mapping insee↔zonage.
+    let loyerM2MedianZone: number | null = null;
+    if (l.code_insee && l.pieces !== null) {
+      const piecesNum = Math.max(1, Math.floor(Number(l.pieces)));
+      const piecesBucket = piecesNum >= 4 ? "4_plus" : String(piecesNum);
+      const { data: ollData } = await supabaseData
+        .from("oll_loyers_medians")
+        .select("loyer_m2_median")
+        .eq("code_zonage_oll", l.code_insee)
+        .eq(
+          "type_logement",
+          l.type === "maison" ? "maison" : "appartement",
+        )
+        .eq("nombre_pieces", piecesBucket)
+        .order("annee", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      loyerM2MedianZone = ollData?.loyer_m2_median
+        ? Number(ollData.loyer_m2_median)
+        : null;
+    }
+
     // Risques Géorisques
     let hasPpri = false;
     let argile: "nul" | "faible" | "moyen" | "fort" | null = null;
@@ -406,7 +433,7 @@ async function scoreListings(
       is_new_construction: !!l.is_new_construction,
       prix_m2_median_commune: prixMedianCommune,
       prix_m2_median_iris: prixMedianIris,
-      loyer_m2_median_zone: null, // PR5 ajoutera OLL
+      loyer_m2_median_zone: loyerM2MedianZone,
       strategy: ((params.strategy as string) ?? "locatif_nu") as never,
       apport: Number(params.apport ?? 200_000),
       taux_credit_pct: Number(params.taux_credit_pct ?? 3),
