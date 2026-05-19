@@ -17,6 +17,7 @@ import { Lock, Pencil } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnalysisActions } from "@/components/analysis-actions";
+import { AnalysisMap } from "@/components/analysis-map";
 import { AnalysisProgress } from "@/components/analysis-progress";
 import { AppShell } from "@/components/app-shell";
 import { HelpDrawer } from "@/components/help-drawer";
@@ -496,6 +497,23 @@ function ListingsSection({
     <div className="space-y-8">
       {/* Synthèse marché : compact, calculée côté client */}
       <MarketSummary listings={listings.data} />
+
+      {/* Carte : localisation des biens (centroïde commune + jitter) */}
+      <section>
+        <div className="mb-4">
+          <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
+            Carte
+          </h2>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            Cliquez sur un point pour ouvrir la fiche du bien. Localisation
+            au niveau commune (pas d'adresse exacte sur SeLoger).
+          </p>
+        </div>
+        <AnalysisMap
+          listings={sorted}
+          onSelectListing={(id) => setSelectedId(id)}
+        />
+      </section>
 
       <section>
       <div className="mb-4 flex items-baseline justify-between">

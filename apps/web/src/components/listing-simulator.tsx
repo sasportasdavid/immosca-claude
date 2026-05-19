@@ -38,6 +38,16 @@ function mensualite(
   return (capital * (tauxM * Math.pow(1 + tauxM, n))) / (Math.pow(1 + tauxM, n) - 1);
 }
 
+function fmtEur(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "—";
+  return `${Math.round(n).toLocaleString("fr-FR")} €`;
+}
+
+function fmtPct(n: number | null | undefined): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return "—";
+  return `${n.toFixed(2)} %`;
+}
+
 export function ListingSimulator({ listing, initialParams }: Props) {
   const [apport, setApport] = useState(initialParams.apport);
   const [taux, setTaux] = useState(initialParams.taux_credit_pct);
@@ -164,29 +174,30 @@ export function ListingSimulator({ listing, initialParams }: Props) {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-3 text-[13px]">
-        <Stat
-          label="Mensualité"
-          value={`${Math.round(calc.mensualite).toLocaleString("fr-FR")} €`}
-        />
+        <Stat label="Mensualité" value={fmtEur(calc.mensualite)} />
         <Stat
           label="Cashflow / mois"
-          value={`${Math.round(calc.cashflowMensuel).toLocaleString("fr-FR")} €`}
-          tone={calc.cashflowMensuel >= 0 ? "good" : "bad"}
+          value={fmtEur(calc.cashflowMensuel)}
+          tone={
+            Number.isFinite(calc.cashflowMensuel)
+              ? calc.cashflowMensuel >= 0
+                ? "good"
+                : "bad"
+              : undefined
+          }
         />
-        <Stat label="Rendement brut" value={`${calc.rendementBrut.toFixed(2)} %`} />
+        <Stat label="Rendement brut" value={fmtPct(calc.rendementBrut)} />
         <Stat
           label="Rendement net-net"
-          value={`${calc.rendementNetNet.toFixed(2)} %`}
-          tone={calc.rendementNetNet >= 4 ? "good" : undefined}
+          value={fmtPct(calc.rendementNetNet)}
+          tone={
+            Number.isFinite(calc.rendementNetNet) && calc.rendementNetNet >= 4
+              ? "good"
+              : undefined
+          }
         />
-        <Stat
-          label="Frais notaire"
-          value={`${Math.round(calc.fraisNotaire).toLocaleString("fr-FR")} €`}
-        />
-        <Stat
-          label="Montant emprunté"
-          value={`${Math.round(calc.emprunte).toLocaleString("fr-FR")} €`}
-        />
+        <Stat label="Frais notaire" value={fmtEur(calc.fraisNotaire)} />
+        <Stat label="Montant emprunté" value={fmtEur(calc.emprunte)} />
       </div>
 
       <p className="mt-3 text-[11px] leading-[1.5] text-muted-foreground">
