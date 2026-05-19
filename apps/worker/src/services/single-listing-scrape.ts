@@ -175,6 +175,19 @@ async function scrapePapDirect(
     html = await res.text();
   }
 
+  return parsePapHtml(html, url, null);
+}
+
+/**
+ * Parse une page HTML PAP (récupérée via fetch direct OU Puppeteer) et
+ * extrait les données structurées. Externalisé en fonction pour pouvoir
+ * être réutilisé par `scrapePapViaPuppeteer`.
+ */
+function parsePapHtml(
+  html: string,
+  url: string,
+  apifyRunId: string | null,
+): SingleListing | null {
   // Extract JSON-LD blocks
   const ldMatches = Array.from(
     html.matchAll(
@@ -203,7 +216,6 @@ async function scrapePapDirect(
   }
 
   // Fallback : parse les meta OG si pas de JSON-LD utilisable
-  // (titre, prix viennent des og:* généralement)
   const getMeta = (prop: string): string | null => {
     const re = new RegExp(
       `<meta[^>]+property=["']${prop}["'][^>]+content=["']([^"']+)["']`,
@@ -215,13 +227,10 @@ async function scrapePapDirect(
 
   // Extract id from URL (PAP : -r<id>)
   const idMatch = url.match(/-r(\d+)/);
-  if (!idMatch) {
-    throw new Error("Impossible d'extraire l'ID PAP de l'URL");
-  }
+  if (!idMatch) return null;
   const externalId = idMatch[1]!;
 
-  // Parse depuis HTML : surface ("m²"), prix, code postal (94210)
-  // Ces regex sont best-effort — PAP affiche tout sur la page.
+  // Parse depuis HTML : surface ("m²"), prix, code postal
   const surfaceMatch = html.match(/(\d+(?:[.,]\d+)?)\s*m²/);
   const surface = surfaceMatch
     ? Number(surfaceMatch[1]!.replace(",", "."))
@@ -229,11 +238,10 @@ async function scrapePapDirect(
   const cpMatch = html.match(/\b(\d{5})\b/);
   const codePostal = cpMatch ? cpMatch[1]! : null;
 
-  // DPE : cherche "DPE : X" ou "Classe énergie : X" ou "classe_energie"
   const dpeMatch = html.match(/(?:DPE|[Cc]lasse énergie)\s*[:=]\s*([A-G])/);
   const dpe = dpeMatch ? asDpe(dpeMatch[1]) : null;
 
-  // Lat/lng peuvent venir du JSON-LD ou de markers JS embarqués
+  // Lat/lng depuis JSON-LD ou markers JS
   let lat: number | null = null;
   let lng: number | null = null;
   const geoMatch = html.match(
@@ -244,26 +252,31 @@ async function scrapePapDirect(
     lng = Number(geoMatch[2]);
   }
 
+  // Si on n'a RIEN extrait (ni titre, ni prix, ni surface), c'est probablement
+  // une page de challenge Cloudflare et pas la vraie annonce → return null
+  // pour laisser le fallback ultime se déclencher.
+  const title = asStr(ld?.name) ?? asStr(getMeta("og:title"));
+  const prix = asNum(
+    (ld?.offers as { price?: unknown })?.price ??
+      getMeta("product:price:amount"),
+  );
+  if (!title && !prix && !surface) {
+    return null;
+  }
+
   return {
     sourceSite: "pap",
     externalId,
-    title: asStr(ld?.name) ?? asStr(getMeta("og:title")) ?? null,
-    prix: asNum(
-      (ld?.offers as { price?: unknown })?.price ??
-        getMeta("product:price:amount"),
-    ),
+    title,
+    prix,
     surface,
-    pieces: null, // pas systématique dans le JSON-LD
+    pieces: null,
     codePostal,
     ville:
       asStr(
-        (
-          ld?.address as {
-            addressLocality?: unknown;
-          }
-        )?.addressLocality,
+        (ld?.address as { addressLocality?: unknown })?.addressLocality,
       ) ?? null,
-    adresseRaw: null, // PAP n'expose pas l'adresse exacte côté frontend
+    adresseRaw: null,
     lat,
     lng,
     dpe,
@@ -276,8 +289,84 @@ async function scrapePapDirect(
               (s): s is string => typeof s === "string",
             )
           : [],
-    apifyRunId: null,
+    apifyRunId,
   };
+}
+
+/**
+ * PAP via apify/web-scraper — navigateur headless avec proxy résidentiel.
+ *
+ * Pourquoi : PAP a Cloudflare avec JS challenges. Un simple fetch HTML
+ * (même via proxy résidentiel) reçoit la page de challenge et pas le
+ * contenu réel. Le navigateur headless exécute le JS et résout le
+ * challenge automatiquement.
+ *
+ * On utilise une `pageFunction` minimaliste qui :
+ *  1. Attend que la page soit complètement chargée (networkidle)
+ *  2. Récupère le HTML rendu
+ *  3. Le retourne pour parsing côté worker
+ *
+ * Coût : ~$0.02 par run. Latence : 20-40s (boot Chromium).
+ */
+async function scrapePapViaPuppeteer(url: string): Promise<SingleListing | null> {
+  const pageFunction = `
+async function pageFunction(context) {
+  const { page, request, log } = context;
+  try {
+    // Attendre que la page soit complètement chargée (Cloudflare
+    // challenge résolu si présent)
+    await page.waitForLoadState('networkidle').catch(() => {});
+  } catch (e) {
+    log.warning('waitForLoadState failed: ' + e.message);
+  }
+  // Wait extra time for any defered scripts to render JSON-LD
+  await page.waitForTimeout(2000);
+  const html = await page.content();
+  return {
+    url: request.url,
+    html,
+    title: await page.title(),
+  };
+}
+`.trim();
+
+  const result = await runApifyActor<Record<string, unknown>>({
+    actorId: "apify~web-scraper",
+    runInput: {
+      startUrls: [{ url }],
+      pageFunction,
+      proxyConfiguration: {
+        useApifyProxy: true,
+        apifyProxyGroups: ["RESIDENTIAL"],
+        apifyProxyCountry: "FR",
+      },
+      maxRequestsPerCrawl: 1,
+      maxPagesPerCrawl: 1,
+      maxConcurrency: 1,
+      ignoreSslErrors: false,
+      ignoreCorsAndCsp: false,
+      // Skip resources that ralentissent sans servir au parsing
+      downloadMedia: false,
+      downloadCss: false,
+      browserLog: false,
+      // Headless browser type
+      useChrome: false,
+      // 60s par requête max
+      pageLoadTimeoutSecs: 60,
+    },
+    timeoutSecs: 180,
+    memoryMbytes: 4096, // Puppeteer a besoin de mémoire
+  });
+
+  const item = result.items[0];
+  if (!item || typeof item.html !== "string") {
+    logger.warn("Puppeteer: pas de HTML retourné", { url });
+    return null;
+  }
+
+  // Parse le HTML retourné par Puppeteer comme on le fait pour
+  // le fetch direct (extraction JSON-LD + regex fallback)
+  return parsePapHtml(item.html as string, url, result.runId);
 }
 
 /**
@@ -654,35 +743,42 @@ export async function scrapeSingleListingFromUrl(
   logger.info("Single-listing scrape", { url, site });
 
   if (site === "pap") {
-    // Tentative 1 : fetch HTML direct (gratuit, rapide ~500ms).
-    // PAP a un WAF qui bloque souvent les IPs datacenter.
+    // PAP a Cloudflare avec JS challenges → fetch HTML simple ne suffit
+    // pas (renvoie la page de challenge). Solution : navigateur headless
+    // via apify/web-scraper avec proxy résidentiel FR. Bypass complet
+    // car Puppeteer exécute le JS et résout le challenge automatiquement.
+    //
+    // Coût ~$0.02, latence 20-40s (boot Chromium + page load).
+
+    // Tentative 1 : fetch direct (gratuit, parfois passe selon l'IP)
     try {
       const result = await scrapePapDirect(url, { useProxy: false });
-      if (result) return result;
+      if (result) {
+        logger.info("PAP direct fetch OK", { url });
+        return result;
+      }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.warn("PAP direct fetch failed, retry via Apify proxy", {
+      logger.warn("PAP direct fetch failed", {
         url,
-        error: msg,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
 
-    // Tentative 2 : fetch HTML via proxy résidentiel Apify (~$0.002, 1-3s)
-    // C'est le même code de parsing JSON-LD que le fetch direct, juste
-    // routé via une IP résidentielle FR pour contourner le WAF PAP.
+    // Tentative 2 : navigateur headless Puppeteer via apify/web-scraper
     try {
-      const result = await scrapePapDirect(url, { useProxy: true });
-      if (result) return result;
+      const result = await scrapePapViaPuppeteer(url);
+      if (result) {
+        logger.info("PAP via Puppeteer OK", { url });
+        return result;
+      }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logger.warn("PAP via proxy failed, fallback to URL extraction", {
+      logger.warn("PAP via Puppeteer failed", {
         url,
-        error: msg,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
 
-    // Tentative 3 : extraction minimale depuis l'URL (CP, slug ville, ID).
-    // Permet au moins le fallback ville+CP du pipeline en aval.
+    // Tentative 3 : extraction minimale depuis l'URL (ultime fallback)
     const result = await scrapePapViaApify(url);
     if (!result) throw new Error("PAP : aucune donnée extraite");
     return result;
