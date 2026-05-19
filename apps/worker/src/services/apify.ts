@@ -457,22 +457,49 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
   leboncoin: {
     actorId: "leadsbrary~leboncoin-real-estate-scraper",
     buildInput: (url) => {
-      // L'actor leadsbrary attend des filtres JSON (city, priceMax, etc.)
-      // pas une URL — on parse l'URL LBC pour extraire les filtres.
-      // Format URL : /c/ventes_immobilieres/gagny_93220?real_estate_type=2&price=min-500000
-      const filters: Record<string, unknown> = { maxAds: 100 };
+      // L'actor leadsbrary attend des filtres JSON (pas une URL). Schéma
+      // exact récupéré via Apify API le 2026-05-19 :
+      //   keywords (str), city (str — "75015" ou "Paris 15"), radius (int, m),
+      //   priceMin/Max, surfaceMin/Max, roomsMin, maxAds, delay.
+      // Pas de `latitude`/`longitude`/`category` supportés.
+      //
+      // Sans `city`, l'actor scrape toute la France (test du 2026-05-19 →
+      // 100 maisons aléatoires, 0 retenue). On parse les 2 formats LBC :
+      //
+      // Format A (legacy) : /c/ventes_immobilieres/gagny_93220?...
+      // Format B (moderne) : /recherche?category=9&locations=94210__lat_lng_radiusM
+      const filters: Record<string, unknown> = { maxAds: 500 };
       let parsed: URL;
       try {
         parsed = new URL(url);
       } catch {
         return filters;
       }
-      // City + zipcode depuis le path (gagny_93220)
-      const m = parsed.pathname.match(/\/c\/[^/]+\/([a-z-]+)_(\d{5})/i);
-      if (m) {
-        filters.city = m[1]!.replace(/-/g, " ");
+
+      // Format A : path `/c/<categorie>/<ville>_<cp>`
+      const mA = parsed.pathname.match(/\/c\/[^/]+\/([a-z-]+)_(\d{5})/i);
+      if (mA) {
+        filters.city = mA[2]!; // CP — plus fiable que le slug
       }
-      // real_estate_type : 1=maison, 2=appartement, 3=terrain, 4=parking
+
+      // Format B : ?locations=ZIP__lat_lng_radiusMeters (peut être liste ,)
+      const locs = parsed.searchParams.get("locations");
+      if (locs) {
+        const first = locs.split(",")[0]!;
+        const m = first.match(/^(\d{5})(?:__[\d.-]+_[\d.-]+_(\d+))?/);
+        if (m) {
+          filters.city = m[1]!; // CP
+          if (m[2]) {
+            // radius LBC déjà en mètres, dans la borne [500, 100000]
+            const r = Number(m[2]);
+            filters.radius = Math.max(500, Math.min(100_000, r));
+          }
+        } else if (/^\d{5}$/.test(first)) {
+          filters.city = first;
+        }
+      }
+
+      // real_estate_type : 1=maison, 2=appartement, 3=terrain
       const ret = parsed.searchParams.get("real_estate_type");
       if (ret) {
         const map: Record<string, string> = {
@@ -481,8 +508,9 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
           "3": "terrain",
         };
         const parts = ret.split(",").map((t) => map[t.trim()]).filter(Boolean);
-        if (parts.length > 0) filters.keywords = parts[0]; // leadsbrary prend 1 keyword
+        if (parts.length > 0) filters.keywords = parts[0]; // leadsbrary : 1 keyword
       }
+
       // price : "min-500000" ou "100000-300000"
       const price = parsed.searchParams.get("price");
       if (price) {
@@ -492,7 +520,8 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
           if (m2[2] !== "max") filters.priceMax = Number(m2[2]);
         }
       }
-      // square : surface
+
+      // square : "min-100" ou "50-200"
       const sq = parsed.searchParams.get("square");
       if (sq) {
         const m3 = sq.match(/(\w+)-(\w+)/);
@@ -501,6 +530,14 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
           if (m3[2] !== "max") filters.surfaceMax = Number(m3[2]);
         }
       }
+
+      // rooms : "3-max" ou "2-5"
+      const rooms = parsed.searchParams.get("rooms");
+      if (rooms) {
+        const m4 = rooms.match(/(\w+)-/);
+        if (m4 && m4[1] !== "min") filters.roomsMin = Number(m4[1]);
+      }
+
       return filters;
     },
     mapperKey: "leboncoin:leadsbrary",
