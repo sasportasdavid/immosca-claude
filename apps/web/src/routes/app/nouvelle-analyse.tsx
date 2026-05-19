@@ -11,11 +11,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import type { Commune } from "@/lib/commune-search";
+
 import { AppShell } from "@/components/app-shell";
+import { CommuneAutocomplete } from "@/components/commune-autocomplete";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -130,6 +134,11 @@ function NouvelleAnalysePage() {
 
   const overrideParams = form.watch("overrideParams");
 
+  // Commune sélectionnée via l'autocomplete (state local, hors form).
+  // Permet d'enrichir search_filters avec code INSEE, département,
+  // centre géo — pas juste le nom de ville saisi.
+  const [selectedCommune, setSelectedCommune] = useState<Commune | null>(null);
+
   const createAnalysis = useMutation({
     mutationFn: async (values: FormInput) => {
       if (!auth.user) throw new Error("Pas de session");
@@ -158,10 +167,22 @@ function NouvelleAnalysePage() {
         tolerance_travaux: base?.tolerance_travaux ?? null,
       };
 
-      // Filtres dltik (format PigeImmoFilters côté worker)
+      // Filtres dltik (format PigeImmoFilters côté worker).
+      // Si l'user a pické une commune dans l'autocomplete, on enrichit
+      // avec tous ses codes postaux (Paris a 20 CP, Lyon en a 9, etc.)
+      // et le département.
+      const sc = selectedCommune;
       const search_filters = {
         cities: [values.city],
-        postalCodes: values.postalCode ? [values.postalCode] : [],
+        postalCodes:
+          sc?.codesPostaux?.length
+            ? sc.codesPostaux
+            : values.postalCode
+              ? [values.postalCode]
+              : [],
+        departments: sc?.codeDepartement ? [sc.codeDepartement] : [],
+        codeInsee: sc?.code, // pas dans le schema PigeImmoFilters mais utile
+        //                      pour le worker (lookup DVF par code commune)
         transaction: values.transaction,
         propertyTypes: values.propertyTypes,
         priceMin: values.priceMin ?? null,
@@ -266,39 +287,67 @@ function NouvelleAnalysePage() {
               )}
             />
 
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_140px]">
-              <FormField
-                control={form.control}
-                name="city"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ville</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="text"
-                        placeholder="Gagny"
-                        autoFocus
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="postalCode"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Code postal</FormLabel>
-                    <FormControl>
-                      <Input type="text" placeholder="93220" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="city"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Ville</FormLabel>
+                  <FormControl>
+                    <CommuneAutocomplete
+                      id="city-input"
+                      value={field.value}
+                      onChange={(val) => {
+                        field.onChange(val);
+                        // Si l'user retape après pick, on invalide la
+                        // sélection (sinon CP/INSEE deviennent obsolètes)
+                        if (
+                          selectedCommune &&
+                          val.toLowerCase() !== selectedCommune.nom.toLowerCase()
+                        ) {
+                          setSelectedCommune(null);
+                          form.setValue("postalCode", "");
+                        }
+                      }}
+                      onSelect={(commune) => {
+                        setSelectedCommune(commune);
+                        field.onChange(commune.nom);
+                        // Auto-fill du CP (1er si plusieurs — l'user
+                        // verra "+N" dans la liste pour les communes
+                        // multi-CP comme Paris)
+                        form.setValue(
+                          "postalCode",
+                          commune.codesPostaux[0] ?? "",
+                        );
+                      }}
+                      placeholder="Tape les 2 premières lettres…"
+                      autoFocus
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    {selectedCommune ? (
+                      <span className="font-mono">
+                        {selectedCommune.nom} · {selectedCommune.codesPostaux.join(", ")}{" "}
+                        · INSEE {selectedCommune.code} · dép. {selectedCommune.codeDepartement}
+                      </span>
+                    ) : (
+                      "Suggestions officielles INSEE via geo.api.gouv.fr."
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            {/* Code postal : caché pour l'user (rempli par l'autocomplete),
+                mais reste dans le form pour préserver la valeur si l'user
+                tape manuellement sans pick. */}
+            <FormField
+              control={form.control}
+              name="postalCode"
+              render={({ field }) => (
+                <input type="hidden" {...field} />
+              )}
+            />
 
             <FormField
               control={form.control}
