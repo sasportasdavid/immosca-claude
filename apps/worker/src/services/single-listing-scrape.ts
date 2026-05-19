@@ -546,8 +546,11 @@ async function scrapeViaApify(
     actorId = "fatihtahta~leboncoin-fr-scraper";
     runInput = { startUrls: [{ url: cleanUrl }], limit: 1 };
   } else if (site === "seloger") {
-    actorId = "azzouzana~seloger-mass-products-scraper-by-items-urls";
-    runInput = { startUrls: [{ url: cleanUrl }] };
+    // silentflow/seloger-scraper-ppr a `adUrls` dédié aux URLs detail
+    // (vs azzouzana by-items-urls qui crash "uncaught exception" en
+    // prod). Pattern identique à leur Bien'ici scraper.
+    actorId = "silentflow~seloger-scraper-ppr";
+    runInput = { adUrls: [cleanUrl], maxItems: 1, deepScrape: true };
   } else {
     actorId = "silentflow~bienici-scraper-ppr";
     runInput = { adUrls: [cleanUrl], maxItems: 1, deepScrape: true };
