@@ -48,7 +48,7 @@ function AnalysesListPage() {
       const { data, error } = await supabase
         .from("analyses")
         .select(
-          "id, source_url, source_site, status, total_listings_filtered, median_price_per_sqm, ville, code_postal, created_at",
+          "id, name, source_url, source_site, status, total_listings_filtered, median_price_per_sqm, ville, code_postal, created_at",
         )
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -120,10 +120,12 @@ function AnalysesListPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-[15px] font-semibold">
-                            {a.ville ?? "Sans ville"}
-                            {a.code_postal ? ` · ${a.code_postal}` : ""}
+                            {a.name ??
+                              (a.ville
+                                ? `${a.ville}${a.code_postal ? ` · ${a.code_postal}` : ""}`
+                                : `Analyse #${a.id.slice(0, 8)}`)}
                           </span>
                           {badge ? (
                             <Badge variant={badge.variant}>{badge.label}</Badge>

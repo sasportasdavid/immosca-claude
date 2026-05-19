@@ -135,13 +135,34 @@ export function mapSelogerRow(
     ascenseur: Boolean(raw.ascenseur ?? raw.elevator),
     cave: Boolean(raw.cave ?? raw.cellar),
     annee_construction: numOrNull(raw.anneeConstruction ?? raw.yearBuilt),
-    photos_urls: Array.isArray(raw.gallery)
-      ? (raw.gallery as Array<{ src?: string } | string>)
+    // azzouzana retourne `gallery: { images: [{ url, alt, classification }] }`
+    // (dict, pas array). Format précédemment supporté pour les actors
+    // qui renvoient un array de strings ou {src} reste compatible.
+    photos_urls: (() => {
+      const gallery = raw.gallery as
+        | { images?: Array<{ url?: string }> }
+        | Array<{ src?: string } | string>
+        | null
+        | undefined;
+      if (!gallery) {
+        return Array.isArray(raw.photos)
+          ? (raw.photos as string[]).filter((p) => typeof p === "string")
+          : null;
+      }
+      if (Array.isArray(gallery)) {
+        const urls = gallery
           .map((g) => (typeof g === "string" ? g : g.src))
-          .filter((p): p is string => typeof p === "string")
-      : Array.isArray(raw.photos)
-        ? (raw.photos as string[]).filter((p) => typeof p === "string")
-        : null,
+          .filter((p): p is string => typeof p === "string");
+        return urls.length > 0 ? urls : null;
+      }
+      if (Array.isArray(gallery.images)) {
+        const urls = gallery.images
+          .map((img) => img.url)
+          .filter((u): u is string => typeof u === "string");
+        return urls.length > 0 ? urls : null;
+      }
+      return null;
+    })(),
     is_exclusive: Boolean(raw.exclusivite ?? raw.isExclusive),
     is_new_construction:
       propertyType === "PROJECT" || Boolean(raw.neuf ?? raw.isNew),

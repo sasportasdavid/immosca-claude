@@ -11,10 +11,10 @@
 // - Side panel fiche bien
 // - Tabs (Tableau / Top 10 / Synthèse / Carte)
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Lock } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Lock, Pencil } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnalysisProgress } from "@/components/analysis-progress";
 import { AppShell } from "@/components/app-shell";
@@ -99,11 +99,20 @@ function AnalysisPage() {
             <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
               Analyse #{id.slice(0, 8)}
             </span>
-            <div className="mt-2 flex items-baseline gap-3">
-              <h1 className="text-[28px] font-semibold leading-[1.1] tracking-[-0.02em]">
-                {analysis.data?.ville ?? "—"}
-                {analysis.data?.code_postal ? ` ${analysis.data.code_postal}` : ""}
-              </h1>
+            <div className="mt-2 flex flex-wrap items-baseline gap-3">
+              <RenameableTitle
+                analysisId={id}
+                value={
+                  analysis.data?.name ??
+                  (analysis.data?.ville
+                    ? `${analysis.data.ville}${
+                        analysis.data.code_postal
+                          ? ` ${analysis.data.code_postal}`
+                          : ""
+                      }`
+                    : null)
+                }
+              />
               {analysis.data?.status ? (
                 <Badge variant={STATUS_BADGE[analysis.data.status] ?? "default"}>
                   {STATUS_LABELS[analysis.data.status] ?? analysis.data.status}
@@ -387,6 +396,7 @@ function ListingsSection({
           <table className="w-full text-[13px]">
             <thead className="border-b border-border bg-secondary/50">
               <tr>
+                <th className="w-16 px-3 py-2.5" />
                 <SortableTh
                   label="Score"
                   active={sortKey === "score_total"}
@@ -456,6 +466,24 @@ function ListingsSection({
                     }}
                     className="cursor-pointer border-b border-border last:border-0 hover:bg-secondary/30 transition-colors focus:bg-secondary/40 focus:outline-none"
                   >
+                    <td className="px-3 py-2">
+                      {l.photos_urls && l.photos_urls[0] && !l.is_masked ? (
+                        <img
+                          src={l.photos_urls[0]}
+                          alt=""
+                          loading="lazy"
+                          className="h-12 w-16 rounded-md object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-12 w-16 items-center justify-center rounded-md border border-dashed border-border bg-secondary/30 text-tertiary-foreground">
+                          {l.is_masked ? (
+                            <Lock className="h-3.5 w-3.5 text-primary" />
+                          ) : (
+                            <span className="text-[9px]">—</span>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-3 py-3">
                       {l.score_total !== null ? (
                         <ScoreBadge score={l.score_total} size="md" />
@@ -696,5 +724,87 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
         })}
       </div>
     </section>
+  );
+}
+
+
+// ──────────────────────────────────────────────────────────────────
+// RenameableTitle — h1 cliquable qui se transforme en input pour
+// renommer une recherche. Update direct sur analyses.name côté DB.
+// ──────────────────────────────────────────────────────────────────
+
+function RenameableTitle({
+  analysisId,
+  value,
+}: {
+  analysisId: string;
+  value: string | null;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!editing) setDraft(value ?? "");
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  const display = value ?? "Sans nom";
+
+  async function save() {
+    const trimmed = draft.trim();
+    if (!trimmed || trimmed === value) {
+      setEditing(false);
+      return;
+    }
+    const { error } = await supabase
+      .from("analyses")
+      .update({ name: trimmed })
+      .eq("id", analysisId);
+    if (error) {
+      console.warn("Renommage échoué", error);
+      setEditing(false);
+      return;
+    }
+    // Optimistic : on update le cache puis on invalide pour forcer le refetch.
+    queryClient.invalidateQueries({ queryKey: ["analysis", analysisId] });
+    queryClient.invalidateQueries({ queryKey: ["analyses"] });
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") {
+            setDraft(value ?? "");
+            setEditing(false);
+          }
+        }}
+        maxLength={80}
+        className="rounded-md border border-border bg-background px-2 py-1 text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] outline-none focus:ring-2 focus:ring-ring"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="group inline-flex items-baseline gap-2 rounded-md px-1 py-0.5 text-left text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] hover:bg-secondary/50"
+      aria-label="Renommer la recherche"
+    >
+      {display}
+      <Pencil className="h-3.5 w-3.5 self-center text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+    </button>
   );
 }

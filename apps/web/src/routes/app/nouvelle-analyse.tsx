@@ -49,6 +49,7 @@ export const Route = createFileRoute("/app/nouvelle-analyse")({
 });
 
 const formSchema = z.object({
+  name: z.string().trim().max(80, "Max 80 caractères").optional(),
   url: z
     .string()
     .url("Doit être une URL valide")
@@ -62,6 +63,22 @@ const formSchema = z.object({
 });
 
 type FormInput = z.infer<typeof formSchema>;
+
+/**
+ * Tente de générer un nom auto à partir de l'URL ("SeLoger · Gagny · achat").
+ * Heuristique simple sur les patterns connus, sinon fallback "Recherche
+ * SeLoger" / "Recherche Leboncoin".
+ */
+function suggestNameFromUrl(url: string): string {
+  const site = /seloger/.test(url)
+    ? "SeLoger"
+    : /leboncoin/.test(url)
+      ? "Leboncoin"
+      : /bienici/.test(url)
+        ? "BienIci"
+        : "Recherche";
+  return `Recherche ${site} ${new Date().toLocaleDateString("fr-FR")}`;
+}
 
 function detectSite(
   url: string,
@@ -98,7 +115,7 @@ function NouvelleAnalysePage() {
 
   const form = useForm<FormInput>({
     resolver: zodResolver(formSchema),
-    defaultValues: { url: "" },
+    defaultValues: { name: "", url: "" },
   });
 
   const createAnalysis = useMutation({
@@ -127,6 +144,7 @@ function NouvelleAnalysePage() {
           source_site: site,
           params_snapshot: snapshot,
           status: "pending",
+          name: values.name?.trim() || suggestNameFromUrl(values.url),
         })
         .select("id")
         .single();
@@ -191,6 +209,28 @@ function NouvelleAnalysePage() {
             onSubmit={form.handleSubmit((v) => createAnalysis.mutate(v))}
             className="mt-8 space-y-5"
           >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nom de la recherche (optionnel)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      placeholder="Ex. Gagny été 2026 — appart 2P"
+                      maxLength={80}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Pour t'y retrouver entre plusieurs analyses. Si tu
+                    laisses vide, on génère un nom automatique.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
               control={form.control}
               name="url"

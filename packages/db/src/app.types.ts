@@ -24,6 +24,7 @@ export type Database = {
           id: string
           median_price_per_sqm: number | null
           median_score: number | null
+          name: string | null
           params_snapshot: Json
           profile_id: string
           progress_pct: number
@@ -46,6 +47,7 @@ export type Database = {
           id?: string
           median_price_per_sqm?: number | null
           median_score?: number | null
+          name?: string | null
           params_snapshot: Json
           profile_id: string
           progress_pct?: number
@@ -68,6 +70,7 @@ export type Database = {
           id?: string
           median_price_per_sqm?: number | null
           median_score?: number | null
+          name?: string | null
           params_snapshot?: Json
           profile_id?: string
           progress_pct?: number

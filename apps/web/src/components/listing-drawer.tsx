@@ -9,6 +9,7 @@
 // sensibles (prix, adresse, thèse) arrivent déjà à null si `is_masked`.
 
 import { ExternalLink, Lock, MapPin } from "lucide-react";
+import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -103,7 +104,6 @@ function fmtPct(n: number | null | undefined, digits = 2): string {
 export function ListingDrawer({ listing, onClose, onUpgrade }: Props) {
   const open = listing !== null;
   const verdict = listing?.verdict ? VERDICT_LABEL[listing.verdict] : null;
-  const photo = listing?.photos_urls?.[0];
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
@@ -136,15 +136,13 @@ export function ListingDrawer({ listing, onClose, onUpgrade }: Props) {
             </SheetHeader>
 
             <SheetBody className="space-y-7">
-              {/* Photo + URL */}
-              {photo ? (
-                <div className="overflow-hidden rounded-lg border border-border">
-                  <img
-                    src={photo}
-                    alt={listing.title ?? ""}
-                    className={`aspect-[16/10] w-full object-cover ${listing.is_masked ? "blur-md select-none" : ""}`}
-                  />
-                </div>
+              {/* Galerie photos : 1ère en grand + thumbs scrollables horizontales */}
+              {listing.photos_urls && listing.photos_urls.length > 0 ? (
+                <ListingGallery
+                  photos={listing.photos_urls}
+                  alt={listing.title ?? ""}
+                  blurred={listing.is_masked}
+                />
               ) : null}
 
               {/* Prix + écart marché */}
@@ -363,6 +361,60 @@ function Tag({ children }: { children: React.ReactNode }) {
     <span className="inline-flex items-center rounded-full border border-border bg-secondary/40 px-2.5 py-0.5 text-[11px] text-muted-foreground">
       {children}
     </span>
+  );
+}
+
+function ListingGallery({
+  photos,
+  alt,
+  blurred,
+}: {
+  photos: string[];
+  alt: string;
+  blurred: boolean;
+}) {
+  // index de la photo affichée en grand. Cliquer une thumb la met en hero.
+  const [activeIdx, setActiveIdx] = React.useState(0);
+  const safeIdx = Math.min(activeIdx, photos.length - 1);
+  const heroSrc = photos[safeIdx]!;
+
+  return (
+    <div>
+      <div className="overflow-hidden rounded-lg border border-border">
+        <img
+          src={heroSrc}
+          alt={alt}
+          className={`aspect-[16/10] w-full bg-secondary object-cover ${blurred ? "blur-md select-none" : ""}`}
+        />
+      </div>
+      {photos.length > 1 ? (
+        <div className="-mx-1 mt-2 flex gap-1.5 overflow-x-auto pb-1">
+          {photos.map((url, i) => (
+            <button
+              key={url}
+              type="button"
+              onClick={() => setActiveIdx(i)}
+              className={`flex-shrink-0 overflow-hidden rounded-md border-2 transition-colors ${
+                i === safeIdx
+                  ? "border-primary"
+                  : "border-transparent hover:border-border"
+              }`}
+              aria-label={`Photo ${i + 1}`}
+            >
+              <img
+                src={url}
+                alt=""
+                loading="lazy"
+                className={`h-14 w-20 object-cover ${blurred ? "blur-sm" : ""}`}
+              />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+        {photos.length} photo{photos.length > 1 ? "s" : ""}
+      </p>
+    </div>
   );
 }
 
