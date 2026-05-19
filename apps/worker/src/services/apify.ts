@@ -449,33 +449,6 @@ export type SitePlan = {
 };
 
 /**
- * Résout un code postal en nom de commune (la plus peuplée si plusieurs).
- * Utilise l'API gouv geo.api.gouv.fr — gratuite, sans clé, 50 req/s.
- * Cache module-scope pour éviter de re-fetch sur la même session.
- */
-const cpToCityCache = new Map<string, string | null>();
-async function resolveCpToCityName(cp: string): Promise<string | null> {
-  if (!/^\d{5}$/.test(cp)) return null;
-  if (cpToCityCache.has(cp)) return cpToCityCache.get(cp)!;
-  try {
-    const res = await fetch(
-      `https://geo.api.gouv.fr/communes?codePostal=${cp}&fields=nom,population&boost=population&limit=1`,
-    );
-    if (!res.ok) {
-      cpToCityCache.set(cp, null);
-      return null;
-    }
-    const data = (await res.json()) as Array<{ nom: string }>;
-    const name = data[0]?.nom ?? null;
-    cpToCityCache.set(cp, name);
-    return name;
-  } catch {
-    cpToCityCache.set(cp, null);
-    return null;
-  }
-}
-
-/**
  * Mapping site → actor par défaut + builder d'input + mapper.
  * Pour changer d'actor sur un site, modifier ici (et ajouter le mapper
  * correspondant dans apify-mappers.MULTI_URL_MAPPERS).
@@ -487,121 +460,22 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
     mapperKey: "seloger:azzouzana",
   },
   leboncoin: {
-    actorId: "leadsbrary~leboncoin-real-estate-scraper",
-    buildInput: async (url) => {
-      // L'actor leadsbrary attend des filtres JSON (pas une URL). Schéma
-      // exact récupéré via Apify API le 2026-05-19 :
-      //   keywords (str), city (str — "75015" ou "Paris 15"), radius (int, m),
-      //   priceMin/Max, surfaceMin/Max, roomsMin, maxAds, delay.
-      // Pas de `latitude`/`longitude`/`category` supportés.
-      //
-      // IMPORTANT : `city` doit être un NOM de ville (ex. "Saint-Maur-des-
-      // Fossés") ou un CP d'arrondissement Paris/Lyon/Marseille (75015,
-      // 69003, 13008). Pour les autres CP (94210, 33000, …), l'actor
-      // renvoie "City not found" — on doit donc résoudre le CP → nom via
-      // geo.api.gouv.fr avant d'appeler.
-      //
-      // Sans `city`, l'actor scrape toute la France (test du 2026-05-19 →
-      // 100 maisons aléatoires, 0 retenue). On parse les 2 formats LBC :
-      //
-      // Format A (legacy) : /c/ventes_immobilieres/gagny_93220?...
-      // Format B (moderne) : /recherche?category=9&locations=94210__lat_lng_radiusM
-      const filters: Record<string, unknown> = { maxAds: 500 };
-      let parsed: URL;
-      try {
-        parsed = new URL(url);
-      } catch {
-        return filters;
-      }
-
-      // Extrait CP + (optionnel) slug ville depuis l'URL.
-      let cp: string | null = null;
-      let slugCity: string | null = null;
-
-      // Format A : path `/c/<categorie>/<ville>_<cp>`
-      const mA = parsed.pathname.match(/\/c\/[^/]+\/([a-z-]+)_(\d{5})/i);
-      if (mA) {
-        slugCity = mA[1]!.replace(/-/g, " "); // gagny-93220 → "gagny"
-        cp = mA[2]!;
-      }
-
-      // Format B : ?locations=ZIP__lat_lng_radiusMeters (peut être liste ,)
-      const locs = parsed.searchParams.get("locations");
-      if (locs) {
-        const first = locs.split(",")[0]!;
-        const m = first.match(/^(\d{5})(?:__[\d.-]+_[\d.-]+_(\d+))?/);
-        if (m) {
-          cp = m[1]!;
-          if (m[2]) {
-            // radius LBC déjà en mètres, dans la borne [500, 100000]
-            const r = Number(m[2]);
-            filters.radius = Math.max(500, Math.min(100_000, r));
-          }
-        } else if (/^\d{5}$/.test(first)) {
-          cp = first;
-        }
-      }
-
-      // Résolution CP → nom de commune via geo.api.gouv.fr.
-      // Cas particuliers : Paris (75001-75020), Lyon (69001-69009),
-      // Marseille (13001-13016) — l'actor accepte le CP directement
-      // car il le mappe en arrondissement.
-      if (cp) {
-        const isParisArr = /^750[0-2]\d$/.test(cp);
-        const isLyonArr = /^6900[1-9]$/.test(cp);
-        const isMarseilleArr = /^130(0[1-9]|1[0-6])$/.test(cp);
-        if (isParisArr || isLyonArr || isMarseilleArr) {
-          filters.city = cp;
-        } else {
-          const name = await resolveCpToCityName(cp);
-          filters.city = name ?? slugCity ?? cp;
-        }
-      } else if (slugCity) {
-        filters.city = slugCity;
-      }
-
-      // real_estate_type : 1=maison, 2=appartement, 3=terrain
-      const ret = parsed.searchParams.get("real_estate_type");
-      if (ret) {
-        const map: Record<string, string> = {
-          "1": "maison",
-          "2": "appartement",
-          "3": "terrain",
-        };
-        const parts = ret.split(",").map((t) => map[t.trim()]).filter(Boolean);
-        if (parts.length > 0) filters.keywords = parts[0]; // leadsbrary : 1 keyword
-      }
-
-      // price : "min-500000" ou "100000-300000"
-      const price = parsed.searchParams.get("price");
-      if (price) {
-        const m2 = price.match(/(\w+)-(\w+)/);
-        if (m2) {
-          if (m2[1] !== "min") filters.priceMin = Number(m2[1]);
-          if (m2[2] !== "max") filters.priceMax = Number(m2[2]);
-        }
-      }
-
-      // square : "min-100" ou "50-200"
-      const sq = parsed.searchParams.get("square");
-      if (sq) {
-        const m3 = sq.match(/(\w+)-(\w+)/);
-        if (m3) {
-          if (m3[1] !== "min") filters.surfaceMin = Number(m3[1]);
-          if (m3[2] !== "max") filters.surfaceMax = Number(m3[2]);
-        }
-      }
-
-      // rooms : "3-max" ou "2-5"
-      const rooms = parsed.searchParams.get("rooms");
-      if (rooms) {
-        const m4 = rooms.match(/(\w+)-/);
-        if (m4 && m4[1] !== "min") filters.roomsMin = Number(m4[1]);
-      }
-
-      return filters;
-    },
-    mapperKey: "leboncoin:leadsbrary",
+    // 2026-05-19 : swap leadsbrary → silentflow.
+    // Raisons :
+    //  - silentflow accepte une URL LBC directe (`searchUrl`), pas besoin
+    //    de parser les filtres ni de résoudre CP→ville (leadsbrary
+    //    rejetait les CP non-arrondissement avec "City not found")
+    //  - $0.0015/result vs $0.003/result (2× moins cher)
+    //  - Sortie : GPS natif (`latitude`/`longitude`), `attributes[]`
+    //    pivotable pour DPE/surface/pièces, `images[]` complet
+    actorId: "silentflow~leboncoin-scraper-ppr",
+    buildInput: (url) => ({
+      searchUrl: url,
+      maxItems: 500,
+      browseMode: true, // requis pour DPE, GPS, surface (mode "search" simple
+      //                   ne renvoie que titre/prix/ville)
+    }),
+    mapperKey: "leboncoin:silentflow",
   },
   pap: {
     actorId: "azzouzana~pap-fr-mass-products-scraper-by-search-url",

@@ -385,6 +385,98 @@ export function mapLbcLeadsbraryRow(
 }
 
 /**
+ * LBC `silentflow/leboncoin-scraper-ppr` (browseMode=true).
+ *
+ * Sortie : prix direct (`price`), GPS natif (`latitude`/`longitude`),
+ * `images[]`, et `attributes[]` un tableau de paires {key, value} pour
+ * surface, pièces, DPE, GES, etc. On résout les attributs en pivotant
+ * le tableau en map locale.
+ *
+ * Avantages vs leadsbrary : accepte une URL LBC directe (pas de parsing
+ * filtres), pricing 2× moins cher ($0.0015 vs $0.003).
+ */
+export function mapLbcSilentflowRow(
+  raw: RawApifyListing,
+  analysisId: string,
+): ListingInsert | null {
+  const prix = numOrNull(raw.price);
+  const externalId = strOrNull(raw.id);
+  const sourceUrl = strOrNull(raw.url);
+  if (!prix || !externalId || !sourceUrl) return null;
+
+  // Pivot attributes[] → map pour accès rapide par key
+  const attrsList = Array.isArray(raw.attributes)
+    ? (raw.attributes as Array<{ key?: string; value?: string }>)
+    : [];
+  const attrs = new Map<string, string>();
+  for (const a of attrsList) {
+    if (a && typeof a.key === "string" && typeof a.value === "string") {
+      attrs.set(a.key, a.value);
+    }
+  }
+  const attrNum = (k: string): number | null => {
+    const v = attrs.get(k);
+    if (!v) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  // property_type via attribute `real_estate_type` : 1=maison, 2=appartement,
+  // 3=terrain, 4=parking, 5=immeuble (mapping LBC standard)
+  const ret = attrs.get("real_estate_type");
+  const inferredType =
+    ret === "1"
+      ? ("maison" as const)
+      : ret === "3"
+        ? ("terrain" as const)
+        : ret === "5"
+          ? ("immeuble" as const)
+          : ("appartement" as const);
+
+  // DPE/GES : attribute "energy_rate" / "ges" → "a".."g" (lowercase)
+  const energy = attrs.get("energy_rate") ?? attrs.get("energy_class");
+  const gesRaw = attrs.get("ges") ?? attrs.get("ges_rate") ?? attrs.get("ges_class");
+
+  // outside_access : "Balcon, Terrasse, Jardin, Piscine" → flags
+  const outside = (attrs.get("outside_access") ?? "").toLowerCase();
+
+  return {
+    analysis_id: analysisId,
+    external_id: externalId,
+    source_site: "leboncoin",
+    source_url: sourceUrl,
+    title: strOrNull(raw.title) ?? "(Sans titre)",
+    description: strOrNull(raw.description),
+    type: inferredType,
+    prix,
+    surface: attrNum("square") ?? attrNum("surface"),
+    pieces: attrNum("rooms"),
+    chambres: attrNum("bedrooms"),
+    ville: strOrNull(raw.city),
+    code_postal: strOrNull(raw.zipcode),
+    adresse_raw: null, // LBC ne donne jamais l'adresse exacte
+    lat: numOrNull(raw.latitude),
+    lng: numOrNull(raw.longitude),
+    dpe: dpeOrNull(energy?.toUpperCase()),
+    ges: dpeOrNull(gesRaw?.toUpperCase()),
+    etage: attrNum("floor_number"),
+    balcon: outside.includes("balcon"),
+    terrasse: outside.includes("terrasse"),
+    parking: attrs.get("parking") === "1" || Number(attrs.get("parking_spots") ?? 0) > 0,
+    ascenseur: attrs.get("elevator") === "1",
+    cave: attrs.get("cellar") === "1",
+    annee_construction: attrNum("building_year"),
+    photos_urls: Array.isArray(raw.images)
+      ? (raw.images as string[]).filter((u) => typeof u === "string")
+      : null,
+    is_exclusive: false,
+    is_new_construction: (attrs.get("real_estate_status") ?? "")
+      .toLowerCase()
+      .includes("neuf"),
+  };
+}
+
+/**
  * PAP `azzouzana/pap-fr-mass-products-scraper-by-search-url`.
  * Format français : `prix` est une string "192.000 €", surface dans
  * `caracteristiques` à parser via regex ("Appartement / 1 pièce / 35,51 m² / 5.407 € le m²").
@@ -551,7 +643,9 @@ export const APIFY_MAPPERS = {
  */
 export const MULTI_URL_MAPPERS = {
   "seloger:azzouzana": mapSelogerRow,
+  // leadsbrary conservé pour pouvoir rollback si silentflow régresse
   "leboncoin:leadsbrary": mapLbcLeadsbraryRow,
+  "leboncoin:silentflow": mapLbcSilentflowRow,
   "pap:azzouzana": mapPapAzzouzanaRow,
   "bienici:stealth_mode": mapBienIciStealthRow,
 } as const;
