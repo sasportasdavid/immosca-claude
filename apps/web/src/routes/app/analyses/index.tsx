@@ -38,6 +38,7 @@ const STATUS_BADGE: Record<
   generating: { variant: "info", label: "Analyses Claude" },
   done: { variant: "success", label: "Terminée" },
   failed: { variant: "danger", label: "Échec" },
+  canceled: { variant: "default", label: "Annulée" },
 };
 
 function AnalysesListPage() {

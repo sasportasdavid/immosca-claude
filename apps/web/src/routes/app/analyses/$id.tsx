@@ -11,7 +11,7 @@
 // - Side panel fiche bien
 // - Tabs (Tableau / Top 10 / Synthèse / Carte)
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Lock, Pencil } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -50,6 +50,7 @@ const STATUS_LABELS: Record<string, string> = {
   generating: "Rédaction des analyses Claude pour le Top 5",
   done: "Analyse terminée",
   failed: "Échec",
+  canceled: "Annulée",
 };
 
 const STATUS_BADGE: Record<
@@ -63,12 +64,26 @@ const STATUS_BADGE: Record<
   generating: "info",
   done: "success",
   failed: "danger",
+  canceled: "default",
 };
 
 function AnalysisPage() {
   const { id } = Route.useParams();
   const auth = useAuth();
   const profile = useProfile();
+  const queryClient = useQueryClient();
+
+  const cancelAnalysis = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase.functions.invoke("cancel-analysis", {
+        body: { analysisId: id },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["analysis", id] });
+    },
+  });
 
   const analysis = useQuery({
     queryKey: ["analysis", id],
@@ -188,6 +203,8 @@ function AnalysisPage() {
                 status={analysis.data.status}
                 progressPct={analysis.data.progress_pct}
                 totalListings={analysis.data.total_listings_raw}
+                onCancel={() => cancelAnalysis.mutate()}
+                isCanceling={cancelAnalysis.isPending}
               />
             )}
 

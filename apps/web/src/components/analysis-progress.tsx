@@ -9,7 +9,9 @@
 //
 // Présentationnel pur. Reçoit `status` + `progressPct` en props.
 
-import { Check, Loader2, Sparkles } from "lucide-react";
+import { Check, Loader2, Sparkles, X } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 
 export type AnalysisStatus =
   | "pending"
@@ -18,7 +20,8 @@ export type AnalysisStatus =
   | "scoring"
   | "generating"
   | "done"
-  | "failed";
+  | "failed"
+  | "canceled";
 
 type Step = {
   key: AnalysisStatus;
@@ -83,15 +86,23 @@ type Props = {
   status: AnalysisStatus;
   progressPct: number;
   totalListings?: number | null;
+  /** Si fourni, affiche un bouton "Arrêter l'analyse" pendant les étapes
+   *  en cours. Le parent gère la mutation Edge Function + invalidation. */
+  onCancel?: () => void;
+  isCanceling?: boolean;
 };
 
 export function AnalysisProgress({
   status,
   progressPct,
   totalListings,
+  onCancel,
+  isCanceling,
 }: Props) {
   const isDone = status === "done";
   const isFailed = status === "failed";
+  const isCanceled = status === "canceled";
+  const isActive = !isDone && !isFailed && !isCanceled;
 
   return (
     <div className="space-y-6">
@@ -106,6 +117,10 @@ export function AnalysisProgress({
             ) : isFailed ? (
               <span className="text-destructive-foreground">
                 Analyse interrompue
+              </span>
+            ) : isCanceled ? (
+              <span className="text-muted-foreground">
+                Analyse annulée
               </span>
             ) : (
               <span>Analyse en cours…</span>
@@ -182,12 +197,26 @@ export function AnalysisProgress({
         })}
       </ol>
 
-      {!isDone && !isFailed ? (
-        <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
-          Cette page se rafraîchit toute seule. Tu peux fermer l'onglet et
-          revenir plus tard — l'analyse continue côté serveur.
-        </p>
+      {isActive ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border bg-secondary/20 px-4 py-3">
+          <p className="flex items-center gap-2 text-[12px] text-muted-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            Cette page se rafraîchit toute seule. Tu peux fermer l'onglet et
+            revenir plus tard — l'analyse continue côté serveur.
+          </p>
+          {onCancel ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCancel}
+              disabled={isCanceling}
+              className="flex-shrink-0"
+            >
+              <X className="mr-1.5 h-3.5 w-3.5" />
+              {isCanceling ? "Annulation…" : "Arrêter l'analyse"}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
