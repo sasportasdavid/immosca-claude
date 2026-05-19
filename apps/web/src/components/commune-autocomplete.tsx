@@ -57,6 +57,11 @@ export function CommuneAutocomplete({
       setOptions(results);
       setLoading(false);
       setActive(0);
+      // Ouvre la liste dès que les résultats arrivent si le champ a le
+      // focus (sinon on respecte l'intent user qui aurait blur).
+      if (results.length > 0 && document.activeElement === inputRef.current) {
+        setOpen(true);
+      }
     }, 250);
     return () => {
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);

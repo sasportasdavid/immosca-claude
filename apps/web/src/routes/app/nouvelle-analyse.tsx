@@ -11,12 +11,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import type { Commune } from "@/lib/commune-search";
+import { findCommunesInRadius, type Commune } from "@/lib/commune-search";
 
 import { AppShell } from "@/components/app-shell";
 import { CommuneAutocomplete } from "@/components/commune-autocomplete";
@@ -139,6 +139,32 @@ function NouvelleAnalysePage() {
   // centre géo — pas juste le nom de ville saisi.
   const [selectedCommune, setSelectedCommune] = useState<Commune | null>(null);
 
+  // Rayon en km autour de la commune pivot. 0 = juste la ville pivot.
+  const [radiusKm, setRadiusKm] = useState<number>(0);
+
+  // Communes incluses dans le rayon (calculé async). Vide si radiusKm=0.
+  const [communesInRadius, setCommunesInRadius] = useState<
+    Array<Commune & { distanceKm: number }>
+  >([]);
+  const [radiusLoading, setRadiusLoading] = useState(false);
+
+  // Recalcule la liste des communes incluses quand pivot ou rayon change.
+  // Debounce léger pour éviter de cogner l'API à chaque tick du slider.
+  useEffect(() => {
+    if (!selectedCommune?.centre || radiusKm <= 0) {
+      setCommunesInRadius([]);
+      return;
+    }
+    const [lng, lat] = selectedCommune.centre.coordinates;
+    setRadiusLoading(true);
+    const t = setTimeout(async () => {
+      const list = await findCommunesInRadius(lat, lng, radiusKm);
+      setCommunesInRadius(list);
+      setRadiusLoading(false);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [selectedCommune, radiusKm]);
+
   const createAnalysis = useMutation({
     mutationFn: async (values: FormInput) => {
       if (!auth.user) throw new Error("Pas de session");
@@ -168,21 +194,43 @@ function NouvelleAnalysePage() {
       };
 
       // Filtres dltik (format PigeImmoFilters côté worker).
-      // Si l'user a pické une commune dans l'autocomplete, on enrichit
-      // avec tous ses codes postaux (Paris a 20 CP, Lyon en a 9, etc.)
-      // et le département.
+      // Multi-communes si rayon > 0 : on inclut toutes les communes
+      // dans le rayon de la pivot. Sinon juste la pivot.
       const sc = selectedCommune;
+      const allCommunes =
+        radiusKm > 0 && communesInRadius.length > 0
+          ? communesInRadius
+          : sc
+            ? [{ ...sc, distanceKm: 0 }]
+            : [];
+      const cities = allCommunes.map((c) => c.nom);
+      const postalCodes = Array.from(
+        new Set(allCommunes.flatMap((c) => c.codesPostaux ?? [])),
+      );
+      const departments = Array.from(
+        new Set(
+          allCommunes
+            .map((c) => c.codeDepartement)
+            .filter((d): d is string => !!d),
+        ),
+      );
       const search_filters = {
-        cities: [values.city],
+        cities: cities.length > 0 ? cities : [values.city],
         postalCodes:
-          sc?.codesPostaux?.length
-            ? sc.codesPostaux
+          postalCodes.length > 0
+            ? postalCodes
             : values.postalCode
               ? [values.postalCode]
               : [],
-        departments: sc?.codeDepartement ? [sc.codeDepartement] : [],
-        codeInsee: sc?.code, // pas dans le schema PigeImmoFilters mais utile
-        //                      pour le worker (lookup DVF par code commune)
+        departments,
+        codeInsee: sc?.code, // pivot uniquement (pour DVF lookup)
+        centre: sc?.centre
+          ? {
+              lat: sc.centre.coordinates[1],
+              lng: sc.centre.coordinates[0],
+              radiusKm,
+            }
+          : null,
         transaction: values.transaction,
         propertyTypes: values.propertyTypes,
         priceMin: values.priceMin ?? null,
@@ -348,6 +396,75 @@ function NouvelleAnalysePage() {
                 <input type="hidden" {...field} />
               )}
             />
+
+            {/* Slider rayon — visible seulement quand une commune est
+                sélectionnée (sinon on n'a pas de centre géo). */}
+            {selectedCommune?.centre ? (
+              <div>
+                <div className="mb-2 flex items-baseline justify-between">
+                  <label
+                    htmlFor="radius-slider"
+                    className="text-[14px] font-medium"
+                  >
+                    Rayon autour de {selectedCommune.nom}
+                  </label>
+                  <span className="font-mono text-[14px] tabular-nums">
+                    {radiusKm === 0 ? "Ville seule" : `${radiusKm} km`}
+                  </span>
+                </div>
+                <input
+                  id="radius-slider"
+                  type="range"
+                  min={0}
+                  max={30}
+                  step={1}
+                  value={radiusKm}
+                  onChange={(e) => setRadiusKm(Number(e.target.value))}
+                  className="w-full accent-primary"
+                />
+                <div className="mt-1 flex justify-between font-mono text-[10px] text-tertiary-foreground">
+                  <span>0 km</span>
+                  <span>5 km</span>
+                  <span>10 km</span>
+                  <span>20 km</span>
+                  <span>30 km</span>
+                </div>
+                {radiusKm > 0 ? (
+                  <details className="mt-3 rounded-md border border-border bg-secondary/30 p-3 text-[12px]">
+                    <summary className="cursor-pointer">
+                      {radiusLoading ? (
+                        <span className="text-muted-foreground">
+                          Calcul des communes incluses…
+                        </span>
+                      ) : (
+                        <span>
+                          <span className="font-semibold">
+                            {communesInRadius.length}
+                          </span>{" "}
+                          commune{communesInRadius.length > 1 ? "s" : ""} incluse
+                          {communesInRadius.length > 1 ? "s" : ""} dans le rayon
+                        </span>
+                      )}
+                    </summary>
+                    {communesInRadius.length > 0 ? (
+                      <ul className="mt-2 max-h-[180px] space-y-0.5 overflow-y-auto pr-2 text-[11.5px]">
+                        {communesInRadius.map((c) => (
+                          <li
+                            key={c.code}
+                            className="flex justify-between gap-2"
+                          >
+                            <span>{c.nom}</span>
+                            <span className="font-mono text-tertiary-foreground">
+                              {c.distanceKm.toFixed(1)} km · {c.codesPostaux[0]}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </details>
+                ) : null}
+              </div>
+            ) : null}
 
             <FormField
               control={form.control}

@@ -63,6 +63,118 @@ export async function searchCommunes(
 }
 
 /**
+ * Distance Haversine en km entre 2 points lat/lng.
+ * Précision suffisante pour des distances < 100km (au-delà, l'ellipsoïde
+ * terrestre se fait sentir mais ça reste à ±0.5%).
+ */
+export function distanceKm(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const R = 6371; // rayon Terre, km
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+type Departement = {
+  nom: string;
+  code: string;
+  centre?: { type: "Point"; coordinates: [number, number] };
+};
+
+let departementsCache: Departement[] | null = null;
+
+async function fetchAllDepartements(): Promise<Departement[]> {
+  if (departementsCache) return departementsCache;
+  try {
+    const res = await fetch(
+      `${BASE}/departements?fields=nom,code,centre`,
+    );
+    if (!res.ok) return [];
+    departementsCache = (await res.json()) as Departement[];
+    return departementsCache;
+  } catch {
+    return [];
+  }
+}
+
+const communesByDeptCache = new Map<string, Commune[]>();
+
+async function fetchCommunesByDepartement(code: string): Promise<Commune[]> {
+  if (communesByDeptCache.has(code)) return communesByDeptCache.get(code)!;
+  try {
+    const params = new URLSearchParams({
+      fields: "nom,code,codesPostaux,codeDepartement,codeRegion,population,centre",
+    });
+    const res = await fetch(
+      `${BASE}/departements/${code}/communes?${params.toString()}`,
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as Commune[];
+    communesByDeptCache.set(code, data);
+    return data;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Retourne les communes dans un rayon de N km autour d'un point central,
+ * triées par distance croissante.
+ *
+ * Stratégie :
+ *  1. Charger /departements (101 entrées, cached)
+ *  2. Filtrer ceux dont le centre est à < (rayon + 80km) du point pivot
+ *     — un département fait ~80km max d'extension depuis son centre
+ *  3. Fetch les communes de chaque département pertinent en parallèle
+ *  4. Filtrer Haversine ≤ rayon et trier par distance
+ *
+ * Coût typique : 1 + 3-7 fetches selon le rayon. Tout cached, donc les
+ * appels suivants pour la même zone géo sont instantanés.
+ */
+export async function findCommunesInRadius(
+  centreLat: number,
+  centreLng: number,
+  radiusKm: number,
+): Promise<Array<Commune & { distanceKm: number }>> {
+  if (radiusKm <= 0 || !Number.isFinite(radiusKm)) return [];
+
+  const allDepts = await fetchAllDepartements();
+  const candidateDepts = allDepts.filter((d) => {
+    if (!d.centre) return false;
+    const [lng, lat] = d.centre.coordinates;
+    const dist = distanceKm(centreLat, centreLng, lat, lng);
+    // 80km = marge max (largeur typique d'un département). Au-dessus,
+    // pas la peine de fetch ses communes.
+    return dist <= radiusKm + 80;
+  });
+
+  const arrays = await Promise.all(
+    candidateDepts.map((d) => fetchCommunesByDepartement(d.code)),
+  );
+
+  const all = arrays.flat();
+  return all
+    .map((c) => {
+      if (!c.centre) return null;
+      const [lng, lat] = c.centre.coordinates;
+      const d = distanceKm(centreLat, centreLng, lat, lng);
+      return d <= radiusKm ? { ...c, distanceKm: d } : null;
+    })
+    .filter((c): c is Commune & { distanceKm: number } => c !== null)
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+}
+
+/**
  * Recherche par code postal exact (5 chiffres). Retourne toutes les
  * communes qui partagent ce CP (utile pour le 75001-75020 etc.).
  */
