@@ -200,35 +200,42 @@ async function scrapePapDirect(url: string): Promise<SingleListing | null> {
 }
 
 /**
- * LBC, SeLoger, Bien'ici — via Apify actor en mode mono-résultat.
- * On utilise les mêmes actors que pour l'analyse complète (déjà câblés
- * dans ACTOR_BY_SITE), mais avec un maxItems=1 ou équivalent.
+ * LBC, SeLoger, Bien'ici — via Apify actor "detail URL" (vs search URL).
  *
- * NOTE : les actors search-URL acceptent souvent une URL de detail page
- * comme `startUrl` — ils renvoient alors un seul résultat. À tester par
- * site.
+ * Distinction importante : les actors câblés dans `ACTOR_BY_SITE` (pour
+ * les analyses multi-URLs) attendent des URLs de **search page**. Mais
+ * dans ce module on reçoit une URL de **detail page** (une seule annonce).
+ * On utilise donc d'autres actors dédiés au scraping par URL d'annonce :
+ *
+ *  - LBC      : fatihtahta/leboncoin-fr-scraper  (startUrls + limit)
+ *  - SeLoger  : azzouzana/.../by-items-urls       (startUrls)
+ *  - Bien'ici : silentflow/bienici-scraper-ppr    (adUrls + deepScrape)
+ *
+ * Tous acceptent un array d'URLs de detail page. On en passe 1 → on récupère
+ * 1 item.
  */
 async function scrapeViaApify(
   url: string,
   site: "leboncoin" | "seloger" | "bienici",
 ): Promise<SingleListing | null> {
-  // Pour LBC : silentflow accepte un searchUrl, pas un detail URL.
-  // Solution : construire une URL search qui matche l'annonce.
-  // Pour MVP, on appelle l'actor avec searchUrl=URL detail — beaucoup
-  // d'actors gèrent ça en interne (suit le redirect, extrait l'ID).
   let actorId: string;
   let runInput: Record<string, unknown>;
 
   if (site === "leboncoin") {
-    actorId = "silentflow~leboncoin-scraper-ppr";
-    runInput = { searchUrl: url, maxItems: 1, browseMode: true };
+    // fatihtahta accepte les URLs detail LBC dans startUrls
+    actorId = "fatihtahta~leboncoin-fr-scraper";
+    runInput = { startUrls: [{ url }], limit: 1 };
   } else if (site === "seloger") {
-    actorId = "azzouzana~seloger-mass-products-scraper-by-search-url";
-    runInput = { startUrl: url, maxItems: 1 };
+    // Variante "by-items-urls" — vs "by-search-url" qu'on utilise pour analyze
+    actorId = "azzouzana~seloger-mass-products-scraper-by-items-urls";
+    runInput = { startUrls: [{ url }] };
   } else {
-    actorId = "stealth_mode~bienici-property-search-scraper";
-    runInput = { urls: [url], ignore_url_failures: true, max_items_per_url: 1 };
+    // silentflow Bien'ici : adUrls dédié aux annonces individuelles
+    actorId = "silentflow~bienici-scraper-ppr";
+    runInput = { adUrls: [url], maxItems: 1, deepScrape: true };
   }
+
+  logger.info("Apify detail-URL", { url, actorId });
 
   const result = await runApifyActor<Record<string, unknown>>({
     actorId,
@@ -243,8 +250,7 @@ async function scrapeViaApify(
     return null;
   }
 
-  // Normalisation selon site. Reuse des mêmes mappings que dans
-  // apify-mappers.ts mais en mode "single result", on fait du best-effort.
+  // Normalisation selon site
   return normalizeApifyItem(item, site, url, result.runId);
 }
 
@@ -254,15 +260,31 @@ function normalizeApifyItem(
   url: string,
   apifyRunId: string,
 ): SingleListing | null {
+  // Helper : essaye plusieurs noms de champ candidats (tolérance entre
+  // actors qui exposent le même attribut sous différents noms).
+  const pick = (...names: string[]): unknown => {
+    for (const n of names) {
+      const v = raw[n];
+      if (v !== undefined && v !== null && v !== "") return v;
+    }
+    return null;
+  };
+
   if (site === "leboncoin") {
-    // Silentflow output (cf. mapLbcSilentflowRow)
+    // Acceptable pour silentflow ET fatihtahta. fatihtahta utilise
+    // souvent listId/list_id pour l'ID, prix/price_value, etc.
     const externalId =
       typeof raw.id === "number" || typeof raw.id === "string"
         ? String(raw.id)
-        : null;
+        : typeof raw.list_id === "number" || typeof raw.list_id === "string"
+          ? String(raw.list_id)
+          : typeof raw.listId === "number" || typeof raw.listId === "string"
+            ? String(raw.listId)
+            : null;
     if (!externalId) return null;
 
-    // attributes[] pivotable
+    // attributes[] pivotable (silentflow). fatihtahta utilise une struct
+    // différente — on tente de récupérer surface/pieces direct sinon.
     const attrs = new Map<string, string>();
     if (Array.isArray(raw.attributes)) {
       for (const a of raw.attributes as Array<{
@@ -278,22 +300,36 @@ function normalizeApifyItem(
     return {
       sourceSite: "leboncoin",
       externalId,
-      title: asStr(raw.title),
-      prix: asNum(raw.price),
-      surface: asNum(attrs.get("square")),
-      pieces: asNum(attrs.get("rooms")),
-      codePostal: asStr(raw.zipcode),
-      ville: asStr(raw.city),
+      title: asStr(pick("title", "subject")),
+      prix: asNum(pick("price", "price_eur", "price_cents")),
+      surface: asNum(
+        attrs.get("square") ??
+          pick("surface", "surface_m2", "square_meters"),
+      ),
+      pieces: asNum(attrs.get("rooms") ?? pick("rooms", "nb_pieces")),
+      codePostal: asStr(pick("zipcode", "postal_code", "zip_code")),
+      ville: asStr(pick("city", "location_city")),
       adresseRaw: null,
-      lat: asNum(raw.latitude),
-      lng: asNum(raw.longitude),
-      dpe: asDpe(attrs.get("energy_rate")?.toUpperCase()),
+      lat: asNum(pick("latitude", "lat", "location_lat")),
+      lng: asNum(pick("longitude", "lng", "lon", "location_lng")),
+      dpe: asDpe(
+        (attrs.get("energy_rate") ?? attrs.get("energy_class"))?.toUpperCase() ??
+          pick("energy_class", "energy_rate", "dpe"),
+      ),
       url: asStr(raw.url) ?? url,
       photos: Array.isArray(raw.images)
         ? (raw.images as unknown[]).filter(
             (s): s is string => typeof s === "string",
           )
-        : [],
+        : Array.isArray(raw.images_urls)
+          ? (raw.images_urls as unknown[]).filter(
+              (s): s is string => typeof s === "string",
+            )
+          : Array.isArray(raw.photos)
+            ? (raw.photos as unknown[]).filter(
+                (s): s is string => typeof s === "string",
+              )
+            : [],
       apifyRunId,
     };
   }
@@ -333,32 +369,53 @@ function normalizeApifyItem(
     };
   }
 
-  // bienici
-  const externalId = asStr(raw.id);
+  // bienici (silentflow ou stealth_mode — formats légèrement différents)
+  const externalId =
+    asStr(raw.id) ?? asStr(raw.adId) ?? asStr(raw.ad_id);
   if (!externalId) return null;
 
+  // stealth_mode utilise `blur_info.position`, silentflow utilise direct
+  // latitude/longitude
   const blurInfo = raw.blur_info as { position?: { lat?: number; lon?: number } } | undefined;
   const district = (raw.district ?? {}) as { name?: unknown };
+  const photos = Array.isArray(raw.photos)
+    ? (raw.photos as unknown[])
+        .map((p) => {
+          if (typeof p === "string") return p;
+          if (p && typeof p === "object") {
+            const obj = p as { url_photo?: unknown; url?: unknown };
+            return typeof obj.url_photo === "string"
+              ? obj.url_photo
+              : typeof obj.url === "string"
+                ? obj.url
+                : null;
+          }
+          return null;
+        })
+        .filter((s): s is string => typeof s === "string")
+    : Array.isArray(raw.images)
+      ? (raw.images as unknown[]).filter(
+          (s): s is string => typeof s === "string",
+        )
+      : [];
 
   return {
     sourceSite: "bienici",
     externalId,
-    title: asStr(raw.title),
-    prix: asNum(raw.price),
-    surface: asNum(raw.surface ?? raw.surface_area),
-    pieces: asNum(raw.rooms_quantity),
-    codePostal: asStr(raw.postal_code ?? raw.zipcode),
-    ville: asStr(raw.city ?? raw.city_label),
-    adresseRaw: asStr(district.name),
-    lat: asNum(blurInfo?.position?.lat),
-    lng: asNum(blurInfo?.position?.lon),
-    dpe: asDpe(raw.energy_classification ?? raw.dpe),
+    title: asStr(pick("title", "name", "subject")),
+    prix: asNum(pick("price", "price_eur", "priceValue")),
+    surface: asNum(pick("surface", "surface_area", "livingArea")),
+    pieces: asNum(pick("rooms_quantity", "rooms", "roomsQuantity", "nb_pieces")),
+    codePostal: asStr(pick("postal_code", "zipcode", "postalCode")),
+    ville: asStr(pick("city", "city_label", "cityName")),
+    adresseRaw: asStr(district.name ?? pick("address", "street")),
+    lat: asNum(blurInfo?.position?.lat ?? pick("latitude", "lat")),
+    lng: asNum(blurInfo?.position?.lon ?? pick("longitude", "lng", "lon")),
+    dpe: asDpe(
+      pick("energy_classification", "dpe", "energy_class", "energyValue"),
+    ),
     url: asStr(raw.url) ?? url,
-    photos: Array.isArray(raw.photos)
-      ? (raw.photos as Array<{ url_photo?: string }>).map((p) => p.url_photo).filter(
-          (u): u is string => typeof u === "string",
-        )
-      : [],
+    photos,
     apifyRunId,
   };
 }
