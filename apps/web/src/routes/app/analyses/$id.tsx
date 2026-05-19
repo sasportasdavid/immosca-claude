@@ -25,6 +25,7 @@ import {
   type ListingDrawerData,
 } from "@/components/listing-drawer";
 import { MarketSummary } from "@/components/market-summary";
+import { RecomputeSheet } from "@/components/recompute-sheet";
 import { ScoreBadge } from "@/components/score-badge";
 import { SearchCriteriaChips } from "@/components/search-criteria-chips";
 import { Badge } from "@/components/ui/badge";
@@ -146,6 +147,35 @@ function AnalysisPage() {
             ) : null}
           </div>
           <div className="flex items-center gap-2">
+            {analysis.data && analysis.data.status === "done" ? (
+              <RecomputeSheet
+                analysisId={id}
+                apifyRunId={analysis.data.apify_run_id}
+                currentParams={{
+                  apport:
+                    (analysis.data.params_snapshot as { apport?: number })
+                      ?.apport ?? 200_000,
+                  taux_credit_pct:
+                    (analysis.data.params_snapshot as {
+                      taux_credit_pct?: number;
+                    })?.taux_credit_pct ?? 3,
+                  duree_credit_ans:
+                    (analysis.data.params_snapshot as {
+                      duree_credit_ans?: number;
+                    })?.duree_credit_ans ?? 25,
+                  tmi_pct:
+                    (analysis.data.params_snapshot as { tmi_pct?: number })
+                      ?.tmi_pct ?? 30,
+                  rendement_min_pct:
+                    (analysis.data.params_snapshot as {
+                      rendement_min_pct?: number;
+                    })?.rendement_min_pct ?? 6,
+                }}
+                onLaunched={() =>
+                  queryClient.invalidateQueries({ queryKey: ["analysis", id] })
+                }
+              />
+            ) : null}
             {analysis.data ? (
               <AnalysisActions
                 analysisId={id}
@@ -222,7 +252,18 @@ function AnalysisPage() {
 
             {/* Tableau listings : visible dès qu'on a quelque chose */}
             {(analysis.data.total_listings_filtered ?? 0) > 0 ? (
-              <ListingsSection analysisId={id} status={analysis.data.status} />
+              <ListingsSection
+                analysisId={id}
+                status={analysis.data.status}
+                analysisParams={
+                  analysis.data.params_snapshot as {
+                    apport: number | null;
+                    taux_credit_pct: number | null;
+                    duree_credit_ans: number | null;
+                    tmi_pct: number | null;
+                  } | null
+                }
+              />
             ) : null}
 
             <div>
@@ -348,9 +389,16 @@ function getSortValue(l: ListingRow, key: SortKey): number | null {
 function ListingsSection({
   analysisId,
   status,
+  analysisParams,
 }: {
   analysisId: string;
   status: string;
+  analysisParams: {
+    apport: number | null;
+    taux_credit_pct: number | null;
+    duree_credit_ans: number | null;
+    tmi_pct: number | null;
+  } | null;
 }) {
   const listings = useQuery({
     queryKey: ["listings", analysisId],
@@ -740,6 +788,7 @@ function ListingsSection({
       <ListingDrawer
         listing={selected}
         onClose={() => setSelectedId(null)}
+        analysisParams={analysisParams}
       />
       </section>
     </div>

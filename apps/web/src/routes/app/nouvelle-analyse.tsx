@@ -60,6 +60,13 @@ const formSchema = z.object({
         /bienici\.com/.test(u),
       "URL non reconnue (SeLoger, Leboncoin ou BienIci)",
     ),
+  // Override params (optionnel — sinon on prend ceux du profil)
+  overrideParams: z.boolean().optional(),
+  apport: z.number().min(0).max(10_000_000).optional(),
+  taux_credit_pct: z.number().min(0).max(15).optional(),
+  duree_credit_ans: z.number().int().min(5).max(30).optional(),
+  tmi_pct: z.number().int().min(0).max(50).optional(),
+  rendement_min_pct: z.number().min(0).max(30).optional(),
 });
 
 type FormInput = z.infer<typeof formSchema>;
@@ -115,8 +122,21 @@ function NouvelleAnalysePage() {
 
   const form = useForm<FormInput>({
     resolver: zodResolver(formSchema),
-    defaultValues: { name: "", url: "" },
+    defaultValues: {
+      name: "",
+      url: "",
+      overrideParams: false,
+      apport: undefined,
+      taux_credit_pct: undefined,
+      duree_credit_ans: undefined,
+      tmi_pct: undefined,
+      rendement_min_pct: undefined,
+    },
   });
+
+  // Pré-remplit les champs override quand on active le toggle (avec les
+  // valeurs du profil pour que l'user voie de quoi il part).
+  const overrideParams = form.watch("overrideParams");
 
   const createAnalysis = useMutation({
     mutationFn: async (values: FormInput) => {
@@ -124,16 +144,32 @@ function NouvelleAnalysePage() {
       const site = detectSite(values.url);
       if (!site) throw new Error("Site non détecté");
 
-      // Snapshot params au moment du run (immutable)
+      // Snapshot params : par défaut on prend ceux du profil. Si l'user
+      // a coché "Personnaliser pour cette recherche", on override par
+      // ce qu'il a saisi (en gardant les autres champs du profil).
+      const base = userParams.data;
+      const overriding = values.overrideParams === true;
       const snapshot = {
-        strategy: userParams.data?.strategy ?? null,
-        apport: userParams.data?.apport ?? null,
-        budget_max: userParams.data?.budget_max ?? null,
-        taux_credit_pct: userParams.data?.taux_credit_pct ?? null,
-        duree_credit_ans: userParams.data?.duree_credit_ans ?? null,
-        tmi_pct: userParams.data?.tmi_pct ?? null,
-        rendement_min_pct: userParams.data?.rendement_min_pct ?? null,
-        tolerance_travaux: userParams.data?.tolerance_travaux ?? null,
+        strategy: base?.strategy ?? null,
+        apport: overriding && values.apport !== undefined
+          ? values.apport
+          : (base?.apport ?? null),
+        budget_max: base?.budget_max ?? null,
+        taux_credit_pct: overriding && values.taux_credit_pct !== undefined
+          ? values.taux_credit_pct
+          : (base?.taux_credit_pct ?? null),
+        duree_credit_ans:
+          overriding && values.duree_credit_ans !== undefined
+            ? values.duree_credit_ans
+            : (base?.duree_credit_ans ?? null),
+        tmi_pct: overriding && values.tmi_pct !== undefined
+          ? values.tmi_pct
+          : (base?.tmi_pct ?? null),
+        rendement_min_pct:
+          overriding && values.rendement_min_pct !== undefined
+            ? values.rendement_min_pct
+            : (base?.rendement_min_pct ?? null),
+        tolerance_travaux: base?.tolerance_travaux ?? null,
       };
 
       const { data, error } = await supabase
@@ -253,6 +289,100 @@ function NouvelleAnalysePage() {
                 </FormItem>
               )}
             />
+            {/* Paramètres personnalisés (optionnel) : par défaut on
+                utilise ceux du profil. Sinon on override pour cette
+                recherche spécifique. */}
+            <div className="rounded-lg border border-border bg-card p-4">
+              <FormField
+                control={form.control}
+                name="overrideParams"
+                render={({ field }) => (
+                  <label className="flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={field.value ?? false}
+                      onChange={(e) => {
+                        field.onChange(e.target.checked);
+                        // Pré-remplit avec les valeurs profil au check
+                        if (e.target.checked && userParams.data) {
+                          form.setValue("apport", userParams.data.apport ?? 200_000);
+                          form.setValue(
+                            "taux_credit_pct",
+                            userParams.data.taux_credit_pct ?? 3,
+                          );
+                          form.setValue(
+                            "duree_credit_ans",
+                            userParams.data.duree_credit_ans ?? 25,
+                          );
+                          form.setValue("tmi_pct", userParams.data.tmi_pct ?? 30);
+                          form.setValue(
+                            "rendement_min_pct",
+                            userParams.data.rendement_min_pct ?? 6,
+                          );
+                        }
+                      }}
+                      className="mt-0.5 h-4 w-4 rounded border-border"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[14px] font-medium">
+                        Personnaliser les paramètres pour cette recherche
+                      </div>
+                      <p className="mt-0.5 text-[12px] text-muted-foreground">
+                        Sinon on utilise ceux de ton profil (apport{" "}
+                        {userParams.data?.apport?.toLocaleString("fr-FR")} €,
+                        TMI {userParams.data?.tmi_pct} %, rendement min{" "}
+                        {userParams.data?.rendement_min_pct} %).
+                      </p>
+                    </div>
+                  </label>
+                )}
+              />
+
+              {overrideParams ? (
+                <div className="mt-4 grid grid-cols-1 gap-4 border-t border-border pt-4 md:grid-cols-2">
+                  <NumberField
+                    form={form}
+                    name="apport"
+                    label="Apport (€)"
+                    step={5000}
+                    min={0}
+                  />
+                  <NumberField
+                    form={form}
+                    name="taux_credit_pct"
+                    label="Taux crédit (%)"
+                    step={0.05}
+                    min={0}
+                    max={15}
+                  />
+                  <NumberField
+                    form={form}
+                    name="duree_credit_ans"
+                    label="Durée crédit (années)"
+                    step={1}
+                    min={5}
+                    max={30}
+                  />
+                  <NumberField
+                    form={form}
+                    name="tmi_pct"
+                    label="TMI (%)"
+                    step={1}
+                    min={0}
+                    max={50}
+                  />
+                  <NumberField
+                    form={form}
+                    name="rendement_min_pct"
+                    label="Rendement min (%)"
+                    step={0.1}
+                    min={0}
+                    max={30}
+                  />
+                </div>
+              ) : null}
+            </div>
+
             <Button
               type="submit"
               size="lg"
@@ -286,5 +416,52 @@ function NouvelleAnalysePage() {
         </section>
       </div>
     </AppShell>
+  );
+}
+
+function NumberField({
+  form,
+  name,
+  label,
+  step,
+  min,
+  max,
+}: {
+  form: ReturnType<typeof useForm<FormInput>>;
+  name: keyof FormInput;
+  label: string;
+  step: number;
+  min?: number;
+  max?: number;
+}) {
+  return (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <Input
+              type="number"
+              step={step}
+              min={min}
+              max={max}
+              value={
+                field.value === undefined || field.value === null
+                  ? ""
+                  : String(field.value)
+              }
+              onChange={(e) =>
+                field.onChange(
+                  e.target.value === "" ? undefined : Number(e.target.value),
+                )
+              }
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   );
 }

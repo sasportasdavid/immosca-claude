@@ -11,6 +11,7 @@
 import { ExternalLink, Lock, MapPin } from "lucide-react";
 import * as React from "react";
 
+import { ListingSimulator } from "@/components/listing-simulator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -80,6 +81,13 @@ type Props = {
   listing: ListingDrawerData | null;
   onClose: () => void;
   onUpgrade?: () => void;
+  /** Params actuels de l'analyse (pour pré-remplir le simulateur). */
+  analysisParams?: {
+    apport: number | null;
+    taux_credit_pct: number | null;
+    duree_credit_ans: number | null;
+    tmi_pct: number | null;
+  } | null;
 };
 
 const VERDICT_LABEL: Record<
@@ -101,7 +109,12 @@ function fmtPct(n: number | null | undefined, digits = 2): string {
   return `${n.toFixed(digits)} %`;
 }
 
-export function ListingDrawer({ listing, onClose, onUpgrade }: Props) {
+export function ListingDrawer({
+  listing,
+  onClose,
+  onUpgrade,
+  analysisParams,
+}: Props) {
   const open = listing !== null;
   const verdict = listing?.verdict ? VERDICT_LABEL[listing.verdict] : null;
 
@@ -253,6 +266,24 @@ export function ListingDrawer({ listing, onClose, onUpgrade }: Props) {
                     <Pair label="Rendement net" value={fmtPct(listing.rendement_net_pct)} />
                   </dl>
                 </section>
+              ) : null}
+
+              {/* Simulateur "et si ?" */}
+              {!listing.is_masked && analysisParams && listing.loyer_estime ? (
+                <ListingSimulator
+                  listing={{
+                    prix: listing.prix,
+                    surface: listing.surface,
+                    is_new_construction: listing.is_new_construction,
+                    loyer_estime: listing.loyer_estime,
+                  }}
+                  initialParams={{
+                    apport: analysisParams.apport ?? 200_000,
+                    taux_credit_pct: analysisParams.taux_credit_pct ?? 3,
+                    duree_credit_ans: analysisParams.duree_credit_ans ?? 25,
+                    tmi_pct: analysisParams.tmi_pct ?? 30,
+                  }}
+                />
               ) : null}
 
               {/* Thèse Claude */}

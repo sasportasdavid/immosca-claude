@@ -50,6 +50,28 @@ const payloadSchema = z.object({
    * rate-limit par les free tiers d'actors.
    */
   apifyRunIdOverride: z.string().optional(),
+  /**
+   * Nouveau set de params à appliquer avant le scoring (re-simulation
+   * post-analyse). Update `analyses.params_snapshot` et recalcule tous
+   * les listing_scores avec ces valeurs. Si combiné avec
+   * `apifyRunIdOverride`, on skip le re-scrape (la collecte ne change
+   * pas en fonction des params financiers).
+   */
+  paramsOverride: z
+    .object({
+      apport: z.number().optional(),
+      taux_credit_pct: z.number().optional(),
+      duree_credit_ans: z.number().int().optional(),
+      tmi_pct: z.number().int().optional(),
+      rendement_min_pct: z.number().optional(),
+    })
+    .optional(),
+  /**
+   * Si true, skip la regénération Claude (économie budget API).
+   * Par défaut Claude regénère pour le nouveau Top 5 si les params
+   * ont changé.
+   */
+  skipClaude: z.boolean().optional(),
 });
 
 async function setAnalysisStatus(
@@ -91,9 +113,14 @@ export const analyzeTask = task({
   maxDuration: 600, // 10 min
   retry: { maxAttempts: 1 }, // pas de retry auto : on a Sentry pour debug
   run: async (payload: unknown) => {
-    const { analysisId, actorId, apifyRunIdOverride } =
+    const { analysisId, actorId, apifyRunIdOverride, paramsOverride, skipClaude } =
       payloadSchema.parse(payload);
-    logger.info("Analyze start", { analysisId, apifyRunIdOverride });
+    logger.info("Analyze start", {
+      analysisId,
+      apifyRunIdOverride,
+      hasParamsOverride: !!paramsOverride,
+      skipClaude,
+    });
 
     // 1. Lire l'analyse
     const { data: analysis, error: readErr } = await supabaseApp
@@ -221,7 +248,7 @@ export const analyzeTask = task({
       await setAnalysisStatus(analysisId, "scoring", 70);
       logger.info("Scoring listings", { count: mapped.length });
 
-      const paramsSnapshot = analysis.params_snapshot as Record<
+      let paramsSnapshot = analysis.params_snapshot as Record<
         string,
         unknown
       > & {
@@ -233,6 +260,29 @@ export const analyzeTask = task({
         rendement_min_pct?: number;
         tolerance_travaux?: string;
       };
+
+      // Si paramsOverride fourni (re-simulation post-analyse), on fusionne
+      // dans le snapshot et on persiste avant le scoring. Le rescore se
+      // base alors sur les NOUVEAUX params, ce qui donne les nouveaux
+      // rendements / cashflows.
+      if (paramsOverride) {
+        paramsSnapshot = {
+          ...paramsSnapshot,
+          ...Object.fromEntries(
+            Object.entries(paramsOverride).filter(
+              ([, v]) => v !== undefined && v !== null,
+            ),
+          ),
+        };
+        const { error: persistErr } = await supabaseApp
+          .from("analyses")
+          .update({
+            params_snapshot: paramsSnapshot as never,
+          })
+          .eq("id", analysisId);
+        if (persistErr) throw persistErr;
+        logger.info("Params override appliqué", { paramsOverride });
+      }
 
       // Re-read listings depuis la DB pour avoir les id générés + geom
       const { data: dbListings, error: readErr } = await supabaseApp
@@ -262,13 +312,20 @@ export const analyzeTask = task({
       const plan = (profile?.subscription_plan ?? "free") as PlanId;
       const topN = PLANS[plan].topN ?? 5;
 
-      const generatedCount = await generateThesesForTop(
-        analysisId,
-        topN,
+      const generatedCount = skipClaude
+        ? 0
+        : await generateThesesForTop(
+            analysisId,
+            topN,
+            plan,
+            paramsSnapshot,
+          );
+      logger.info("Theses generated", {
+        generatedCount,
         plan,
-        paramsSnapshot,
-      );
-      logger.info("Theses generated", { generatedCount, plan, topN });
+        topN,
+        skipped: !!skipClaude,
+      });
 
       // 9. Done
       await setAnalysisStatus(analysisId, "done", 100, {
