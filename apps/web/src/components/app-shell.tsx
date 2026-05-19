@@ -85,7 +85,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard", icon: Home, enabled: true },
   { id: "analyses", label: "Mes analyses", href: "/app/analyses", icon: Folder, enabled: true },
   { id: "veilles", label: "Veilles", href: "/app/veilles", icon: Radar, enabled: false },
-  { id: "pipeline", label: "Pipeline", href: "/app/pipeline", icon: KanbanSquare, enabled: false },
+  { id: "pipeline", label: "Pipeline", href: "/app/pipeline", icon: KanbanSquare, enabled: true },
 ];
 
 const BOTTOM_ITEMS: readonly NavItem[] = [

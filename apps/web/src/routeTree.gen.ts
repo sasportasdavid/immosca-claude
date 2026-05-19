@@ -18,6 +18,7 @@ import { Route as OnboardingStep1RouteImport } from './routes/onboarding/step-1'
 import { Route as AuthSignupRouteImport } from './routes/auth/signup'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
 import { Route as AppNouvelleAnalyseRouteImport } from './routes/app/nouvelle-analyse'
 import { Route as AppAnalysesIndexRouteImport } from './routes/app/analyses/index'
 import { Route as AppAnalysesIdRouteImport } from './routes/app/analyses/$id'
@@ -67,6 +68,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
   path: '/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppPipelineRoute = AppPipelineRouteImport.update({
+  id: '/app/pipeline',
+  path: '/app/pipeline',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppNouvelleAnalyseRoute = AppNouvelleAnalyseRouteImport.update({
   id: '/app/nouvelle-analyse',
   path: '/app/nouvelle-analyse',
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
   '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
+  '/app/pipeline': typeof AppPipelineRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/signup': typeof AuthSignupRoute
@@ -103,6 +110,7 @@ export interface FileRoutesByTo {
   '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
   '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
+  '/app/pipeline': typeof AppPipelineRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/signup': typeof AuthSignupRoute
@@ -118,6 +126,7 @@ export interface FileRoutesById {
   '/confidentialite': typeof ConfidentialiteRoute
   '/dashboard': typeof DashboardRoute
   '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
+  '/app/pipeline': typeof AppPipelineRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/signup': typeof AuthSignupRoute
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | '/confidentialite'
     | '/dashboard'
     | '/app/nouvelle-analyse'
+    | '/app/pipeline'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/signup'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/confidentialite'
     | '/dashboard'
     | '/app/nouvelle-analyse'
+    | '/app/pipeline'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/signup'
@@ -162,6 +173,7 @@ export interface FileRouteTypes {
     | '/confidentialite'
     | '/dashboard'
     | '/app/nouvelle-analyse'
+    | '/app/pipeline'
     | '/auth/callback'
     | '/auth/login'
     | '/auth/signup'
@@ -177,6 +189,7 @@ export interface RootRouteChildren {
   ConfidentialiteRoute: typeof ConfidentialiteRoute
   DashboardRoute: typeof DashboardRoute
   AppNouvelleAnalyseRoute: typeof AppNouvelleAnalyseRoute
+  AppPipelineRoute: typeof AppPipelineRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthSignupRoute: typeof AuthSignupRoute
@@ -251,6 +264,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/pipeline': {
+      id: '/app/pipeline'
+      path: '/app/pipeline'
+      fullPath: '/app/pipeline'
+      preLoaderRoute: typeof AppPipelineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/app/nouvelle-analyse': {
       id: '/app/nouvelle-analyse'
       path: '/app/nouvelle-analyse'
@@ -281,6 +301,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfidentialiteRoute: ConfidentialiteRoute,
   DashboardRoute: DashboardRoute,
   AppNouvelleAnalyseRoute: AppNouvelleAnalyseRoute,
+  AppPipelineRoute: AppPipelineRoute,
   AuthCallbackRoute: AuthCallbackRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthSignupRoute: AuthSignupRoute,

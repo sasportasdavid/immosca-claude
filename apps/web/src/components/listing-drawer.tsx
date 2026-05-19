@@ -8,12 +8,19 @@
 // Le freemium teasing est géré côté serveur via la vue : les champs
 // sensibles (prix, adresse, thèse) arrivent déjà à null si `is_masked`.
 
-import { ExternalLink, Lock, MapPin } from "lucide-react";
+import { Bookmark, BookmarkCheck, ExternalLink, Lock, MapPin } from "lucide-react";
 import * as React from "react";
+import { toast } from "sonner";
 
 import { ListingSimulator } from "@/components/listing-simulator";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  type ListingSnapshot,
+  useAddToPipeline,
+  useDeletePipelineItem,
+  usePipelineItemForListing,
+} from "@/hooks/use-pipeline";
 import {
   Sheet,
   SheetBody,
@@ -88,6 +95,8 @@ type Props = {
     duree_credit_ans: number | null;
     tmi_pct: number | null;
   } | null;
+  /** analysisId pour le snapshot pipeline_items (lien vers la recherche). */
+  analysisId?: string;
 };
 
 const VERDICT_LABEL: Record<
@@ -114,7 +123,49 @@ export function ListingDrawer({
   onClose,
   onUpgrade,
   analysisParams,
+  analysisId,
 }: Props) {
+  const { item: pipelineItem } = usePipelineItemForListing(listing?.id ?? null);
+  const addToPipeline = useAddToPipeline();
+  const removeFromPipeline = useDeletePipelineItem();
+
+  function togglePipeline() {
+    if (!listing || !analysisId) return;
+    if (pipelineItem) {
+      removeFromPipeline.mutate(pipelineItem.id, {
+        onSuccess: () => toast.success("Retiré du pipeline"),
+      });
+    } else {
+      const snapshot: ListingSnapshot = {
+        id: listing.id,
+        external_id: "", // dispo dans ListingRow mais pas dans ListingDrawerData
+        source_url: listing.source_url,
+        source_site: "seloger",
+        title: listing.title,
+        type: listing.type,
+        surface: listing.surface,
+        pieces: listing.pieces,
+        prix: listing.prix,
+        dpe: listing.dpe,
+        ville: listing.ville,
+        code_postal: listing.code_postal,
+        photos_urls: listing.photos_urls,
+        score_total: listing.score_total,
+        rendement_brut_pct: listing.rendement_brut_pct,
+        cashflow_mensuel: listing.cashflow_mensuel,
+        verdict: listing.verdict,
+        analysis_id: analysisId,
+      };
+      addToPipeline.mutate(
+        { snapshot },
+        {
+          onSuccess: () =>
+            toast.success("Ajouté au pipeline · À visiter"),
+          onError: (err) => toast.error(`Erreur : ${(err as Error).message}`),
+        },
+      );
+    }
+  }
   const open = listing !== null;
   const verdict = listing?.verdict ? VERDICT_LABEL[listing.verdict] : null;
 
@@ -139,11 +190,28 @@ export function ListingDrawer({
                     {listing.surface ? ` · ${listing.surface} m²` : ""}
                     {listing.pieces ? ` · ${listing.pieces}P` : ""}
                   </SheetDescription>
-                  {verdict ? (
-                    <Badge variant={verdict.variant} className="mt-2">
-                      {verdict.label}
-                    </Badge>
-                  ) : null}
+                  <div className="mt-2 flex items-center gap-2">
+                    {verdict ? (
+                      <Badge variant={verdict.variant}>{verdict.label}</Badge>
+                    ) : null}
+                    {analysisId && !listing.is_masked ? (
+                      <Button
+                        variant={pipelineItem ? "default" : "outline"}
+                        size="sm"
+                        onClick={togglePipeline}
+                        disabled={
+                          addToPipeline.isPending || removeFromPipeline.isPending
+                        }
+                      >
+                        {pipelineItem ? (
+                          <BookmarkCheck className="mr-1.5 h-3.5 w-3.5" />
+                        ) : (
+                          <Bookmark className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        {pipelineItem ? "Dans le pipeline" : "Ajouter au pipeline"}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </SheetHeader>

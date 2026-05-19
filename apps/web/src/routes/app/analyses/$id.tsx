@@ -807,6 +807,7 @@ function ListingsSection({
         listing={selected}
         onClose={() => setSelectedId(null)}
         analysisParams={analysisParams}
+        analysisId={analysisId}
       />
       </section>
     </div>
