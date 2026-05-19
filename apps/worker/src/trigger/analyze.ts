@@ -41,7 +41,7 @@ import {
   type MultiUrlMapperKey,
   type RawApifyListing,
 } from "@/services/apify-mappers";
-import { banGeocode } from "@/services/ban";
+import { banGeocode, banReverse } from "@/services/ban";
 import { callClaudeStructured } from "@/services/claude";
 import {
   THESIS_SYSTEM_PROMPT,
@@ -483,9 +483,11 @@ export const analyzeTask = task({
         total_listings_filtered: mapped.length,
       });
 
-      // 5. Enrichissement géocodage (BAN) — sur listings sans lat/lng
+      // 5a. Enrichissement géocodage FORWARD (BAN) — sur listings avec
+      // adresse mais sans coords. Cas typique : SeLoger qui extrait
+      // l'adresse mais pas la lat/lng.
       const toGeocode = mapped.filter((l) => !l.lat && l.adresse_raw);
-      logger.info("Géocodage BAN", { count: toGeocode.length });
+      logger.info("Géocodage BAN forward", { count: toGeocode.length });
       for (const listing of toGeocode) {
         if (!listing.adresse_raw) continue;
         try {
@@ -504,6 +506,49 @@ export const analyzeTask = task({
           // Géocodage best-effort : on continue si BAN refuse.
           Sentry.captureException(err, {
             extra: { context: "ban geocode", adresse: listing.adresse_raw },
+          });
+        }
+      }
+
+      // 5b. Enrichissement REVERSE — listings avec coords mais sans
+      // adresse. Cas typique : LBC silentflow, PAP, Bien'ici qui
+      // retournent un GPS (parfois flouté pour anonymisation) sans
+      // adresse exacte. BAN /reverse retourne la rue la plus proche.
+      //
+      // Précision attendue selon `typeResult` :
+      //   - "housenumber" : rue + numéro (rare avec GPS flouté)
+      //   - "street"      : nom de rue (cas le plus fréquent)
+      //   - "locality"    : seulement le quartier (GPS très flouté)
+      //
+      // On stocke le label dans `adresse_geocoded` (champ dédié) ET
+      // dans `adresse_raw` si vide — comme ça l'UI affiche quelque
+      // chose (avec un disclaimer "adresse approximative" à terme).
+      const toReverseGeocode = mapped.filter(
+        (l) => l.lat && l.lng && !l.adresse_raw,
+      );
+      logger.info("Géocodage BAN reverse", { count: toReverseGeocode.length });
+      for (const listing of toReverseGeocode) {
+        if (!listing.lat || !listing.lng) continue;
+        try {
+          const geo = await banReverse(listing.lat, listing.lng);
+          if (!geo) continue;
+          await supabaseApp
+            .from("listings")
+            .update({
+              adresse_raw: geo.label,
+              adresse_geocoded: geo.label,
+              code_insee: geo.citycode ?? listing.code_insee,
+            })
+            .eq("analysis_id", analysisId)
+            .eq("external_id", listing.external_id);
+        } catch (err) {
+          // Reverse best-effort
+          Sentry.captureException(err, {
+            extra: {
+              context: "ban reverse",
+              lat: listing.lat,
+              lng: listing.lng,
+            },
           });
         }
       }
