@@ -549,8 +549,18 @@ export function mapPapAzzouzanaRow(
     adresse_raw: null,
     lat: typeof marker.lat === "number" ? marker.lat : null,
     lng: typeof marker.lng === "number" ? marker.lng : null,
-    dpe: dpeOrNull(raw.classe_energie),
-    ges: dpeOrNull(raw.classe_ges),
+    // PAP renvoie classe_energie/classe_ges comme un OBJET
+    // { lettre: "d", description: "..." }, pas une string. On extrait .lettre.
+    dpe: dpeOrNull(
+      typeof raw.classe_energie === "object" && raw.classe_energie !== null
+        ? (raw.classe_energie as { lettre?: unknown }).lettre
+        : raw.classe_energie,
+    ),
+    ges: dpeOrNull(
+      typeof raw.classe_ges === "object" && raw.classe_ges !== null
+        ? (raw.classe_ges as { lettre?: unknown }).lettre
+        : raw.classe_ges,
+    ),
     etage: null,
     balcon: false,
     terrasse: false,

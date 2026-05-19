@@ -441,14 +441,43 @@ export const analyzeTask = task({
       // 4. Upsert listings : idempotent via la contrainte unique
       // (analysis_id, external_id, source_site). On peut donc re-trigger
       // un run sans dupliquer.
+      //
+      // IMPORTANT : Postgres rejette un batch UPSERT contenant 2 rows
+      // avec la même clé de conflit (`cannot affect row a second time`).
+      // Or les datasets Apify contiennent fréquemment des doublons
+      // (test PAP 2026-05-19 : id 461400207 répété 3×). On dédup donc
+      // côté worker avant d'envoyer le batch — on garde la 1ère occurrence
+      // (les suivantes sont juste des annonces re-listées sur d'autres
+      // pages).
+      const dedupKey = (l: typeof mapped[number]) =>
+        `${l.analysis_id}|${l.external_id}|${l.source_site}`;
+      const seenKeys = new Set<string>();
+      const dedupedMapped = mapped.filter((l) => {
+        const k = dedupKey(l);
+        if (seenKeys.has(k)) return false;
+        seenKeys.add(k);
+        return true;
+      });
+      if (dedupedMapped.length < mapped.length) {
+        logger.info("Dédup intra-batch", {
+          before: mapped.length,
+          after: dedupedMapped.length,
+          dropped: mapped.length - dedupedMapped.length,
+        });
+      }
+
       const BATCH = 500;
-      for (let i = 0; i < mapped.length; i += BATCH) {
-        const slice = mapped.slice(i, i + BATCH);
+      for (let i = 0; i < dedupedMapped.length; i += BATCH) {
+        const slice = dedupedMapped.slice(i, i + BATCH);
         const { error } = await supabaseApp
           .from("listings")
           .upsert(slice, { onConflict: "analysis_id,external_id,source_site" });
         if (error) throw error;
       }
+      // À partir d'ici, les variables `mapped` ne sont plus utilisées que
+      // pour le compteur "annonces filtrées" affiché à l'user — on prend
+      // la valeur dédupliquée pour rester cohérent avec ce qui est en DB.
+      mapped = dedupedMapped;
 
       await setAnalysisStatus(analysisId, "enriching", 50, {
         total_listings_filtered: mapped.length,
@@ -589,7 +618,30 @@ export const analyzeTask = task({
         medianPriceM2: median,
       };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      // Stringify lisible : un PostgrestError (et autres objets erreur
+      // non-Error) deviennent "[object Object]" via String(err). On préfère
+      // extraire `.message` puis fallback sur JSON.stringify pour avoir
+      // au moins le code/details/hint de Postgres dans le message visible
+      // par l'user. Si tout échoue, "[Erreur inconnue]".
+      const message = (() => {
+        if (err instanceof Error) return err.message;
+        if (err && typeof err === "object") {
+          const obj = err as Record<string, unknown>;
+          // PostgrestError : { message, code, details, hint }
+          if (typeof obj.message === "string") {
+            const code = typeof obj.code === "string" ? ` [${obj.code}]` : "";
+            const details =
+              typeof obj.details === "string" ? ` — ${obj.details}` : "";
+            return `${obj.message}${code}${details}`;
+          }
+          try {
+            return JSON.stringify(err);
+          } catch {
+            return "[Erreur non sérialisable]";
+          }
+        }
+        return String(err ?? "[Erreur inconnue]");
+      })();
 
       // Cas cancel : `shouldAbort` a renvoyé true (l'edge fn cancel-analysis
       // a déjà set status=canceled). Inutile de surcharger en "failed",
