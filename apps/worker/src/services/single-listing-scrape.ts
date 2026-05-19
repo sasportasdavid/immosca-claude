@@ -82,12 +82,31 @@ function asStr(v: unknown): string | null {
  * la page HTML. Pas d'anti-bot lourd → fetch direct possible.
  */
 async function scrapePapDirect(url: string): Promise<SingleListing | null> {
+  // PAP a un WAF Cloudflare/Akamai qui bloque les IPs datacenter
+  // (Trigger.dev = AWS). Les headers ci-dessous miment Chrome desktop FR
+  // pour passer la première check. Si 403 quand même, c'est du IP block
+  // et il faut passer par un proxy résidentiel (cf. fallback Apify).
   const res = await fetch(url, {
     headers: {
       "user-agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-      "accept-language": "fr-FR,fr;q=0.9",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+      "accept-language": "fr-FR,fr;q=0.9,en;q=0.8",
+      "accept-encoding": "gzip, deflate, br, zstd",
+      "cache-control": "no-cache",
+      pragma: "no-cache",
+      "sec-ch-ua":
+        '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"macOS"',
+      "sec-fetch-dest": "document",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-site": "none",
+      "sec-fetch-user": "?1",
+      "upgrade-insecure-requests": "1",
     },
+    redirect: "follow",
   });
   if (!res.ok) {
     throw new Error(`PAP fetch ${res.status} on ${url}`);
@@ -196,6 +215,141 @@ async function scrapePapDirect(url: string): Promise<SingleListing | null> {
             )
           : [],
     apifyRunId: null,
+  };
+}
+
+/**
+ * PAP via Apify — fallback quand le fetch direct est bloqué par le WAF
+ * (403 sur IP datacenter). On utilise `abotapi/pap-fr-scraper` qui
+ * tourne avec des proxies résidentiels et accepte un array d'URLs.
+ *
+ * Note : abotapi est principalement search-URL, mais avec
+ * `fetchDetails: true` il visite chaque URL et extrait les détails. Si
+ * l'URL est detail (pas search), il devrait toujours tenter le fetch
+ * et parser ce qu'il trouve.
+ *
+ * Si l'actor renvoie 0 items (URL detail non comprise), on tente un
+ * dernier fallback : extraire CP + slug ville depuis l'URL elle-même
+ * pour permettre au moins le fallback ville/CP côté pipeline.
+ */
+async function scrapePapViaApify(url: string): Promise<SingleListing | null> {
+  try {
+    const result = await runApifyActor<Record<string, unknown>>({
+      actorId: "abotapi~pap-fr-scraper",
+      runInput: {
+        mode: "url",
+        urls: [url],
+        maxListings: 1,
+        maxPages: 1,
+        fetchDetails: true,
+        proxy: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"] },
+      },
+      timeoutSecs: 180,
+      memoryMbytes: 2048,
+    });
+
+    const item = result.items[0];
+    if (item) {
+      return normalizePapApifyItem(item, url, result.runId);
+    }
+  } catch (err) {
+    logger.warn("PAP Apify fallback failed", {
+      url,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // Dernier recours : extraire le minimum depuis l'URL pour permettre
+  // au moins un fallback ville+CP en aval. Format URL PAP detail :
+  //   /annonces/maison-saint-maur-des-fosses-94100-r438201542
+  const slugMatch = url.match(/\/annonces\/([^/?#]+)/);
+  if (!slugMatch) return null;
+  const slug = slugMatch[1]!;
+  const cpMatch = slug.match(/-(\d{5})-r\d+$/);
+  const idMatch = slug.match(/-r(\d+)$/);
+  if (!cpMatch || !idMatch) return null;
+
+  const codePostal = cpMatch[1]!;
+  const externalId = idMatch[1]!;
+  // Slug = "maison-saint-maur-des-fosses-94100-r438201542"
+  // → on retire le suffixe -cp-rId et le préfixe type → ville
+  const villeSlug = slug
+    .replace(/-\d{5}-r\d+$/, "")
+    .replace(/^(maison|appartement|terrain|immeuble|parking|garage|local|local-commercial|bureaux|chambre|loft|studio)-/i, "")
+    .replace(/-/g, " ");
+  const ville = villeSlug
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+
+  logger.info("PAP minimal extraction from URL", {
+    externalId,
+    codePostal,
+    ville,
+  });
+
+  return {
+    sourceSite: "pap",
+    externalId,
+    title: null,
+    prix: null,
+    surface: null,
+    pieces: null,
+    codePostal,
+    ville,
+    adresseRaw: null,
+    lat: null,
+    lng: null,
+    dpe: null,
+    url,
+    photos: [],
+    apifyRunId: null,
+  };
+}
+
+function normalizePapApifyItem(
+  raw: Record<string, unknown>,
+  url: string,
+  apifyRunId: string,
+): SingleListing | null {
+  const pick = (...names: string[]): unknown => {
+    for (const n of names) {
+      const v = raw[n];
+      if (v !== undefined && v !== null && v !== "") return v;
+    }
+    return null;
+  };
+
+  const externalId =
+    asStr(pick("reference", "reference_courte", "id", "papRef")) ??
+    url.match(/-r(\d+)/)?.[1] ??
+    null;
+  if (!externalId) return null;
+
+  return {
+    sourceSite: "pap",
+    externalId,
+    title: asStr(pick("title", "titre", "publishedTitle")),
+    prix: asNum(pick("price", "priceNumeric", "prix")),
+    surface: asNum(pick("livingArea", "surface", "area")),
+    pieces: asNum(pick("rooms", "pieces", "nb_pieces")),
+    codePostal: asStr(pick("postcode", "postalCode", "zipcode", "code_postal")),
+    ville: asStr(pick("city", "ville", "arrondissement")),
+    adresseRaw: asStr(pick("streetAddress", "street", "adresse", "address")),
+    lat: asNum(pick("latitude", "lat")),
+    lng: asNum(pick("longitude", "lng", "lon")),
+    dpe: asDpe(pick("energyClass", "dpe", "classe_energie")),
+    url: asStr(pick("url", "permalink")) ?? url,
+    photos: Array.isArray(raw.images)
+      ? (raw.images as unknown[]).filter(
+          (s): s is string => typeof s === "string",
+        )
+      : Array.isArray(raw.photos)
+        ? (raw.photos as unknown[]).filter(
+            (s): s is string => typeof s === "string",
+          )
+        : [],
+    apifyRunId,
   };
 }
 
@@ -438,7 +592,20 @@ export async function scrapeSingleListingFromUrl(
   logger.info("Single-listing scrape", { url, site });
 
   if (site === "pap") {
-    const result = await scrapePapDirect(url);
+    // Tentative 1 : fetch HTML direct (gratuit, rapide ~500ms).
+    // PAP a un WAF qui bloque souvent les IPs datacenter.
+    try {
+      const result = await scrapePapDirect(url);
+      if (result) return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn("PAP direct fetch failed, fallback to Apify", {
+        url,
+        error: msg,
+      });
+    }
+    // Tentative 2 : Apify avec proxy résidentiel (abotapi)
+    const result = await scrapePapViaApify(url);
     if (!result) throw new Error("PAP : aucune donnée extraite");
     return result;
   }
