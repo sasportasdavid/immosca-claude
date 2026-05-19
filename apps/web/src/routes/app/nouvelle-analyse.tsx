@@ -1,19 +1,12 @@
-// /app/nouvelle-analyse — saisie URL + déclenchement analyse.
+// /app/nouvelle-analyse — formulaire structuré (ville, types, prix, sources)
+// pour lancer une analyse via l'actor multi-source `dltik/pige-immo-fr-scraper`.
 //
-// PR3 minimal : input URL + auto-détection site (regex) + INSERT dans
-// `analyses` côté Supabase + redirect /app/analyses/[id].
+// L'ancien input "URL SeLoger" → azzouzana a été remplacé par ce form
+// car azzouzana ne retourne pas de lat/lng précis. dltik est meilleur
+// sur tous les axes (multi-source, dédup, lat/lng adresse, ADEME enrich).
 //
-// Le déclenchement de la task `analyze` worker côté Trigger.dev est
-// fait par un mécanisme à câbler en PR3.5 :
-// - Option A : Edge Function Supabase qui écoute INSERT analyses et
-//   appelle `tasks.trigger("analyze", { analysisId })` côté Trigger.
-// - Option B : polling cron Trigger.dev qui scanne `analyses` status=pending.
-// - Option C : appel direct trigger() depuis le navigateur (nécessite
-//   exposer un token Trigger côté client — déconseillé).
-// Recommandé : Option A.
-//
-// Donc ici on crée la row avec status=pending et message "démarrage en
-// cours". L'user voit la progression dès que le worker prend la main.
+// Snapshot `search_filters` + `params_snapshot` immutables au moment du
+// run (la table `analyses` les conserve pour traçabilité).
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
@@ -48,19 +41,47 @@ export const Route = createFileRoute("/app/nouvelle-analyse")({
   component: NouvelleAnalysePage,
 });
 
+const SOURCE_OPTIONS = [
+  { id: "seloger", label: "SeLoger" },
+  { id: "leboncoin", label: "Leboncoin" },
+  { id: "pap", label: "PAP" },
+  { id: "bienici", label: "Bien'ici" },
+  { id: "logic-immo", label: "Logic-immo" },
+] as const;
+
+const TYPE_OPTIONS = [
+  { id: "appartement", label: "Appartement" },
+  { id: "maison", label: "Maison" },
+  { id: "terrain", label: "Terrain" },
+  { id: "immeuble", label: "Immeuble" },
+] as const;
+
 const formSchema = z.object({
   name: z.string().trim().max(80, "Max 80 caractères").optional(),
-  url: z
+
+  // Localisation
+  city: z.string().trim().min(2, "Ville requise").max(60),
+  postalCode: z
     .string()
-    .url("Doit être une URL valide")
-    .refine(
-      (u) =>
-        /seloger\.com/.test(u) ||
-        /leboncoin\.fr/.test(u) ||
-        /bienici\.com/.test(u),
-      "URL non reconnue (SeLoger, Leboncoin ou BienIci)",
-    ),
-  // Override params (optionnel — sinon on prend ceux du profil)
+    .trim()
+    .regex(/^\d{4,5}$/, "Code postal à 4-5 chiffres")
+    .optional()
+    .or(z.literal("")),
+
+  // Critères
+  transaction: z.enum(["buy", "rent"]).default("buy"),
+  propertyTypes: z
+    .array(z.enum(["appartement", "maison", "terrain", "immeuble"]))
+    .min(1, "Coche au moins un type"),
+  priceMax: z.number().int().min(10_000, "Min 10 000 €").max(50_000_000),
+  priceMin: z.number().int().min(0).max(50_000_000).optional(),
+  surfaceMin: z.number().int().min(5).max(2000).optional(),
+  surfaceMax: z.number().int().min(5).max(2000).optional(),
+  sources: z
+    .array(z.enum(["leboncoin", "seloger", "pap", "bienici", "logic-immo"]))
+    .min(1, "Au moins une source"),
+
+  // Override params (optionnel — sinon profil)
   overrideParams: z.boolean().optional(),
   apport: z.number().min(0).max(10_000_000).optional(),
   taux_credit_pct: z.number().min(0).max(15).optional(),
@@ -71,48 +92,13 @@ const formSchema = z.object({
 
 type FormInput = z.infer<typeof formSchema>;
 
-/**
- * Tente de générer un nom auto à partir de l'URL ("SeLoger · Gagny · achat").
- * Heuristique simple sur les patterns connus, sinon fallback "Recherche
- * SeLoger" / "Recherche Leboncoin".
- */
-function suggestNameFromUrl(url: string): string {
-  const site = /seloger/.test(url)
-    ? "SeLoger"
-    : /leboncoin/.test(url)
-      ? "Leboncoin"
-      : /bienici/.test(url)
-        ? "BienIci"
-        : "Recherche";
-  return `Recherche ${site} ${new Date().toLocaleDateString("fr-FR")}`;
+function suggestName(city: string): string {
+  return `${city} · ${new Date().toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  })}`;
 }
-
-function detectSite(
-  url: string,
-): "seloger" | "leboncoin" | "bienici" | null {
-  if (/seloger\.com/.test(url)) return "seloger";
-  if (/leboncoin\.fr/.test(url)) return "leboncoin";
-  if (/bienici\.com/.test(url)) return "bienici";
-  return null;
-}
-
-const EXAMPLES: ReadonlyArray<{ label: string; ville: string; url: string }> = [
-  {
-    label: "Gagny 93220 — appartements jusqu'à 200 k€",
-    ville: "Gagny",
-    url: "https://www.seloger.com/list.htm?projects=2&types=1,2&natures=1,2,4&places=[{ci:930032}]&price=NaN/200000",
-  },
-  {
-    label: "Saint-Denis 93200 — maisons",
-    ville: "Saint-Denis",
-    url: "https://www.seloger.com/list.htm?projects=2&types=2&natures=1,2,4&places=[{ci:930066}]",
-  },
-  {
-    label: "Montreuil 93100 — tous types",
-    ville: "Montreuil",
-    url: "https://www.seloger.com/list.htm?projects=2&types=1,2&natures=1,2,4&places=[{ci:930048}]",
-  },
-];
 
 function NouvelleAnalysePage() {
   const auth = useAuth();
@@ -124,7 +110,15 @@ function NouvelleAnalysePage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
-      url: "",
+      city: "",
+      postalCode: "",
+      transaction: "buy",
+      propertyTypes: ["appartement", "maison"],
+      priceMax: 500_000,
+      priceMin: undefined,
+      surfaceMin: undefined,
+      surfaceMax: undefined,
+      sources: ["leboncoin", "seloger", "pap", "bienici"],
       overrideParams: false,
       apport: undefined,
       taux_credit_pct: undefined,
@@ -134,68 +128,76 @@ function NouvelleAnalysePage() {
     },
   });
 
-  // Pré-remplit les champs override quand on active le toggle (avec les
-  // valeurs du profil pour que l'user voie de quoi il part).
   const overrideParams = form.watch("overrideParams");
 
   const createAnalysis = useMutation({
     mutationFn: async (values: FormInput) => {
       if (!auth.user) throw new Error("Pas de session");
-      const site = detectSite(values.url);
-      if (!site) throw new Error("Site non détecté");
 
-      // Snapshot params : par défaut on prend ceux du profil. Si l'user
-      // a coché "Personnaliser pour cette recherche", on override par
-      // ce qu'il a saisi (en gardant les autres champs du profil).
+      // Construction du snapshot params (profil + override éventuel)
       const base = userParams.data;
-      const overriding = values.overrideParams === true;
-      const snapshot = {
+      const ov = values.overrideParams === true;
+      const params_snapshot = {
         strategy: base?.strategy ?? null,
-        apport: overriding && values.apport !== undefined
+        apport: ov && values.apport !== undefined
           ? values.apport
           : (base?.apport ?? null),
         budget_max: base?.budget_max ?? null,
-        taux_credit_pct: overriding && values.taux_credit_pct !== undefined
+        taux_credit_pct: ov && values.taux_credit_pct !== undefined
           ? values.taux_credit_pct
           : (base?.taux_credit_pct ?? null),
-        duree_credit_ans:
-          overriding && values.duree_credit_ans !== undefined
-            ? values.duree_credit_ans
-            : (base?.duree_credit_ans ?? null),
-        tmi_pct: overriding && values.tmi_pct !== undefined
+        duree_credit_ans: ov && values.duree_credit_ans !== undefined
+          ? values.duree_credit_ans
+          : (base?.duree_credit_ans ?? null),
+        tmi_pct: ov && values.tmi_pct !== undefined
           ? values.tmi_pct
           : (base?.tmi_pct ?? null),
-        rendement_min_pct:
-          overriding && values.rendement_min_pct !== undefined
-            ? values.rendement_min_pct
-            : (base?.rendement_min_pct ?? null),
+        rendement_min_pct: ov && values.rendement_min_pct !== undefined
+          ? values.rendement_min_pct
+          : (base?.rendement_min_pct ?? null),
         tolerance_travaux: base?.tolerance_travaux ?? null,
+      };
+
+      // Filtres dltik (format PigeImmoFilters côté worker)
+      const search_filters = {
+        cities: [values.city],
+        postalCodes: values.postalCode ? [values.postalCode] : [],
+        transaction: values.transaction,
+        propertyTypes: values.propertyTypes,
+        priceMin: values.priceMin ?? null,
+        priceMax: values.priceMax,
+        surfaceMin: values.surfaceMin ?? null,
+        surfaceMax: values.surfaceMax ?? null,
+        sources: values.sources,
+        maxResultsPerSource: 200,
+        enrichDpe: true,
+        dedupAcrossSources: true,
       };
 
       const { data, error } = await supabase
         .from("analyses")
         .insert({
           profile_id: auth.user.id,
-          source_url: values.url,
-          source_site: site,
-          params_snapshot: snapshot,
+          source_url: null, // on n'a plus d'URL, c'est le form qui fait foi
+          source_site: "seloger", // valeur arbitraire (enum NOT NULL), le
+          //                          worker overwritera avec la vraie source
+          //                          par bien quand il insère listings
+          params_snapshot,
+          search_filters,
           status: "pending",
-          name: values.name?.trim() || suggestNameFromUrl(values.url),
+          name: values.name?.trim() || suggestName(values.city),
+          ville: values.city,
+          code_postal: values.postalCode || null,
         })
         .select("id")
         .single();
       if (error) throw error;
 
-      // Déclenche la task Trigger.dev `analyze` via l'Edge Function.
-      // `supabase.functions.invoke` ne throw PAS sur erreur HTTP — il
-      // retourne `{ data, error }`. On inspecte les deux pour ne pas
-      // laisser l'user croire que l'analyse va démarrer alors que la
-      // task n'a jamais été déclenchée (zombie `pending`).
+      // Déclenche la task Trigger.dev
       const invokeRes = await supabase.functions.invoke("trigger-analyze", {
         body: { analysisId: data.id },
       });
       if (invokeRes.error) {
-        // Marque l'analyse failed côté DB pour éviter le zombie.
         await supabase
           .from("analyses")
           .update({
@@ -204,10 +206,9 @@ function NouvelleAnalysePage() {
           })
           .eq("id", data.id);
         throw new Error(
-          `Impossible de démarrer l'analyse: ${invokeRes.error.message ?? "Edge Function en erreur"}`,
+          `Impossible de démarrer l'analyse: ${invokeRes.error.message}`,
         );
       }
-
       return data;
     },
     onSuccess: (data) => {
@@ -215,8 +216,7 @@ function NouvelleAnalysePage() {
       navigate({ to: "/app/analyses/$id", params: { id: data.id } });
     },
     onError: (err) => {
-      const msg = err instanceof Error ? err.message : "Impossible de créer";
-      toast.error(msg);
+      toast.error(err instanceof Error ? err.message : "Impossible de créer");
     },
   });
 
@@ -227,17 +227,17 @@ function NouvelleAnalysePage() {
       currentRoute="dashboard"
       onLogout={() => auth.signOut()}
     >
-      <div className="mx-auto max-w-[720px] px-6 py-12">
+      <div className="mx-auto max-w-[640px] px-6 py-12">
         <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
           Nouvelle analyse
         </span>
         <h1 className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em]">
-          Colle une URL SeLoger ou Leboncoin.
+          Décris ta recherche.
         </h1>
         <p className="mt-3 text-[14px] text-muted-foreground">
-          On collecte 100 à 500 annonces depuis ta recherche, on les croise
-          avec les ventes DVF, les DPE et les risques Géorisques, et on te
-          livre un rapport noté en 8 minutes environ.
+          On collecte 100 à 500 annonces depuis SeLoger, Leboncoin, PAP et
+          Bien'ici en croisant avec DVF, DPE et Géorisques. Rapport noté en
+          ~8 minutes.
         </p>
 
         <Form {...form}>
@@ -260,38 +260,268 @@ function NouvelleAnalysePage() {
                     />
                   </FormControl>
                   <FormDescription>
-                    Pour t'y retrouver entre plusieurs analyses. Si tu
-                    laisses vide, on génère un nom automatique.
+                    Pour t'y retrouver entre plusieurs analyses.
                   </FormDescription>
-                  <FormMessage />
                 </FormItem>
               )}
             />
+
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_140px]">
+              <FormField
+                control={form.control}
+                name="city"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ville</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="text"
+                        placeholder="Gagny"
+                        autoFocus
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="postalCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Code postal</FormLabel>
+                    <FormControl>
+                      <Input type="text" placeholder="93220" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
             <FormField
               control={form.control}
-              name="url"
+              name="propertyTypes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>URL de recherche</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="url"
-                      placeholder="https://www.seloger.com/list.htm?…"
-                      autoFocus
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Copie la barre d'adresse de ton onglet SeLoger /
-                    Leboncoin après avoir saisi tes critères.
-                  </FormDescription>
+                  <FormLabel>Type de bien</FormLabel>
+                  <div className="flex flex-wrap gap-2">
+                    {TYPE_OPTIONS.map((t) => {
+                      const checked = field.value?.includes(t.id) ?? false;
+                      return (
+                        <label
+                          key={t.id}
+                          className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] transition-colors ${
+                            checked
+                              ? "border-primary bg-primary-soft text-primary"
+                              : "border-border bg-background hover:border-primary/40"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = new Set(field.value ?? []);
+                              if (e.target.checked) next.add(t.id);
+                              else next.delete(t.id);
+                              field.onChange(Array.from(next));
+                            }}
+                            className="sr-only"
+                          />
+                          {t.label}
+                        </label>
+                      );
+                    })}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            {/* Paramètres personnalisés (optionnel) : par défaut on
-                utilise ceux du profil. Sinon on override pour cette
-                recherche spécifique. */}
+
+            <FormField
+              control={form.control}
+              name="transaction"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Type de transaction</FormLabel>
+                  <div className="flex gap-2">
+                    {[
+                      { id: "buy", label: "Achat" },
+                      { id: "rent", label: "Location" },
+                    ].map((t) => {
+                      const checked = field.value === t.id;
+                      return (
+                        <label
+                          key={t.id}
+                          className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] transition-colors ${
+                            checked
+                              ? "border-primary bg-primary-soft text-primary"
+                              : "border-border bg-background hover:border-primary/40"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            value={t.id}
+                            checked={checked}
+                            onChange={() => field.onChange(t.id)}
+                            className="sr-only"
+                          />
+                          {t.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="priceMin"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Prix min (€) — optionnel</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step={5000}
+                        min={0}
+                        placeholder="0"
+                        value={field.value ?? ""}
+                        onChange={(e) =>
+                          field.onChange(
+                            e.target.value === ""
+                              ? undefined
+                              : Number(e.target.value),
+                          )
+                        }
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="priceMax"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Prix max (€)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step={5000}
+                        min={10000}
+                        {...field}
+                        onChange={(e) => field.onChange(Number(e.target.value))}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <details className="rounded-lg border border-border bg-card p-3">
+              <summary className="cursor-pointer text-[13px] text-muted-foreground">
+                Filtres avancés — surface, sources
+              </summary>
+              <div className="mt-3 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="surfaceMin"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Surface min (m²)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={5}
+                            placeholder="—"
+                            value={field.value ?? ""}
+                            onChange={(e) =>
+                              field.onChange(
+                                e.target.value === ""
+                                  ? undefined
+                                  : Number(e.target.value),
+                              )
+                            }
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="surfaceMax"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Surface max (m²)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={5}
+                            placeholder="—"
+                            value={field.value ?? ""}
+                            onChange={(e) =>
+                              field.onChange(
+                                e.target.value === ""
+                                  ? undefined
+                                  : Number(e.target.value),
+                              )
+                            }
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="sources"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Sources à scraper</FormLabel>
+                      <div className="flex flex-wrap gap-2">
+                        {SOURCE_OPTIONS.map((s) => {
+                          const checked = field.value?.includes(s.id) ?? false;
+                          return (
+                            <label
+                              key={s.id}
+                              className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] transition-colors ${
+                                checked
+                                  ? "border-primary bg-primary-soft text-primary"
+                                  : "border-border bg-background hover:border-primary/40"
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(e) => {
+                                  const next = new Set(field.value ?? []);
+                                  if (e.target.checked) next.add(s.id);
+                                  else next.delete(s.id);
+                                  field.onChange(Array.from(next));
+                                }}
+                                className="sr-only"
+                              />
+                              {s.label}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </details>
+
+            {/* Paramètres personnalisés (apport, taux, TMI) */}
             <div className="rounded-lg border border-border bg-card p-4">
               <FormField
                 control={form.control}
@@ -303,7 +533,6 @@ function NouvelleAnalysePage() {
                       checked={field.value ?? false}
                       onChange={(e) => {
                         field.onChange(e.target.checked);
-                        // Pré-remplit avec les valeurs profil au check
                         if (e.target.checked && userParams.data) {
                           form.setValue("apport", userParams.data.apport ?? 200_000);
                           form.setValue(
@@ -323,62 +552,27 @@ function NouvelleAnalysePage() {
                       }}
                       className="mt-0.5 h-4 w-4 rounded border-border"
                     />
-                    <div className="min-w-0 flex-1">
+                    <div>
                       <div className="text-[14px] font-medium">
-                        Personnaliser les paramètres pour cette recherche
+                        Personnaliser les paramètres financiers
                       </div>
                       <p className="mt-0.5 text-[12px] text-muted-foreground">
                         Sinon on utilise ceux de ton profil (apport{" "}
-                        {userParams.data?.apport?.toLocaleString("fr-FR")} €,
-                        TMI {userParams.data?.tmi_pct} %, rendement min{" "}
-                        {userParams.data?.rendement_min_pct} %).
+                        {userParams.data?.apport?.toLocaleString("fr-FR") ?? "—"} €,
+                        TMI {userParams.data?.tmi_pct ?? "—"} %, rendement min{" "}
+                        {userParams.data?.rendement_min_pct ?? "—"} %).
                       </p>
                     </div>
                   </label>
                 )}
               />
-
               {overrideParams ? (
                 <div className="mt-4 grid grid-cols-1 gap-4 border-t border-border pt-4 md:grid-cols-2">
-                  <NumberField
-                    form={form}
-                    name="apport"
-                    label="Apport (€)"
-                    step={5000}
-                    min={0}
-                  />
-                  <NumberField
-                    form={form}
-                    name="taux_credit_pct"
-                    label="Taux crédit (%)"
-                    step={0.05}
-                    min={0}
-                    max={15}
-                  />
-                  <NumberField
-                    form={form}
-                    name="duree_credit_ans"
-                    label="Durée crédit (années)"
-                    step={1}
-                    min={5}
-                    max={30}
-                  />
-                  <NumberField
-                    form={form}
-                    name="tmi_pct"
-                    label="TMI (%)"
-                    step={1}
-                    min={0}
-                    max={50}
-                  />
-                  <NumberField
-                    form={form}
-                    name="rendement_min_pct"
-                    label="Rendement min (%)"
-                    step={0.1}
-                    min={0}
-                    max={30}
-                  />
+                  <NumberField form={form} name="apport" label="Apport (€)" step={5000} min={0} />
+                  <NumberField form={form} name="taux_credit_pct" label="Taux crédit (%)" step={0.05} min={0} max={15} />
+                  <NumberField form={form} name="duree_credit_ans" label="Durée crédit (années)" step={1} min={5} max={30} />
+                  <NumberField form={form} name="tmi_pct" label="TMI (%)" step={1} min={0} max={50} />
+                  <NumberField form={form} name="rendement_min_pct" label="Rendement min (%)" step={0.1} min={0} max={30} />
                 </div>
               ) : null}
             </div>
@@ -387,33 +581,12 @@ function NouvelleAnalysePage() {
               type="submit"
               size="lg"
               disabled={createAnalysis.isPending}
+              className="w-full"
             >
               {createAnalysis.isPending ? "Création…" : "Lancer l'analyse"}
             </Button>
           </form>
         </Form>
-
-        {/* Examples */}
-        <section className="mt-10">
-          <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            Exemples — clique pour tester
-          </div>
-          <div className="space-y-2">
-            {EXAMPLES.map((ex) => (
-              <button
-                key={ex.url}
-                type="button"
-                onClick={() => form.setValue("url", ex.url)}
-                className="block w-full rounded-md border border-border bg-card px-4 py-3 text-left transition-colors hover:border-primary/40"
-              >
-                <div className="text-[14px] font-medium">{ex.label}</div>
-                <div className="mt-1 font-mono text-[11px] text-muted-foreground line-clamp-1">
-                  {ex.url}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
       </div>
     </AppShell>
   );

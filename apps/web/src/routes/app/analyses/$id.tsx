@@ -138,11 +138,16 @@ function AnalysisPage() {
                 </Badge>
               ) : null}
             </div>
-            {analysis.data?.source_url ? (
+            {analysis.data ? (
               <div className="mt-3">
                 <SearchCriteriaChips
                   sourceUrl={analysis.data.source_url}
                   sourceSite={analysis.data.source_site}
+                  searchFilters={
+                    analysis.data.search_filters as
+                      | Record<string, unknown>
+                      | null
+                  }
                 />
               </div>
             ) : null}

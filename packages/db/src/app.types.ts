@@ -28,10 +28,11 @@ export type Database = {
           median_score: number | null
           name: string | null
           params_snapshot: Json
+          search_filters: Json | null
           profile_id: string
           progress_pct: number
           source_site: Database["public"]["Enums"]["listing_source"]
-          source_url: string
+          source_url: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["analysis_status"]
           total_listings_filtered: number | null
@@ -53,10 +54,11 @@ export type Database = {
           median_score?: number | null
           name?: string | null
           params_snapshot: Json
+          search_filters?: Json | null
           profile_id: string
           progress_pct?: number
           source_site: Database["public"]["Enums"]["listing_source"]
-          source_url: string
+          source_url?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["analysis_status"]
           total_listings_filtered?: number | null
@@ -78,10 +80,11 @@ export type Database = {
           median_score?: number | null
           name?: string | null
           params_snapshot?: Json
+          search_filters?: Json | null
           profile_id?: string
           progress_pct?: number
           source_site?: Database["public"]["Enums"]["listing_source"]
-          source_url?: string
+          source_url?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["analysis_status"]
           total_listings_filtered?: number | null

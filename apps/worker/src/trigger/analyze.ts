@@ -198,13 +198,19 @@ export const analyzeTask = task({
         );
         // Si on rejoue un run multi-source, l'appelant doit le signaler
         mapperIsMulti = !!useMultiSource;
-      } else if (useMultiSource) {
+      } else if (useMultiSource || analysis.search_filters) {
+        // Nouveau flow : utiliser dltik dès que :
+        //  - le payload force useMultiSource=true, OU
+        //  - l'analyse a des search_filters (créée via le form moderne).
+        // Permet la rétrocompat : les anciennes analyses azzouzana
+        // n'ont pas search_filters → tombent dans le else legacy.
         const multiActorId =
           actorId ?? process.env.APIFY_ACTOR_MULTI ?? "dltik~pige-immo-fr-scraper";
-        // Filtres : payload explicite > parse URL + fallback ville/CP
+        // Filtres : payload explicite > search_filters DB > parse URL legacy
         const filters: PigeImmoFilters =
           pigeImmoFilters ??
-          selogerUrlToPigeImmoFilters(analysis.source_url, {
+          (analysis.search_filters as PigeImmoFilters | null) ??
+          selogerUrlToPigeImmoFilters(analysis.source_url ?? "", {
             ville: analysis.ville,
             codePostal: analysis.code_postal,
           });
@@ -231,6 +237,15 @@ export const analyzeTask = task({
         if (!resolvedActorId) {
           throw new Error(
             `Aucun APIFY_ACTOR_${analysis.source_site.toUpperCase()} dans l'env.`,
+          );
+        }
+        if (!analysis.source_url) {
+          // Le flow legacy attend une URL ; sans ça (analyse créée via
+          // form moderne), faut aller chercher search_filters ou
+          // forcer useMultiSource — mais on n'arrive jamais ici dans
+          // ce cas (la condition précédente l'attrape).
+          throw new Error(
+            "Analyse legacy sans source_url ni search_filters — incohérent.",
           );
         }
         apifyResult = await runApifyActor<RawApifyListing>({

@@ -52,7 +52,7 @@ function AnalysesListPage() {
       const { data, error } = await supabase
         .from("analyses")
         .select(
-          "id, name, source_url, source_site, status, total_listings_filtered, median_price_per_sqm, ville, code_postal, created_at, is_favorite, archived_at",
+          "id, name, source_url, source_site, search_filters, status, total_listings_filtered, median_price_per_sqm, ville, code_postal, created_at, is_favorite, archived_at",
         )
         .order("is_favorite", { ascending: false })
         .order("created_at", { ascending: false });
@@ -183,6 +183,9 @@ function AnalysesListPage() {
                           <SearchCriteriaChips
                             sourceUrl={a.source_url}
                             sourceSite={a.source_site}
+                            searchFilters={
+                              a.search_filters as Record<string, unknown> | null
+                            }
                             compact
                           />
                         </div>
