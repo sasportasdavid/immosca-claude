@@ -400,30 +400,52 @@ export function mapLbcSilentflowRow(
   analysisId: string,
 ): ListingInsert | null {
   const prix = numOrNull(raw.price);
-  const externalId = strOrNull(raw.id);
+  // silentflow renvoie l'id en `number` (vs leadsbrary en string), donc
+  // strOrNull retournerait null. On stringifie explicitement.
+  const externalId =
+    typeof raw.id === "number" || typeof raw.id === "string"
+      ? String(raw.id)
+      : null;
   const sourceUrl = strOrNull(raw.url);
   if (!prix || !externalId || !sourceUrl) return null;
 
-  // Pivot attributes[] → map pour accès rapide par key
+  // Pivot attributes[] → map pour accès rapide par key.
+  // Chaque attribut peut avoir 1 valeur scalaire (`value` ex. "650") ou
+  // un tableau de valeurs (`values` ex. ["terrace", "garden"] pour
+  // outside_access). On stocke les 2 pour pouvoir tester les deux.
+  type Attr = { value?: string; values?: string[]; valueLabel?: string };
   const attrsList = Array.isArray(raw.attributes)
-    ? (raw.attributes as Array<{ key?: string; value?: string }>)
+    ? (raw.attributes as Array<{ key?: string } & Attr>)
     : [];
-  const attrs = new Map<string, string>();
+  const attrs = new Map<string, Attr>();
   for (const a of attrsList) {
-    if (a && typeof a.key === "string" && typeof a.value === "string") {
-      attrs.set(a.key, a.value);
+    if (a && typeof a.key === "string") {
+      attrs.set(a.key, {
+        value: typeof a.value === "string" ? a.value : undefined,
+        values: Array.isArray(a.values) ? a.values : undefined,
+        valueLabel: typeof a.valueLabel === "string" ? a.valueLabel : undefined,
+      });
     }
   }
+  const attrStr = (k: string): string | null => attrs.get(k)?.value ?? null;
   const attrNum = (k: string): number | null => {
-    const v = attrs.get(k);
+    const v = attrStr(k);
     if (!v) return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   };
+  const attrHas = (k: string, needle: string): boolean => {
+    const a = attrs.get(k);
+    if (!a) return false;
+    if (a.values?.includes(needle)) return true;
+    // Fallback : certains attributs ont values vide mais valueLabel rempli
+    if (a.valueLabel?.toLowerCase().includes(needle.toLowerCase())) return true;
+    return false;
+  };
 
   // property_type via attribute `real_estate_type` : 1=maison, 2=appartement,
   // 3=terrain, 4=parking, 5=immeuble (mapping LBC standard)
-  const ret = attrs.get("real_estate_type");
+  const ret = attrStr("real_estate_type");
   const inferredType =
     ret === "1"
       ? ("maison" as const)
@@ -434,11 +456,8 @@ export function mapLbcSilentflowRow(
           : ("appartement" as const);
 
   // DPE/GES : attribute "energy_rate" / "ges" → "a".."g" (lowercase)
-  const energy = attrs.get("energy_rate") ?? attrs.get("energy_class");
-  const gesRaw = attrs.get("ges") ?? attrs.get("ges_rate") ?? attrs.get("ges_class");
-
-  // outside_access : "Balcon, Terrasse, Jardin, Piscine" → flags
-  const outside = (attrs.get("outside_access") ?? "").toLowerCase();
+  const energy = attrStr("energy_rate") ?? attrStr("energy_class");
+  const gesRaw = attrStr("ges") ?? attrStr("ges_rate") ?? attrStr("ges_class");
 
   return {
     analysis_id: analysisId,
@@ -460,19 +479,21 @@ export function mapLbcSilentflowRow(
     dpe: dpeOrNull(energy?.toUpperCase()),
     ges: dpeOrNull(gesRaw?.toUpperCase()),
     etage: attrNum("floor_number"),
-    balcon: outside.includes("balcon"),
-    terrasse: outside.includes("terrasse"),
-    parking: attrs.get("parking") === "1" || Number(attrs.get("parking_spots") ?? 0) > 0,
-    ascenseur: attrs.get("elevator") === "1",
-    cave: attrs.get("cellar") === "1",
+    // outside_access est multi-valeurs : ["terrace", "garden", "balcony", "swimming_pool"]
+    balcon: attrHas("outside_access", "balcony"),
+    terrasse: attrHas("outside_access", "terrace"),
+    parking: attrStr("parking") === "1" || (attrNum("parking_spots") ?? 0) > 0,
+    ascenseur: attrStr("elevator") === "1",
+    // specificities est multi-valeurs : ["cellar", "intercom", "elevator", …]
+    cave: attrHas("specificities", "cellar"),
     annee_construction: attrNum("building_year"),
     photos_urls: Array.isArray(raw.images)
       ? (raw.images as string[]).filter((u) => typeof u === "string")
       : null,
     is_exclusive: false,
-    is_new_construction: (attrs.get("real_estate_status") ?? "")
-      .toLowerCase()
-      .includes("neuf"),
+    is_new_construction:
+      (attrStr("real_estate_status") ?? "").toLowerCase().includes("neuf") ||
+      attrHas("specificities", "new_construction"),
   };
 }
 
