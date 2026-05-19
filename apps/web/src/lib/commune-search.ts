@@ -85,27 +85,7 @@ export function distanceKm(
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-type Departement = {
-  nom: string;
-  code: string;
-  centre?: { type: "Point"; coordinates: [number, number] };
-};
-
-let departementsCache: Departement[] | null = null;
-
-async function fetchAllDepartements(): Promise<Departement[]> {
-  if (departementsCache) return departementsCache;
-  try {
-    const res = await fetch(
-      `${BASE}/departements?fields=nom,code,centre`,
-    );
-    if (!res.ok) return [];
-    departementsCache = (await res.json()) as Departement[];
-    return departementsCache;
-  } catch {
-    return [];
-  }
-}
+import { DEPARTEMENT_CENTERS } from "@/lib/departement-centers";
 
 const communesByDeptCache = new Map<string, Commune[]>();
 
@@ -148,18 +128,16 @@ export async function findCommunesInRadius(
 ): Promise<Array<Commune & { distanceKm: number }>> {
   if (radiusKm <= 0 || !Number.isFinite(radiusKm)) return [];
 
-  const allDepts = await fetchAllDepartements();
-  const candidateDepts = allDepts.filter((d) => {
-    if (!d.centre) return false;
-    const [lng, lat] = d.centre.coordinates;
-    const dist = distanceKm(centreLat, centreLng, lat, lng);
-    // 80km = marge max (largeur typique d'un département). Au-dessus,
-    // pas la peine de fetch ses communes.
-    return dist <= radiusKm + 80;
-  });
+  // Identifie les départements pertinents via la table statique des
+  // centres (cf. departement-centers.ts). Marge de 80km = largeur max
+  // d'un département depuis son centre — au-delà, ses communes sont
+  // hors rayon.
+  const candidateDeptCodes = Object.entries(DEPARTEMENT_CENTERS)
+    .filter(([, c]) => distanceKm(centreLat, centreLng, c.lat, c.lng) <= radiusKm + 80)
+    .map(([code]) => code);
 
   const arrays = await Promise.all(
-    candidateDepts.map((d) => fetchCommunesByDepartement(d.code)),
+    candidateDeptCodes.map((code) => fetchCommunesByDepartement(code)),
   );
 
   const all = arrays.flat();
