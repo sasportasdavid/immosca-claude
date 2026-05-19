@@ -16,8 +16,6 @@ import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
-import { findCommunesInRadius, type Commune } from "@/lib/commune-search";
-
 import { AppShell } from "@/components/app-shell";
 import { CommuneAutocomplete } from "@/components/commune-autocomplete";
 import { Button } from "@/components/ui/button";
@@ -35,6 +33,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useUserParams } from "@/hooks/use-user-params";
 import { requireAuth, requireOnboarded } from "@/lib/auth-guards";
+import { findCommunesInRadius, type Commune } from "@/lib/commune-search";
 import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/nouvelle-analyse")({
@@ -60,39 +59,90 @@ const TYPE_OPTIONS = [
   { id: "immeuble", label: "Immeuble" },
 ] as const;
 
-const formSchema = z.object({
-  name: z.string().trim().max(80, "Max 80 caractères").optional(),
+// Détection du site à partir d'une URL — miroir du `detectSiteFromUrl`
+// côté worker. On garde la logique synchro pour le preview UI.
+function detectSiteFromUrl(
+  url: string,
+): "seloger" | "leboncoin" | "pap" | "bienici" | "logic-immo" | null {
+  if (/seloger\.com/i.test(url)) return "seloger";
+  if (/leboncoin\.fr/i.test(url)) return "leboncoin";
+  if (/(?:^|\.)pap\.fr/i.test(url)) return "pap";
+  if (/bienici\.com/i.test(url)) return "bienici";
+  if (/logic-immo\.com/i.test(url)) return "logic-immo";
+  return null;
+}
 
-  // Localisation
-  city: z.string().trim().min(2, "Ville requise").max(60),
-  postalCode: z
-    .string()
-    .trim()
-    .regex(/^\d{4,5}$/, "Code postal à 4-5 chiffres")
-    .optional()
-    .or(z.literal("")),
+const SITE_LABELS: Record<string, string> = {
+  seloger: "SeLoger",
+  leboncoin: "Leboncoin",
+  pap: "PAP",
+  bienici: "Bien'ici",
+  "logic-immo": "Logic-immo",
+};
 
-  // Critères
-  transaction: z.enum(["buy", "rent"]).default("buy"),
-  propertyTypes: z
-    .array(z.enum(["appartement", "maison", "terrain", "immeuble"]))
-    .min(1, "Coche au moins un type"),
-  priceMax: z.number().int().min(10_000, "Min 10 000 €").max(50_000_000),
-  priceMin: z.number().int().min(0).max(50_000_000).optional(),
-  surfaceMin: z.number().int().min(5).max(2000).optional(),
-  surfaceMax: z.number().int().min(5).max(2000).optional(),
-  sources: z
-    .array(z.enum(["leboncoin", "seloger", "pap", "bienici", "logic-immo"]))
-    .min(1, "Au moins une source"),
+const formSchema = z
+  .object({
+    name: z.string().trim().max(80, "Max 80 caractères").optional(),
+    mode: z.enum(["filters", "urls"]).default("filters"),
 
-  // Override params (optionnel — sinon profil)
-  overrideParams: z.boolean().optional(),
-  apport: z.number().min(0).max(10_000_000).optional(),
-  taux_credit_pct: z.number().min(0).max(15).optional(),
-  duree_credit_ans: z.number().int().min(5).max(30).optional(),
-  tmi_pct: z.number().int().min(0).max(50).optional(),
-  rendement_min_pct: z.number().min(0).max(30).optional(),
-});
+    // Mode "filters" — recherche guidée par form
+    city: z.string().trim().max(60).optional().or(z.literal("")),
+    postalCode: z
+      .string()
+      .trim()
+      .regex(/^\d{4,5}$/, "Code postal à 4-5 chiffres")
+      .optional()
+      .or(z.literal("")),
+    transaction: z.enum(["buy", "rent"]).default("buy"),
+    propertyTypes: z
+      .array(z.enum(["appartement", "maison", "terrain", "immeuble"]))
+      .optional(),
+    priceMax: z
+      .number()
+      .int()
+      .min(10_000, "Min 10 000 €")
+      .max(50_000_000)
+      .optional(),
+    priceMin: z.number().int().min(0).max(50_000_000).optional(),
+    surfaceMin: z.number().int().min(5).max(2000).optional(),
+    surfaceMax: z.number().int().min(5).max(2000).optional(),
+    sources: z
+      .array(z.enum(["leboncoin", "seloger", "pap", "bienici", "logic-immo"]))
+      .optional(),
+
+    // Mode "urls" — copier-coller multi-URLs
+    urlsList: z.string().optional(),
+
+    // Override params (optionnel — sinon profil)
+    overrideParams: z.boolean().optional(),
+    apport: z.number().min(0).max(10_000_000).optional(),
+    taux_credit_pct: z.number().min(0).max(15).optional(),
+    duree_credit_ans: z.number().int().min(5).max(30).optional(),
+    tmi_pct: z.number().int().min(0).max(50).optional(),
+    rendement_min_pct: z.number().min(0).max(30).optional(),
+  })
+  .refine(
+    (v) => {
+      if (v.mode === "filters") {
+        return (
+          !!v.city &&
+          v.city.trim().length >= 2 &&
+          !!v.propertyTypes &&
+          v.propertyTypes.length > 0 &&
+          !!v.priceMax
+        );
+      }
+      // mode === "urls" : on demande au moins 1 URL non vide reconnue
+      const urls = (v.urlsList ?? "")
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return urls.length > 0;
+    },
+    {
+      message: "Renseigne ville/types/prix max OU au moins 1 URL",
+    },
+  );
 
 type FormInput = z.infer<typeof formSchema>;
 
@@ -114,6 +164,7 @@ function NouvelleAnalysePage() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
+      mode: "filters",
       city: "",
       postalCode: "",
       transaction: "buy",
@@ -123,6 +174,7 @@ function NouvelleAnalysePage() {
       surfaceMin: undefined,
       surfaceMax: undefined,
       sources: ["leboncoin", "seloger", "pap", "bienici"],
+      urlsList: "",
       overrideParams: false,
       apport: undefined,
       taux_credit_pct: undefined,
@@ -133,6 +185,21 @@ function NouvelleAnalysePage() {
   });
 
   const overrideParams = form.watch("overrideParams");
+  const mode = form.watch("mode");
+  const urlsListRaw = form.watch("urlsList") ?? "";
+
+  // Parse live des URLs (pour preview "5 URLs · 2 SeLoger, 3 LBC")
+  const parsedUrls = urlsListRaw
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((url) => ({ url, site: detectSiteFromUrl(url) }));
+  const urlsBySite = parsedUrls.reduce<Record<string, number>>((acc, u) => {
+    const key = u.site ?? "inconnu";
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  const unknownUrlsCount = parsedUrls.filter((u) => u.site === null).length;
 
   // Commune sélectionnée via l'autocomplete (state local, hors form).
   // Permet d'enrichir search_filters avec code INSEE, département,
@@ -193,70 +260,106 @@ function NouvelleAnalysePage() {
         tolerance_travaux: base?.tolerance_travaux ?? null,
       };
 
-      // Filtres dltik (format PigeImmoFilters côté worker).
-      // Multi-communes si rayon > 0 : on inclut toutes les communes
-      // dans le rayon de la pivot. Sinon juste la pivot.
-      const sc = selectedCommune;
-      const allCommunes =
-        radiusKm > 0 && communesInRadius.length > 0
-          ? communesInRadius
-          : sc
-            ? [{ ...sc, distanceKm: 0 }]
-            : [];
-      const cities = allCommunes.map((c) => c.nom);
-      const postalCodes = Array.from(
-        new Set(allCommunes.flatMap((c) => c.codesPostaux ?? [])),
-      );
-      const departments = Array.from(
-        new Set(
-          allCommunes
-            .map((c) => c.codeDepartement)
-            .filter((d): d is string => !!d),
-        ),
-      );
-      const search_filters = {
-        cities: cities.length > 0 ? cities : [values.city],
-        postalCodes:
-          postalCodes.length > 0
-            ? postalCodes
-            : values.postalCode
-              ? [values.postalCode]
-              : [],
-        departments,
-        codeInsee: sc?.code, // pivot uniquement (pour DVF lookup)
-        centre: sc?.centre
-          ? {
-              lat: sc.centre.coordinates[1],
-              lng: sc.centre.coordinates[0],
-              radiusKm,
-            }
-          : null,
-        transaction: values.transaction,
-        propertyTypes: values.propertyTypes,
-        priceMin: values.priceMin ?? null,
-        priceMax: values.priceMax,
-        surfaceMin: values.surfaceMin ?? null,
-        surfaceMax: values.surfaceMax ?? null,
-        sources: values.sources,
-        maxResultsPerSource: 200,
-        enrichDpe: true,
-        dedupAcrossSources: true,
-      };
+      // Branche selon le mode : "filters" → dltik form, "urls" → multi-URLs
+      // routées vers actors spécialisés par site (cf. ACTOR_BY_SITE worker).
+      let search_filters: Record<string, unknown>;
+      let analysisName: string;
+      let analysisVille: string | null = null;
+      let analysisCp: string | null = null;
+
+      if (values.mode === "urls") {
+        const urls = (values.urlsList ?? "")
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (urls.length === 0) {
+          throw new Error("Aucune URL fournie");
+        }
+        // On garde toutes les URLs (y compris inconnues) — le worker
+        // détecte le site et skip celles qu'il ne sait pas router.
+        search_filters = {
+          urlsList: urls,
+          // Hints éventuels que le worker peut utiliser pour scoring
+          transaction: values.transaction,
+        };
+        analysisName =
+          values.name?.trim() ||
+          `Multi-URLs · ${new Date().toLocaleDateString("fr-FR", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })}`;
+      } else {
+        // Mode "filters" — recherche guidée
+        const sc = selectedCommune;
+        const allCommunes =
+          radiusKm > 0 && communesInRadius.length > 0
+            ? communesInRadius
+            : sc
+              ? [{ ...sc, distanceKm: 0 }]
+              : [];
+        const cities = allCommunes.map((c) => c.nom);
+        const postalCodes = Array.from(
+          new Set(allCommunes.flatMap((c) => c.codesPostaux ?? [])),
+        );
+        const departments = Array.from(
+          new Set(
+            allCommunes
+              .map((c) => c.codeDepartement)
+              .filter((d): d is string => !!d),
+          ),
+        );
+        search_filters = {
+          cities: cities.length > 0 ? cities : [values.city],
+          postalCodes:
+            postalCodes.length > 0
+              ? postalCodes
+              : values.postalCode
+                ? [values.postalCode]
+                : [],
+          departments,
+          codeInsee: sc?.code, // pivot uniquement (pour DVF lookup)
+          centre: sc?.centre
+            ? {
+                lat: sc.centre.coordinates[1],
+                lng: sc.centre.coordinates[0],
+                radiusKm,
+              }
+            : null,
+          transaction: values.transaction,
+          propertyTypes: values.propertyTypes,
+          priceMin: values.priceMin ?? null,
+          priceMax: values.priceMax,
+          surfaceMin: values.surfaceMin ?? null,
+          surfaceMax: values.surfaceMax ?? null,
+          sources: values.sources,
+          maxResultsPerSource: 200,
+          enrichDpe: true,
+          dedupAcrossSources: true,
+        };
+        analysisName =
+          values.name?.trim() || suggestName(values.city ?? "Recherche");
+        analysisVille = values.city ?? null;
+        analysisCp = values.postalCode || null;
+      }
 
       const { data, error } = await supabase
         .from("analyses")
         .insert({
           profile_id: auth.user.id,
-          source_url: null, // on n'a plus d'URL, c'est le form qui fait foi
+          source_url: null, // on n'a plus d'URL unique, c'est le form qui fait foi
           source_site: "seloger", // valeur arbitraire (enum NOT NULL), le
           //                          worker overwritera avec la vraie source
           //                          par bien quand il insère listings
           params_snapshot,
-          search_filters,
+          // search_filters est typé Json côté Supabase — on cast car notre
+          // shape Record<string, unknown> est garantie JSON-compatible
+          // (uniquement des primitives + arrays + objets plats).
+          search_filters: search_filters as never,
           status: "pending",
-          name: values.name?.trim() || suggestName(values.city),
-          ville: values.city,
-          code_postal: values.postalCode || null,
+          name: analysisName,
+          ville: analysisVille,
+          code_postal: analysisCp,
         })
         .select("id")
         .single();
@@ -335,6 +438,103 @@ function NouvelleAnalysePage() {
               )}
             />
 
+            {/* Tab toggle : Rapide (filters) vs Avancé (multi-URLs) */}
+            <FormField
+              control={form.control}
+              name="mode"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="inline-flex rounded-md border border-border bg-secondary/30 p-0.5">
+                    {[
+                      { id: "filters" as const, label: "Recherche guidée" },
+                      { id: "urls" as const, label: "Coller des URLs" },
+                    ].map((t) => {
+                      const active = field.value === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => field.onChange(t.id)}
+                          className={`rounded px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                            active
+                              ? "bg-background text-foreground shadow-sm"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          {t.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <FormDescription>
+                    {field.value === "filters"
+                      ? "On construit la requête à partir de la ville, du rayon, des types et du prix."
+                      : "Lance une recherche sur chaque site (SeLoger, LBC, PAP, Bien'ici), copie l'URL et colle-la ici — une par ligne."}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {mode === "urls" ? (
+              <FormField
+                control={form.control}
+                name="urlsList"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>URLs de recherche (une par ligne)</FormLabel>
+                    <FormControl>
+                      <textarea
+                        className="flex min-h-[160px] w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] font-mono leading-relaxed shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                        placeholder={`https://www.seloger.com/immobilier/achat/immo-gagny-93/...
+https://www.leboncoin.fr/recherche?category=9&locations=Gagny_93220...
+https://www.pap.fr/annonce/vente-...
+https://www.bienici.com/recherche/achat/gagny-93220`}
+                        value={field.value ?? ""}
+                        onChange={(e) => field.onChange(e.target.value)}
+                      />
+                    </FormControl>
+                    {parsedUrls.length > 0 ? (
+                      <div className="mt-2 rounded-md border border-border bg-secondary/30 p-2.5 text-[12px]">
+                        <div className="font-medium">
+                          {parsedUrls.length} URL{parsedUrls.length > 1 ? "s" : ""} détectée
+                          {parsedUrls.length > 1 ? "s" : ""}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
+                          {Object.entries(urlsBySite).map(([site, count]) => (
+                            <span key={site}>
+                              {site === "inconnu" ? (
+                                <span className="text-destructive">
+                                  ⚠ {count} non reconnue{count > 1 ? "s" : ""}
+                                </span>
+                              ) : (
+                                <>
+                                  {SITE_LABELS[site] ?? site} ·{" "}
+                                  <span className="font-semibold">{count}</span>
+                                </>
+                              )}
+                            </span>
+                          ))}
+                        </div>
+                        {unknownUrlsCount > 0 ? (
+                          <p className="mt-1.5 text-[11px] text-muted-foreground">
+                            Sites supportés : SeLoger, Leboncoin, PAP, Bien'ici. Les URLs hors de cette liste sont ignorées.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <FormDescription>
+                        Tu peux mélanger plusieurs sites et plusieurs recherches dans la même analyse.
+                      </FormDescription>
+                    )}
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : null}
+
+            {mode === "filters" ? (
+              <>
             <FormField
               control={form.control}
               name="city"
@@ -344,7 +544,7 @@ function NouvelleAnalysePage() {
                   <FormControl>
                     <CommuneAutocomplete
                       id="city-input"
-                      value={field.value}
+                      value={field.value ?? ""}
                       onChange={(val) => {
                         field.onChange(val);
                         // Si l'user retape après pick, on invalide la
@@ -686,6 +886,8 @@ function NouvelleAnalysePage() {
                 />
               </div>
             </details>
+              </>
+            ) : null}
 
             {/* Paramètres personnalisés (apport, taux, TMI) */}
             <div className="rounded-lg border border-border bg-card p-4">

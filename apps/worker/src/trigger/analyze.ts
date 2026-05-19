@@ -23,8 +23,10 @@ import { z } from "zod";
 import { Sentry } from "@/lib/sentry";
 import { supabaseApp, supabaseData } from "@/lib/supabase";
 import {
+  ACTOR_BY_SITE,
   buildApifyRunInput,
   buildPigeImmoRunInput,
+  detectSiteFromUrl,
   fetchApifyRunResult,
   runApifyActor,
   selogerUrlToPigeImmoFilters,
@@ -32,8 +34,10 @@ import {
 } from "@/services/apify";
 import {
   APIFY_MAPPERS,
+  MULTI_URL_MAPPERS,
   PIGE_IMMO_MAPPER,
   type ListingInsert,
+  type MultiUrlMapperKey,
   type RawApifyListing,
 } from "@/services/apify-mappers";
 import { banGeocode } from "@/services/ban";
@@ -181,13 +185,23 @@ export const analyzeTask = task({
     });
 
     try {
-      // 2. Apify : 3 chemins possibles selon le payload
-      //   - apifyRunIdOverride : rejoue un run existant (test / replay cache)
-      //   - useMultiSource : actor dltik multi-source (LBC+SeLoger+PAP+Bien'ici)
-      //   - default : actor legacy (azzouzana SeLoger) via APIFY_ACTOR_*
+      // 2. Apify : 4 chemins possibles selon le payload / l'analyse
+      //   1. apifyRunIdOverride : rejoue un run existant (test / replay cache)
+      //   2. search_filters.urlsList : mode multi-URLs (1 actor par site,
+      //      parallèle, dédup) — c'est le mode "moderne" préféré
+      //   3. useMultiSource : actor dltik multi-source (legacy d'avant
+      //      le mode multi-URLs)
+      //   4. default : actor legacy azzouzana SeLoger via APIFY_ACTOR_*
       let apifyResult;
       // Flag pour le bloc mapping plus bas
       let mapperIsMulti = false;
+      // Map item idx → mapperKey (pour mode multi-URLs où chaque item a
+      // potentiellement un mapper différent selon son source_site)
+      const itemMapperKeys: (MultiUrlMapperKey | null)[] = [];
+
+      const sfUrlsList = (analysis.search_filters as {
+        urlsList?: string[];
+      } | null)?.urlsList;
 
       if (apifyRunIdOverride) {
         logger.info("Réutilisation d'un run Apify existant", {
@@ -198,6 +212,79 @@ export const analyzeTask = task({
         );
         // Si on rejoue un run multi-source, l'appelant doit le signaler
         mapperIsMulti = !!useMultiSource;
+      } else if (sfUrlsList && sfUrlsList.length > 0) {
+        // Mode multi-URLs : 1 actor par site, parallèle, dédup.
+        // C'est le mode préféré moderne.
+        logger.info("Multi-URLs run", { count: sfUrlsList.length });
+
+        type Group = { site: string; urls: string[] };
+        // Group par site (un actor peut souvent prendre plusieurs URLs
+        // ou être appelé plusieurs fois pour le même site)
+        const groups = new Map<string, Group>();
+        for (const url of sfUrlsList) {
+          const site = detectSiteFromUrl(url);
+          if (!site) {
+            logger.warn("URL non reconnue, skip", { url });
+            continue;
+          }
+          if (!groups.has(site)) groups.set(site, { site, urls: [] });
+          groups.get(site)!.urls.push(url);
+        }
+
+        // Lance un run par (site × URL) en parallèle. Promise.allSettled
+        // pour ne pas que la chute d'un site casse les autres.
+        const runs = await Promise.allSettled(
+          [...groups.values()].flatMap((g) => {
+            const plan = ACTOR_BY_SITE[g.site];
+            if (!plan) {
+              logger.warn("Pas d'actor pour ce site", { site: g.site });
+              return [];
+            }
+            return g.urls.map(async (url) => {
+              const result = await runApifyActor<RawApifyListing>({
+                actorId: plan.actorId,
+                runInput: plan.buildInput(url),
+                timeoutSecs: 900,
+                memoryMbytes: 2048,
+              });
+              return {
+                site: g.site,
+                mapperKey: plan.mapperKey as MultiUrlMapperKey,
+                result,
+              };
+            });
+          }),
+        );
+
+        // Aggrège les items des runs réussis + remplit itemMapperKeys
+        const items: RawApifyListing[] = [];
+        let totalDurationMs = 0;
+        let totalCostEur = 0;
+        for (const r of runs) {
+          if (r.status === "rejected") {
+            logger.warn("Run failed", { reason: String(r.reason).slice(0, 200) });
+            continue;
+          }
+          const { result, mapperKey } = r.value;
+          totalDurationMs += result.stats.durationMs;
+          totalCostEur += result.stats.estimatedCostEur;
+          for (const item of result.items) {
+            items.push(item);
+            itemMapperKeys.push(mapperKey);
+          }
+        }
+
+        apifyResult = {
+          runId: `multi-${runs.length}-runs`,
+          status: "SUCCEEDED",
+          items,
+          stats: {
+            durationMs: totalDurationMs,
+            computeUnits: 0,
+            estimatedCostEur: totalCostEur,
+          },
+        };
+        mapperIsMulti = true;
       } else if (useMultiSource || analysis.search_filters) {
         // Nouveau flow : utiliser dltik dès que :
         //  - le payload force useMultiSource=true, OU
@@ -267,20 +354,31 @@ export const analyzeTask = task({
       });
 
       // 3. Map raw → listings rows.
-      // En mode multi-source, on utilise PIGE_IMMO_MAPPER qui détermine
-      // le `source_site` depuis le champ `source` de chaque item (donc
-      // un même run peut produire des listings de plusieurs sources).
-      // Sinon dispatch legacy par source_site de l'analyse.
-      const mapper = mapperIsMulti
-        ? PIGE_IMMO_MAPPER
-        : APIFY_MAPPERS[analysis.source_site as keyof typeof APIFY_MAPPERS];
-      if (!mapper) {
-        throw new Error(`Pas de mapper pour source_site=${analysis.source_site}`);
+      // 3 stratégies de mapping :
+      //  - itemMapperKeys non vide (mode multi-URLs) : dispatch par item
+      //    selon le site source de chaque run
+      //  - mapperIsMulti (mode dltik multi-source) : PIGE_IMMO_MAPPER unique
+      //  - sinon (legacy) : dispatch par analysis.source_site
+      let mapped: ListingInsert[];
+      if (itemMapperKeys.length > 0 && itemMapperKeys.length === apifyResult.items.length) {
+        mapped = apifyResult.items
+          .map((raw, i) => {
+            const key = itemMapperKeys[i];
+            const m = key ? MULTI_URL_MAPPERS[key] : null;
+            return m ? m(raw, analysisId) : null;
+          })
+          .filter((r): r is ListingInsert => r !== null);
+      } else {
+        const mapper = mapperIsMulti
+          ? PIGE_IMMO_MAPPER
+          : APIFY_MAPPERS[analysis.source_site as keyof typeof APIFY_MAPPERS];
+        if (!mapper) {
+          throw new Error(`Pas de mapper pour source_site=${analysis.source_site}`);
+        }
+        mapped = apifyResult.items
+          .map((raw) => mapper(raw, analysisId))
+          .filter((r): r is ListingInsert => r !== null);
       }
-
-      const mapped: ListingInsert[] = apifyResult.items
-        .map((raw) => mapper(raw, analysisId))
-        .filter((r): r is ListingInsert => r !== null);
 
       logger.info("Mapped listings", {
         raw: apifyResult.items.length,

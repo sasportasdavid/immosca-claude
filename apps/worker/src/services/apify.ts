@@ -340,6 +340,107 @@ export function selogerUrlToPigeImmoFilters(
 }
 
 /**
+ * Détecte le site d'une URL de recherche immobilière.
+ * Retourne le nom du site (= source_site) ou null si non reconnu.
+ */
+export function detectSiteFromUrl(
+  url: string,
+): "seloger" | "leboncoin" | "pap" | "bienici" | "logic-immo" | null {
+  if (/seloger\.com/i.test(url)) return "seloger";
+  if (/leboncoin\.fr/i.test(url)) return "leboncoin";
+  if (/pap\.fr/i.test(url)) return "pap";
+  if (/bienici\.com/i.test(url)) return "bienici";
+  if (/logic-immo\.com/i.test(url)) return "logic-immo";
+  return null;
+}
+
+export type SitePlan = {
+  actorId: string;
+  /** Construit l'input JSON spécifique à cet actor à partir de l'URL. */
+  buildInput: (url: string) => Record<string, unknown>;
+  /** Clé du mapper dans MULTI_URL_MAPPERS. */
+  mapperKey: string;
+};
+
+/**
+ * Mapping site → actor par défaut + builder d'input + mapper.
+ * Pour changer d'actor sur un site, modifier ici (et ajouter le mapper
+ * correspondant dans apify-mappers.MULTI_URL_MAPPERS).
+ */
+export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
+  seloger: {
+    actorId: "azzouzana~seloger-mass-products-scraper-by-search-url",
+    buildInput: (url) => ({ startUrl: url, maxItems: 1000 }),
+    mapperKey: "seloger:azzouzana",
+  },
+  leboncoin: {
+    actorId: "leadsbrary~leboncoin-real-estate-scraper",
+    buildInput: (url) => {
+      // L'actor leadsbrary attend des filtres JSON (city, priceMax, etc.)
+      // pas une URL — on parse l'URL LBC pour extraire les filtres.
+      // Format URL : /c/ventes_immobilieres/gagny_93220?real_estate_type=2&price=min-500000
+      const filters: Record<string, unknown> = { maxAds: 100 };
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch {
+        return filters;
+      }
+      // City + zipcode depuis le path (gagny_93220)
+      const m = parsed.pathname.match(/\/c\/[^/]+\/([a-z-]+)_(\d{5})/i);
+      if (m) {
+        filters.city = m[1]!.replace(/-/g, " ");
+      }
+      // real_estate_type : 1=maison, 2=appartement, 3=terrain, 4=parking
+      const ret = parsed.searchParams.get("real_estate_type");
+      if (ret) {
+        const map: Record<string, string> = {
+          "1": "maison",
+          "2": "appartement",
+          "3": "terrain",
+        };
+        const parts = ret.split(",").map((t) => map[t.trim()]).filter(Boolean);
+        if (parts.length > 0) filters.keywords = parts[0]; // leadsbrary prend 1 keyword
+      }
+      // price : "min-500000" ou "100000-300000"
+      const price = parsed.searchParams.get("price");
+      if (price) {
+        const m2 = price.match(/(\w+)-(\w+)/);
+        if (m2) {
+          if (m2[1] !== "min") filters.priceMin = Number(m2[1]);
+          if (m2[2] !== "max") filters.priceMax = Number(m2[2]);
+        }
+      }
+      // square : surface
+      const sq = parsed.searchParams.get("square");
+      if (sq) {
+        const m3 = sq.match(/(\w+)-(\w+)/);
+        if (m3) {
+          if (m3[1] !== "min") filters.surfaceMin = Number(m3[1]);
+          if (m3[2] !== "max") filters.surfaceMax = Number(m3[2]);
+        }
+      }
+      return filters;
+    },
+    mapperKey: "leboncoin:leadsbrary",
+  },
+  pap: {
+    actorId: "azzouzana~pap-fr-mass-products-scraper-by-search-url",
+    buildInput: (url) => ({ startUrl: url, maxItemsToScrape: 1000 }),
+    mapperKey: "pap:azzouzana",
+  },
+  bienici: {
+    actorId: "stealth_mode~bienici-property-search-scraper",
+    buildInput: (url) => ({
+      urls: [url],
+      ignore_url_failures: true,
+      max_items_per_url: 500,
+    }),
+    mapperKey: "bienici:stealth_mode",
+  },
+};
+
+/**
  * Skeleton : on retourne false en attendant une table `apify_run_costs`
  * pour calculer le cumul mensuel. À câbler avec BetterStack en PR3.5.
  */

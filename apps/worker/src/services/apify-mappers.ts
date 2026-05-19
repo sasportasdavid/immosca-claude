@@ -316,10 +316,247 @@ export function mapPigeImmoRow(
   };
 }
 
+// ──────────────────────────────────────────────────────────────────
+// Mappers dédiés par actor (multi-URLs mode)
+//
+// Stratégie : 1 actor par site (au lieu de 1 actor multi-source). Chaque
+// actor a son propre format de sortie, donc son propre mapper. C'est plus
+// de plomberie mais ça donne :
+//  - meilleure couverture (chaque actor a son bypass anti-bot dédié)
+//  - meilleur format par site (lat/lng natif sur LBC leadsbrary, district
+//    sur Bien'ici stealth_mode, etc.)
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * LBC `leadsbrary/leboncoin-real-estate-scraper`.
+ * Format moderne avec location_lat/lng natif, images_urls galerie.
+ */
+export function mapLbcLeadsbraryRow(
+  raw: RawApifyListing,
+  analysisId: string,
+): ListingInsert | null {
+  const prix = numOrNull(raw.price_eur);
+  const externalId = strOrNull(raw.id);
+  const sourceUrl = strOrNull(raw.url);
+  if (!prix || !externalId || !sourceUrl) return null;
+
+  const pt = String(raw.property_type ?? "").toLowerCase();
+  const inferredType =
+    pt === "house" || pt === "maison"
+      ? ("maison" as const)
+      : pt === "land" || pt === "terrain"
+        ? ("terrain" as const)
+        : pt === "building" || pt === "immeuble"
+          ? ("immeuble" as const)
+          : ("appartement" as const);
+
+  return {
+    analysis_id: analysisId,
+    external_id: externalId,
+    source_site: "leboncoin",
+    source_url: sourceUrl,
+    title: strOrNull(raw.title) ?? "(Sans titre)",
+    description: strOrNull(raw.description),
+    type: inferredType,
+    prix,
+    surface: numOrNull(raw.surface_m2),
+    pieces: numOrNull(raw.rooms),
+    chambres: numOrNull(raw.bedrooms),
+    ville: strOrNull(raw.location_city),
+    code_postal: strOrNull(raw.location_zipcode),
+    adresse_raw: null, // LBC ne donne pas l'adresse exacte
+    lat: numOrNull(raw.location_lat),
+    lng: numOrNull(raw.location_lng),
+    dpe: dpeOrNull(raw.energy_class),
+    ges: dpeOrNull(raw.ges_class),
+    etage: numOrNull(raw.floors),
+    balcon: false, // pas exposé directement par leadsbrary
+    terrasse: false,
+    parking: Number(raw.parking_spots ?? 0) > 0,
+    ascenseur: false,
+    cave: false,
+    annee_construction: numOrNull(raw.building_year),
+    photos_urls: Array.isArray(raw.images_urls)
+      ? (raw.images_urls as string[]).filter((u) => typeof u === "string")
+      : null,
+    is_exclusive: false,
+    is_new_construction: String(raw.condition ?? "").toLowerCase().includes("neuf"),
+  };
+}
+
+/**
+ * PAP `azzouzana/pap-fr-mass-products-scraper-by-search-url`.
+ * Format français : `prix` est une string "192.000 €", surface dans
+ * `caracteristiques` à parser via regex ("Appartement / 1 pièce / 35,51 m² / 5.407 € le m²").
+ */
+export function mapPapAzzouzanaRow(
+  raw: RawApifyListing,
+  analysisId: string,
+): ListingInsert | null {
+  // prix : "192.000 €" → 192000 (format français avec '.' pour milliers)
+  const prixStr = String(raw.prix ?? "").replace(/\./g, "").replace(/[^\d]/g, "");
+  const prix = prixStr ? Number(prixStr) : null;
+  const externalId = strOrNull(raw.id) ?? strOrNull(raw.reference_courte);
+  const sourceUrl = strOrNull(raw.url);
+  if (!prix || !externalId || !sourceUrl) return null;
+
+  // Parse caracteristiques "Appartement / 1 pièce / 35,51 m² / 5.407 € le m²"
+  const carac = String(raw.caracteristiques ?? "");
+  const surfaceMatch = carac.match(/(\d+(?:[.,]\d+)?)\s*m²/);
+  const surface = surfaceMatch
+    ? Number(surfaceMatch[1]!.replace(",", "."))
+    : null;
+
+  const typeSlug = String(raw.typebien_slug ?? "").toLowerCase();
+  const inferredType =
+    typeSlug === "maison"
+      ? ("maison" as const)
+      : typeSlug === "terrain"
+        ? ("terrain" as const)
+        : typeSlug === "immeuble"
+          ? ("immeuble" as const)
+          : ("appartement" as const);
+
+  const marker = (raw.marker ?? {}) as { lat?: number; lng?: number };
+
+  return {
+    analysis_id: analysisId,
+    external_id: externalId,
+    source_site: "pap",
+    source_url: sourceUrl,
+    title: strOrNull(raw.titre) ?? "(Sans titre)",
+    description: strOrNull(raw.texte),
+    type: inferredType,
+    prix,
+    surface,
+    pieces: numOrNull(raw.nb_pieces),
+    chambres: numOrNull(raw.nb_chambres_max),
+    ville: null, // pas exposé directement (à extraire du titre/URL si besoin)
+    code_postal: null,
+    adresse_raw: null,
+    lat: typeof marker.lat === "number" ? marker.lat : null,
+    lng: typeof marker.lng === "number" ? marker.lng : null,
+    dpe: dpeOrNull(raw.classe_energie),
+    ges: dpeOrNull(raw.classe_ges),
+    etage: null,
+    balcon: false,
+    terrasse: false,
+    parking: false,
+    ascenseur: false,
+    cave: false,
+    annee_construction: null,
+    photos_urls: Array.isArray(raw.photos)
+      ? (raw.photos as string[]).filter((u) => typeof u === "string")
+      : null,
+    is_exclusive: false,
+    is_new_construction: false,
+  };
+}
+
+/**
+ * Bien'ici `stealth_mode/bienici-property-search-scraper`.
+ * Lat/lng dans `blur_info.position` (centroïde quartier si adresse floutée).
+ * Programmes neufs : `price`, `surface_area`, `rooms_quantity` sont des
+ * arrays [min, max] — on prend la valeur min pour avoir le ticket d'entrée.
+ */
+export function mapBienIciStealthRow(
+  raw: RawApifyListing,
+  analysisId: string,
+): ListingInsert | null {
+  // Helper : extrait soit un number, soit le min d'un array [min, max]
+  const numOrMin = (v: unknown): number | null => {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (Array.isArray(v) && v.length > 0) {
+      const n = Number(v[0]);
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  };
+
+  const prix = numOrMin(raw.price);
+  const externalId = strOrNull(raw.id) ?? strOrNull(raw.reference);
+  // L'URL n'est pas toujours fournie ; on fallback sur from_url + id
+  const fromUrl = strOrNull(raw.from_url);
+  const sourceUrl =
+    strOrNull(raw.url) ??
+    (externalId && fromUrl ? `${fromUrl}#${externalId}` : null);
+  if (!prix || !externalId || !sourceUrl) return null;
+
+  const pt = String(raw.property_type ?? "").toLowerCase();
+  const inferredType =
+    pt === "house" || pt === "maison"
+      ? ("maison" as const)
+      : pt === "land" || pt === "terrain"
+        ? ("terrain" as const)
+        : pt === "building" || pt === "immeuble"
+          ? ("immeuble" as const)
+          : ("appartement" as const); // "programme" = appart neuf par défaut
+
+  const blurInfo = (raw.blur_info ?? {}) as {
+    position?: { lat?: number; lon?: number };
+    centroid?: { lat?: number; lon?: number };
+  };
+  const pos = blurInfo.position ?? blurInfo.centroid ?? {};
+
+  const district = (raw.district ?? {}) as { name?: string };
+
+  return {
+    analysis_id: analysisId,
+    external_id: externalId,
+    source_site: "bienici",
+    source_url: sourceUrl,
+    title: strOrNull(raw.title) ?? "(Sans titre)",
+    description: strOrNull(raw.description),
+    type: inferredType,
+    prix,
+    surface: numOrMin(raw.surface_area),
+    pieces: numOrMin(raw.rooms_quantity),
+    chambres: numOrMin(raw.bedrooms_quantity),
+    ville: strOrNull(raw.city),
+    code_postal: strOrNull(raw.postal_code),
+    // L'adresse exacte est rarement publique chez Bien'ici (RGPD).
+    // À défaut on garde le nom de quartier comme indication.
+    adresse_raw: strOrNull(district.name),
+    lat: typeof pos.lat === "number" ? pos.lat : null,
+    lng: typeof pos.lon === "number" ? pos.lon : null,
+    dpe: dpeOrNull(raw.energy_classification),
+    ges: dpeOrNull(raw.greenhouse_gaz_classification),
+    etage: numOrNull(raw.floor),
+    balcon: false,
+    terrasse: false,
+    parking: false,
+    ascenseur: Boolean(raw.has_elevator),
+    cave: Boolean(raw.has_cellar),
+    annee_construction: null,
+    photos_urls: Array.isArray(raw.photos)
+      ? (raw.photos as Array<{ url_photo?: string }>)
+          .map((p) => p.url_photo)
+          .filter((u): u is string => typeof u === "string")
+      : null,
+    is_exclusive: Boolean(raw.is_bien_ici_exclusive),
+    is_new_construction:
+      Boolean(raw.new_property) || pt === "programme",
+  };
+}
+
 export const APIFY_MAPPERS = {
   seloger: mapSelogerRow,
   leboncoin: mapLeboncoinRow,
 } as const;
+
+/**
+ * Mappers par actor key (utilisés en mode multi-URLs).
+ * La clé est `${source_site}:${actor_slug_court}` pour pouvoir avoir
+ * plusieurs mappers par site si on change d'actor au fil du temps.
+ */
+export const MULTI_URL_MAPPERS = {
+  "seloger:azzouzana": mapSelogerRow,
+  "leboncoin:leadsbrary": mapLbcLeadsbraryRow,
+  "pap:azzouzana": mapPapAzzouzanaRow,
+  "bienici:stealth_mode": mapBienIciStealthRow,
+} as const;
+
+export type MultiUrlMapperKey = keyof typeof MULTI_URL_MAPPERS;
 
 /**
  * Mapper pour les runs multi-source dltik. Le `source_site` du listing
