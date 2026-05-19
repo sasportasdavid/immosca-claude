@@ -505,8 +505,8 @@ function ListingsSection({
             Carte
           </h2>
           <p className="mt-1 text-[12px] text-muted-foreground">
-            Cliquez sur un point pour ouvrir la fiche du bien. Localisation
-            au niveau commune (pas d'adresse exacte sur SeLoger).
+            Cliquez sur un point pour ouvrir la fiche du bien. Précision
+            adresse quand l'annonce la donne, sinon centroïde commune.
           </p>
         </div>
         <AnalysisMap

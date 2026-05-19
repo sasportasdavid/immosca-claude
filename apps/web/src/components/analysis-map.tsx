@@ -194,7 +194,7 @@ export function AnalysisMap({ listings, onSelectListing }: Props) {
           <Legend color={VERDICT_COLOR.no_go!} label="No-go" />
         </div>
         <span>
-          {positions.length} biens · localisation au niveau commune
+          {positions.length} biens · localisation au niveau adresse
         </span>
       </div>
     </div>
