@@ -16,6 +16,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Lock, Pencil } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { AnalysisActions } from "@/components/analysis-actions";
 import { AnalysisProgress } from "@/components/analysis-progress";
 import { AppShell } from "@/components/app-shell";
 import { HelpDrawer } from "@/components/help-drawer";
@@ -129,7 +130,16 @@ function AnalysisPage() {
               </div>
             ) : null}
           </div>
-          <HelpDrawer />
+          <div className="flex items-center gap-2">
+            {analysis.data ? (
+              <AnalysisActions
+                analysisId={id}
+                isFavorite={analysis.data.is_favorite}
+                archivedAt={analysis.data.archived_at}
+              />
+            ) : null}
+            <HelpDrawer />
+          </div>
         </div>
 
         {analysis.isLoading ? (

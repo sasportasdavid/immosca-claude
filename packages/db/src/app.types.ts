@@ -17,11 +17,13 @@ export type Database = {
       analyses: {
         Row: {
           apify_run_id: string | null
+          archived_at: string | null
           code_postal: string | null
           completed_at: string | null
           created_at: string
           error_message: string | null
           id: string
+          is_favorite: boolean
           median_price_per_sqm: number | null
           median_score: number | null
           name: string | null
@@ -40,11 +42,13 @@ export type Database = {
         }
         Insert: {
           apify_run_id?: string | null
+          archived_at?: string | null
           code_postal?: string | null
           completed_at?: string | null
           created_at?: string
           error_message?: string | null
           id?: string
+          is_favorite?: boolean
           median_price_per_sqm?: number | null
           median_score?: number | null
           name?: string | null
@@ -63,11 +67,13 @@ export type Database = {
         }
         Update: {
           apify_run_id?: string | null
+          archived_at?: string | null
           code_postal?: string | null
           completed_at?: string | null
           created_at?: string
           error_message?: string | null
           id?: string
+          is_favorite?: boolean
           median_price_per_sqm?: number | null
           median_score?: number | null
           name?: string | null
