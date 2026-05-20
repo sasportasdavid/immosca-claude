@@ -38,11 +38,15 @@ import { Sentry } from "@/lib/sentry";
 import { supabaseApp } from "@/lib/supabase";
 import {
   ACTOR_BY_SITE,
+  buildPigeImmoRunInput,
   detectSiteFromUrl,
   runApifyActor,
+  type PigeImmoFilters,
 } from "@/services/apify";
 import {
   MULTI_URL_MAPPERS,
+  PIGE_IMMO_MAPPER,
+  type ListingInsert,
   type MultiUrlMapperKey,
   type RawApifyListing,
 } from "@/services/apify-mappers";
@@ -73,7 +77,7 @@ export const watchScoutTask = task({
     const { data: watch, error: wErr } = await supabaseApp
       .from("watches")
       .select(
-        "id, profile_id, name, source_url, source_site, score_threshold, sensitivity, is_active, suspended_at, consecutive_truncated_runs",
+        "id, profile_id, name, source_url, source_site, search_filters, score_threshold, sensitivity, is_active, suspended_at, consecutive_truncated_runs",
       )
       .eq("id", watchId)
       .single();
@@ -108,19 +112,68 @@ export const watchScoutTask = task({
     const runId = runRow.id;
 
     try {
-      // 3. Scrape via ACTOR_BY_SITE pour le site de la watch
-      const site = detectSiteFromUrl(watch.source_url) ?? watch.source_site;
-      const sitePlan = ACTOR_BY_SITE[site];
-      if (!sitePlan) {
-        throw new Error(`Pas d'actor configuré pour le site ${site}`);
+      // 3. Scrape : 2 modes selon ce qui est set sur la watch.
+      //   A) search_filters (mode form moderne) → actor dltik multi-source
+      //      Mêmes filtres que analyses.search_filters, mêmes 4 sources
+      //      (LBC + SeLoger + PAP + Bien'ici), dédup natif côté actor.
+      //   B) source_url (mode legacy par site) → actor unique selon ACTOR_BY_SITE
+      let apifyResult: Awaited<ReturnType<typeof runApifyActor<RawApifyListing>>>;
+      let mapped: ListingInsert[];
+
+      if (watch.search_filters) {
+        // Mode A : multi-source dltik
+        const multiActorId =
+          process.env.APIFY_ACTOR_MULTI ?? "dltik~pige-immo-fr-scraper";
+        const filters: PigeImmoFilters = {
+          ...(watch.search_filters as PigeImmoFilters),
+          // Cap items/source : cap_plan + 1 par source (best effort dédup).
+          maxResultsPerSource: itemsCap + 1,
+        };
+        logger.info("Scout via search_filters (multi-source)", {
+          watchId,
+          actorId: multiActorId,
+          filters,
+        });
+        apifyResult = await runApifyActor<RawApifyListing>({
+          actorId: multiActorId,
+          runInput: buildPigeImmoRunInput(filters),
+          timeoutSecs: 900,
+          memoryMbytes: 2048,
+        });
+        mapped = apifyResult.items
+          .map((raw) => PIGE_IMMO_MAPPER(raw, runId))
+          .filter(<T,>(x: T | null): x is T => x != null);
+      } else if (watch.source_url) {
+        // Mode B : URL legacy par site
+        const site = detectSiteFromUrl(watch.source_url) ?? watch.source_site;
+        const sitePlan = ACTOR_BY_SITE[site];
+        if (!sitePlan) {
+          throw new Error(`Pas d'actor configuré pour le site ${site}`);
+        }
+        const runInput = await sitePlan.buildInput(watch.source_url, itemsCap + 1);
+        logger.info("Scout via source_url", {
+          watchId,
+          actorId: sitePlan.actorId,
+          source_url: watch.source_url.slice(0, 80),
+        });
+        apifyResult = await runApifyActor<RawApifyListing>({
+          actorId: sitePlan.actorId,
+          runInput,
+          timeoutSecs: 600,
+          memoryMbytes: 2048,
+        });
+        const mapper = MULTI_URL_MAPPERS[sitePlan.mapperKey as MultiUrlMapperKey];
+        if (!mapper) {
+          throw new Error(`Pas de mapper pour ${sitePlan.mapperKey}`);
+        }
+        mapped = apifyResult.items
+          .map((raw) => mapper(raw, runId))
+          .filter(<T,>(x: T | null): x is T => x != null);
+      } else {
+        throw new Error(
+          `Watch ${watchId} sans source_url ni search_filters — incohérent.`,
+        );
       }
-      const runInput = await sitePlan.buildInput(watch.source_url, itemsCap + 1);
-      const apifyResult = await runApifyActor<RawApifyListing>({
-        actorId: sitePlan.actorId,
-        runInput,
-        timeoutSecs: 600,
-        memoryMbytes: 2048,
-      });
 
       const truncated = apifyResult.items.length >= itemsCap + 1;
       logger.info("Scout scraped", {
@@ -128,15 +181,6 @@ export const watchScoutTask = task({
         items: apifyResult.items.length,
         truncated,
       });
-
-      // 4. Normalize via MULTI_URL_MAPPERS
-      const mapper = MULTI_URL_MAPPERS[sitePlan.mapperKey as MultiUrlMapperKey];
-      if (!mapper) {
-        throw new Error(`Pas de mapper pour ${sitePlan.mapperKey}`);
-      }
-      const mapped = apifyResult.items
-        .map((raw) => mapper(raw, runId))
-        .filter(<T,>(x: T | null): x is T => x != null);
 
       // Dédup intra-batch par external_id
       const seenExt = new Set<string>();
