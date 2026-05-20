@@ -162,8 +162,8 @@ export function AnalysisMap({ listings, onSelectListing }: Props) {
 
   if (loading) {
     return (
-      <div className="flex h-[400px] items-center justify-center rounded-lg border border-border bg-secondary/30">
-        <p className="text-[13px] text-muted-foreground">
+      <div className="flex h-[400px] items-center justify-center rounded-r-lg border border-line bg-bg-2">
+        <p className="text-[13px] text-mute-2">
           Géocodage des biens en cours…
         </p>
       </div>
@@ -172,8 +172,8 @@ export function AnalysisMap({ listings, onSelectListing }: Props) {
 
   if (positions.length === 0) {
     return (
-      <div className="flex h-[200px] items-center justify-center rounded-lg border border-dashed border-border bg-card p-6 text-center">
-        <p className="text-[13px] text-muted-foreground">
+      <div className="flex h-[200px] items-center justify-center rounded-r-lg border border-dashed border-line bg-card p-6 text-center shadow-lvl-1">
+        <p className="text-[13px] text-mute-2">
           Localisation indisponible pour ces biens (pas de code postal ou
           de ville renseignés).
         </p>
@@ -185,9 +185,9 @@ export function AnalysisMap({ listings, onSelectListing }: Props) {
     <div className="space-y-2">
       <div
         ref={containerRef}
-        className="h-[480px] w-full overflow-hidden rounded-lg border border-border bg-secondary/30"
+        className="h-[480px] w-full overflow-hidden rounded-r-lg border border-line bg-bg-2 shadow-lvl-1"
       />
-      <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between gap-3 text-[11px] text-mute-2">
         <div className="flex items-center gap-3">
           <Legend color={VERDICT_COLOR.a_visiter!} label="À visiter" />
           <Legend color={VERDICT_COLOR.sous_reserve!} label="Sous réserve" />

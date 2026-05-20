@@ -1,27 +1,33 @@
 // ListingDrawer — fiche bien complète dans un side panel.
 //
 // Présentationnel pur : reçoit `listing` en props, expose `open` + `onClose`.
-// Sections : header (titre/prix), KPIs financiers, scoring détaillé,
-// thèse Claude, plan financement, stratégie négociation.
+// Sections : header (titre/prix), galerie, prix/écart marché, caractéristiques,
+// mini-carte + confiance adresse, scoring détaillé, indicateurs financiers,
+// simulateur "et si ?", thèse Claude, plan financement, rail de négociation,
+// description, source.
 //
 // Tous les champs sont nullable côté DB → on rend "—" si manquant.
 // Le freemium teasing est géré côté serveur via la vue : les champs
 // sensibles (prix, adresse, thèse) arrivent déjà à null si `is_masked`.
 
-import { Bookmark, BookmarkCheck, ExternalLink, Lock, MapPin } from "lucide-react";
+import {
+  Bookmark,
+  BookmarkCheck,
+  ExternalLink,
+  ImageOff,
+  Lock,
+  MapPin,
+} from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { ListingMap } from "@/components/listing-map";
 import { ListingSimulator } from "@/components/listing-simulator";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  type ListingSnapshot,
-  useAddToPipeline,
-  useDeletePipelineItem,
-  usePipelineItemForListing,
-} from "@/hooks/use-pipeline";
+import { ConfBadge } from "@/components/ui/conf-badge";
+import { DpePill, type DpeLetter } from "@/components/ui/dpe-pill";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { ScoreBadge } from "@/components/ui/score-badge";
 import {
   Sheet,
   SheetBody,
@@ -30,7 +36,15 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { ScoreBadge } from "@/components/score-badge";
+import { TheseBlock } from "@/components/ui/these-block";
+import { VerdictPill, type VerdictTone } from "@/components/ui/verdict-pill";
+import {
+  type ListingSnapshot,
+  useAddToPipeline,
+  useDeletePipelineItem,
+  usePipelineItemForListing,
+} from "@/hooks/use-pipeline";
+import { cn } from "@/lib/utils";
 
 export type ListingDrawerData = {
   id: string;
@@ -110,21 +124,22 @@ type Props = {
 
 const VERDICT_LABEL: Record<
   string,
-  { label: string; variant: "success" | "warning" | "danger" }
+  { label: string; tone: VerdictTone }
 > = {
-  a_visiter: { label: "À visiter", variant: "success" },
-  sous_reserve: { label: "Sous réserve", variant: "warning" },
-  no_go: { label: "No-go", variant: "danger" },
+  a_visiter: { label: "À visiter", tone: "good" },
+  sous_reserve: { label: "Sous réserve", tone: "mid" },
+  no_go: { label: "No-go", tone: "bad" },
 };
 
 function fmtEur(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
-  return `${Math.round(n).toLocaleString("fr-FR")} €`;
+  // Espace insécable avant le symbole € (typo française).
+  return `${Math.round(n).toLocaleString("fr-FR")} €`;
 }
 
 function fmtPct(n: number | null | undefined, digits = 2): string {
   if (n === null || n === undefined) return "—";
-  return `${n.toFixed(digits)} %`;
+  return `${n.toFixed(digits).replace(".", ",")} %`;
 }
 
 export function ListingDrawer({
@@ -168,8 +183,7 @@ export function ListingDrawer({
       addToPipeline.mutate(
         { snapshot },
         {
-          onSuccess: () =>
-            toast.success("Ajouté au pipeline · À visiter"),
+          onSuccess: () => toast.success("Ajouté au pipeline · À visiter"),
           onError: (err) => toast.error(`Erreur : ${(err as Error).message}`),
         },
       );
@@ -184,28 +198,35 @@ export function ListingDrawer({
         {listing ? (
           <>
             <SheetHeader>
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-4">
                 {listing.score_total !== null ? (
-                  <ScoreBadge score={listing.score_total} size="lg" />
+                  <ScoreBadge value={listing.score_total} size="lg" />
                 ) : null}
                 <div className="min-w-0 flex-1 pr-8">
-                  <SheetTitle className={listing.is_masked ? "blur-sm select-none" : ""}>
+                  <SheetTitle
+                    className={cn(
+                      "text-2xl font-semibold tracking-tight",
+                      listing.is_masked && "blur-sm select-none",
+                    )}
+                  >
                     {listing.title ?? "Sans titre"}
                   </SheetTitle>
-                  <SheetDescription className="flex items-center gap-1">
+                  <SheetDescription className="flex items-center gap-1.5 text-muted-ink">
                     <MapPin className="h-3.5 w-3.5" />
                     {listing.ville ?? "—"}
                     {listing.code_postal ? ` · ${listing.code_postal}` : ""}
-                    {listing.surface ? ` · ${listing.surface} m²` : ""}
-                    {listing.pieces ? ` · ${listing.pieces}P` : ""}
+                    {listing.surface ? ` · ${listing.surface} m²` : ""}
+                    {listing.pieces ? ` · ${listing.pieces} pièces` : ""}
                   </SheetDescription>
-                  <div className="mt-2 flex items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     {verdict ? (
-                      <Badge variant={verdict.variant}>{verdict.label}</Badge>
+                      <VerdictPill verdict={verdict.tone}>
+                        {verdict.label}
+                      </VerdictPill>
                     ) : null}
                     {analysisId && !listing.is_masked ? (
                       <Button
-                        variant={pipelineItem ? "default" : "outline"}
+                        variant={pipelineItem ? "default" : "ghost"}
                         size="sm"
                         onClick={togglePipeline}
                         disabled={
@@ -213,9 +234,9 @@ export function ListingDrawer({
                         }
                       >
                         {pipelineItem ? (
-                          <BookmarkCheck className="mr-1.5 h-3.5 w-3.5" />
+                          <BookmarkCheck className="h-3.5 w-3.5" />
                         ) : (
-                          <Bookmark className="mr-1.5 h-3.5 w-3.5" />
+                          <Bookmark className="h-3.5 w-3.5" />
                         )}
                         {pipelineItem ? "Dans le pipeline" : "Ajouter au pipeline"}
                       </Button>
@@ -225,113 +246,108 @@ export function ListingDrawer({
               </div>
             </SheetHeader>
 
-            <SheetBody className="space-y-7">
-              {/* Galerie photos : 1ère en grand + thumbs scrollables horizontales */}
-              {listing.photos_urls && listing.photos_urls.length > 0 ? (
-                <ListingGallery
-                  photos={listing.photos_urls}
-                  alt={listing.title ?? ""}
-                  blurred={listing.is_masked}
-                />
-              ) : null}
+            <SheetBody className="space-y-8">
+              {/* 1. Galerie photos — placeholder si vide. */}
+              <ListingGallery
+                photos={listing.photos_urls ?? []}
+                alt={listing.title ?? ""}
+                blurred={listing.is_masked}
+              />
 
-              {/* Prix + écart marché */}
-              <section>
+              {/* 2. Prix + écart marché */}
+              <section className="rounded-r-lg border border-line bg-card p-5">
                 <div className="flex items-baseline justify-between gap-4">
                   <div>
-                    <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                      Prix affiché
-                    </div>
-                    <div className="mt-1 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
+                    <Eyebrow>Prix demandé</Eyebrow>
+                    <div className="mt-1.5 font-mono text-3xl font-semibold tnum tracking-[-0.02em] text-ink">
                       {listing.is_masked ? (
-                        <span className="inline-flex items-center gap-2 text-muted-foreground">
-                          <Lock className="h-5 w-5 text-primary" /> Masqué
+                        <span className="inline-flex items-center gap-2 text-mute-2">
+                          <Lock className="h-5 w-5 text-violet" /> Masqué
                         </span>
                       ) : (
                         fmtEur(listing.prix)
                       )}
                     </div>
-                    {!listing.is_masked && listing.surface ? (
-                      <div className="mt-1 text-[12px] text-muted-foreground">
-                        {Math.round((listing.prix ?? 0) / listing.surface)} €/m²
+                    {!listing.is_masked && listing.surface && listing.prix ? (
+                      <div className="mt-1.5 font-mono text-xs tnum text-mute-2">
+                        {Math.round(listing.prix / listing.surface).toLocaleString("fr-FR")}
+                        {" €/m²"}
                       </div>
                     ) : null}
                   </div>
-                  {!listing.is_masked && listing.ecart_prix_pct !== null && listing.ecart_prix_pct !== undefined ? (
+                  {!listing.is_masked &&
+                  listing.ecart_prix_pct !== null &&
+                  listing.ecart_prix_pct !== undefined ? (
                     <div className="text-right">
-                      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                        Écart vs marché
-                      </div>
-                      <div
-                        className={`mt-1 font-mono text-[18px] font-semibold tabular-nums ${
-                          listing.ecart_prix_pct < 0
-                            ? "text-success-foreground"
-                            : "text-warning-foreground"
-                        }`}
-                      >
-                        {listing.ecart_prix_pct > 0 ? "+" : ""}
-                        {listing.ecart_prix_pct.toFixed(1)} %
-                      </div>
-                      <div className="mt-0.5 text-[11px] text-muted-foreground">
-                        Marché : {fmtEur(listing.prix_marche_estime)}
-                      </div>
+                      <Eyebrow>Écart médian DVF</Eyebrow>
+                      <EcartBadge pct={listing.ecart_prix_pct} />
+                      {listing.prix_marche_estime !== null ? (
+                        <div className="mt-1.5 font-mono text-[11px] tnum text-mute-2">
+                          Marché : {fmtEur(listing.prix_marche_estime)}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
               </section>
 
-              {/* Caractéristiques bien */}
+              {/* 3. Caractéristiques (chips) */}
               <section>
-                <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                  Caractéristiques
-                </h3>
+                <Eyebrow className="mb-3">Caractéristiques</Eyebrow>
                 <dl className="grid grid-cols-2 gap-3 text-[13px]">
                   <Pair label="Type" value={listing.type ?? "—"} />
-                  <Pair label="Surface" value={listing.surface ? `${listing.surface} m²` : "—"} />
+                  <Pair
+                    label="Surface"
+                    value={listing.surface ? `${listing.surface} m²` : "—"}
+                  />
                   <Pair label="Pièces" value={listing.pieces?.toString() ?? "—"} />
                   <Pair label="Chambres" value={listing.chambres?.toString() ?? "—"} />
-                  <Pair label="DPE" value={listing.dpe ?? "—"} />
-                  <Pair label="GES" value={listing.ges ?? "—"} />
+                  <PairDpe label="DPE" letter={listing.dpe} />
+                  <PairDpe label="GES" letter={listing.ges} />
                   <Pair label="Étage" value={listing.etage?.toString() ?? "—"} />
                   <Pair
                     label="Année"
-                    value={listing.annee_construction?.toString() ?? (listing.is_new_construction ? "Neuf" : "—")}
+                    value={
+                      listing.annee_construction?.toString() ??
+                      (listing.is_new_construction ? "Neuf" : "—")
+                    }
                   />
                 </dl>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {listing.balcon ? <Tag>Balcon</Tag> : null}
-                  {listing.terrasse ? <Tag>Terrasse</Tag> : null}
-                  {listing.parking ? <Tag>Parking</Tag> : null}
-                  {listing.ascenseur ? <Tag>Ascenseur</Tag> : null}
-                  {listing.cave ? <Tag>Cave</Tag> : null}
-                  {listing.is_new_construction ? <Tag>Neuf</Tag> : null}
+                <div className="mt-3.5 flex flex-wrap gap-1.5">
+                  {listing.balcon ? <Chip>Balcon</Chip> : null}
+                  {listing.terrasse ? <Chip>Terrasse</Chip> : null}
+                  {listing.parking ? <Chip>Parking</Chip> : null}
+                  {listing.ascenseur ? <Chip>Ascenseur</Chip> : null}
+                  {listing.cave ? <Chip>Cave</Chip> : null}
+                  {listing.is_new_construction ? <Chip>Neuf</Chip> : null}
                 </div>
               </section>
 
-              {/* Localisation — mini carte avec marker du bien.
-                  On affiche que si on a des coords ET que le bien n'est
-                  pas masqué (freemium : la position précise est PII). */}
-              {!listing.is_masked && listing.lat !== null && listing.lng !== null ? (
+              {/* 4. Mini-carte + confiance adresse — uniquement si payant + coords. */}
+              {!listing.is_masked &&
+              listing.lat !== null &&
+              listing.lng !== null ? (
                 <section>
-                  <h3 className="mb-3 flex items-baseline justify-between gap-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    <span>Localisation</span>
+                  <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                    <Eyebrow>Localisation</Eyebrow>
                     {listing.adresse_raw ? (
-                      <span className="truncate font-mono text-[11px] normal-case text-foreground/80">
+                      <span className="truncate font-mono text-[11px] tnum text-ink-2">
                         {listing.adresse_raw}
                       </span>
                     ) : null}
-                  </h3>
-                  <AddressConfidenceBadge
+                  </div>
+                  <AddressConfidence
                     source={listing.resolution_source}
                     confidence={listing.address_confidence}
                   />
-                  <div className="mt-2.5">
+                  <div className="mt-3 overflow-hidden rounded-r-md border border-line">
                     <ListingMap
                       lat={listing.lat}
                       lng={listing.lng}
                       address={
                         listing.adresse_raw ??
-                        (`${listing.ville ?? ""} ${listing.code_postal ?? ""}`.trim() || null)
+                        (`${listing.ville ?? ""} ${listing.code_postal ?? ""}`.trim() ||
+                          null)
                       }
                       verdict={listing.verdict}
                     />
@@ -339,45 +355,80 @@ export function ListingDrawer({
                 </section>
               ) : null}
 
-              {/* Scoring détaillé */}
+              {/* 5. Scoring 6 critères */}
               {listing.score_total !== null ? (
                 <section>
-                  <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Scoring détaillé
-                  </h3>
-                  <div className="space-y-2">
-                    <SubScore label="Prix" score={listing.score_prix} />
-                    <SubScore label="Rendement" score={listing.score_rendement} />
-                    <SubScore label="Cashflow" score={listing.score_cashflow} />
-                    <SubScore label="DPE" score={listing.score_dpe} />
-                    <SubScore label="Quartier" score={listing.score_quartier} />
-                    <SubScore label="Risques" score={listing.score_risques} />
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <Eyebrow>Scoring détaillé</Eyebrow>
+                    <ScoreBadge value={listing.score_total} size="sm" />
+                  </div>
+                  <div className="space-y-2.5">
+                    <SubScore label="Prix" hint="vs DVF" score={listing.score_prix} />
+                    <SubScore
+                      label="Rendement"
+                      hint="brut"
+                      score={listing.score_rendement}
+                    />
+                    <SubScore
+                      label="Cashflow"
+                      hint="mensuel"
+                      score={listing.score_cashflow}
+                    />
+                    <SubScore label="DPE" hint="/ GES" score={listing.score_dpe} />
+                    <SubScore
+                      label="Quartier"
+                      hint="attractivité"
+                      score={listing.score_quartier}
+                    />
+                    <SubScore
+                      label="Risques"
+                      hint="Géorisques"
+                      score={listing.score_risques}
+                    />
                   </div>
                 </section>
               ) : null}
 
-              {/* Métriques financières */}
+              {/* 6. Indicateurs financiers */}
               {!listing.is_masked &&
               (listing.loyer_estime !== null ||
                 listing.rendement_brut_pct !== null) ? (
                 <section>
-                  <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Indicateurs financiers
-                  </h3>
-                  <dl className="grid grid-cols-2 gap-3 text-[13px]">
-                    <Pair label="Loyer estimé" value={fmtEur(listing.loyer_estime)} />
-                    <Pair
+                  <Eyebrow className="mb-3">Indicateurs financiers</Eyebrow>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FinCell
+                      label="Loyer estimé"
+                      value={fmtEur(listing.loyer_estime)}
+                    />
+                    <FinCell
                       label="Cashflow / mois"
                       value={fmtEur(listing.cashflow_mensuel)}
+                      tone={
+                        listing.cashflow_mensuel !== null
+                          ? listing.cashflow_mensuel >= 0
+                            ? "good"
+                            : "bad"
+                          : undefined
+                      }
                     />
-                    <Pair label="Rendement brut" value={fmtPct(listing.rendement_brut_pct)} />
-                    <Pair label="Rendement net" value={fmtPct(listing.rendement_net_pct)} />
-                  </dl>
+                    <FinCell
+                      label="Rendement brut"
+                      value={fmtPct(listing.rendement_brut_pct)}
+                    />
+                    <FinCell
+                      label="Rendement net"
+                      value={fmtPct(listing.rendement_net_pct)}
+                    />
+                  </div>
                 </section>
               ) : null}
 
-              {/* Simulateur "et si ?" */}
-              {!listing.is_masked && analysisParams && listing.loyer_estime ? (
+              {/* 7. Simulateur "et si ?" — branché sur ListingSimulator existant.
+                   Si pas de prix/loyer, on affiche un placeholder pour cohérence. */}
+              {!listing.is_masked &&
+              analysisParams &&
+              listing.loyer_estime &&
+              listing.prix ? (
                 <ListingSimulator
                   listing={{
                     prix: listing.prix,
@@ -392,89 +443,99 @@ export function ListingDrawer({
                     tmi_pct: analysisParams.tmi_pct ?? 30,
                   }}
                 />
+              ) : !listing.is_masked ? (
+                <section className="rounded-r-md border border-dashed border-line bg-bg-2 p-5 text-center">
+                  <Eyebrow variant="violet">Simulateur « et si ? »</Eyebrow>
+                  <p className="mt-2 text-[13px] text-mute-2">
+                    Disponible dès qu'on a le loyer estimé et le prix du bien.
+                  </p>
+                </section>
               ) : null}
 
-              {/* Thèse Claude */}
+              {/* 8. Thèse Claude */}
               {listing.is_masked ? (
-                <section className="rounded-lg border border-border bg-primary-soft/30 p-5 text-center">
-                  <Lock className="mx-auto h-6 w-6 text-primary" />
-                  <p className="mt-3 text-[14px] font-medium">
+                <section className="rounded-r-lg border border-line bg-violet-soft/30 p-6 text-center">
+                  <Lock className="mx-auto h-6 w-6 text-violet" />
+                  <p className="mt-3 text-sm font-medium text-ink">
                     Thèse Claude masquée
                   </p>
-                  <p className="mt-1 text-[13px] text-muted-foreground">
-                    Passe Pro pour lire la thèse complète, le plan de
-                    financement et la stratégie de négociation chiffrée.
+                  <p className="mt-1.5 text-[13px] text-mute-2">
+                    Passe Pro pour lire la thèse complète, le plan de financement
+                    et la stratégie de négociation chiffrée.
                   </p>
                   <Button className="mt-4" size="sm" onClick={onUpgrade}>
-                    Passer Pro — 7 jours offerts
+                    Passer Pro — 7 jours offerts
                   </Button>
                 </section>
               ) : listing.these_claude ? (
-                <section>
-                  <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Analyse Claude
-                  </h3>
-                  <div className="prose prose-sm max-w-none whitespace-pre-wrap text-[13.5px] leading-[1.65] text-secondary-foreground">
-                    {listing.these_claude}
-                  </div>
-                </section>
+                <TheseBlock attribution="Claude" title="Pourquoi ce bien">
+                  <p className="whitespace-pre-wrap">{listing.these_claude}</p>
+                </TheseBlock>
               ) : null}
 
-              {/* Plan de financement */}
+              {/* 9. Plan de financement */}
               {!listing.is_masked && listing.financement_claude ? (
-                <section>
-                  <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Plan de financement
-                  </h3>
-                  <div className="prose prose-sm max-w-none whitespace-pre-wrap text-[13.5px] leading-[1.65] text-secondary-foreground">
+                <section className="rounded-r-md border border-line bg-card p-5">
+                  <Eyebrow className="mb-3">Plan de financement</Eyebrow>
+                  <div className="whitespace-pre-wrap text-[13.5px] leading-[1.65] text-ink-2">
                     {listing.financement_claude}
                   </div>
                 </section>
               ) : null}
 
-              {/* Stratégie de négociation */}
+              {/* 10. Rail de négociation (statique si pas de slider implémenté). */}
               {!listing.is_masked && listing.negociation_claude ? (
-                <section>
-                  <h3 className="mb-3 flex items-center justify-between font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    <span>Stratégie de négociation</span>
+                <section className="rounded-r-md border border-line bg-card p-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <Eyebrow>Stratégie de négociation</Eyebrow>
                     {listing.prix_negociation_cible !== null ? (
-                      <span className="font-mono text-[12px] normal-case text-foreground">
-                        Cible : {fmtEur(listing.prix_negociation_cible)}
+                      <span className="font-mono text-[12px] tnum text-ink">
+                        Cible :{" "}
+                        <span className="font-semibold">
+                          {fmtEur(listing.prix_negociation_cible)}
+                        </span>
                       </span>
                     ) : null}
-                  </h3>
-                  <div className="prose prose-sm max-w-none whitespace-pre-wrap text-[13.5px] leading-[1.65] text-secondary-foreground">
-                    {listing.negociation_claude}
                   </div>
+                  <p className="whitespace-pre-wrap text-[13.5px] leading-[1.65] text-ink-2">
+                    {listing.negociation_claude}
+                  </p>
+                  {listing.prix !== null &&
+                  listing.prix_negociation_cible !== null &&
+                  listing.prix_marche_estime !== null ? (
+                    <NegoRail
+                      target={listing.prix_negociation_cible}
+                      asking={listing.prix}
+                      market={listing.prix_marche_estime}
+                    />
+                  ) : null}
                 </section>
               ) : null}
 
-              {/* Description originale */}
+              {/* 11. Description annonce */}
               {!listing.is_masked && listing.description ? (
                 <section>
-                  <h3 className="mb-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Description annonce
-                  </h3>
-                  <p className="whitespace-pre-wrap text-[13px] text-muted-foreground line-clamp-[10]">
+                  <Eyebrow className="mb-3">Description annonce</Eyebrow>
+                  <p className="line-clamp-[10] whitespace-pre-wrap text-[13.5px] leading-[1.6] text-ink-2">
                     {listing.description}
                   </p>
                 </section>
               ) : null}
 
-              {/* Lien source */}
+              {/* 12. Source */}
               {!listing.is_masked && listing.source_url ? (
-                <div className="pt-2">
-                  <Button asChild variant="outline" size="sm">
-                    <a
-                      href={listing.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Voir l'annonce
-                      <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
-                    </a>
-                  </Button>
-                </div>
+                <section>
+                  <Eyebrow className="mb-2">Source de l'annonce</Eyebrow>
+                  <a
+                    href={listing.source_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-violet hover:underline"
+                  >
+                    Voir l'annonce sur le site
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </section>
               ) : null}
             </SheetBody>
           </>
@@ -485,18 +546,39 @@ export function ListingDrawer({
 }
 
 /**
- * Badge "Adresse exacte / Approximative / Inconnue" selon comment le
- * pipeline a résolu l'adresse du bien :
- *   - ademe   → ADEME DPE match → adresse exacte (numéro + rue)
- *   - scraped → adresse extraite directement par l'actor (fiable)
- *   - ban_forward → adresse scrapée puis géocodée (fiable)
- *   - ban_reverse → GPS du listing → rue la plus proche (parfois floutée)
- *   - none    → seulement ville/CP (échec d'enrichissement)
- *
- * Donne à l'user un signal visuel sur la précision avant qu'il aille
- * sur la carte ou contacte le vendeur.
+ * EcartBadge — affiche le pourcentage d'écart au marché coloré selon le sens :
+ *  - sous le marché (négatif)   → sage-soft / sage-2 (opportunité)
+ *  - dans la fourchette ±3%     → bg-2 / mute-2 (neutre)
+ *  - au-dessus du marché        → warning-soft / warning (vigilance)
  */
-function AddressConfidenceBadge({
+function EcartBadge({ pct }: { pct: number }) {
+  const tone: "good" | "neutral" | "warn" =
+    pct <= -3 ? "good" : pct >= 3 ? "warn" : "neutral";
+  const cls = {
+    good: "bg-sage-soft text-sage-2",
+    neutral: "bg-bg-2 text-mute-2",
+    warn: "bg-warning-soft text-warning-soft-foreground",
+  }[tone];
+  return (
+    <div
+      className={cn(
+        "mt-1.5 inline-flex items-center rounded-r-sm px-2 py-1 font-mono text-lg font-semibold tnum",
+        cls,
+      )}
+    >
+      {pct > 0 ? "+" : ""}
+      {pct.toFixed(1).replace(".", ",")}
+      {" %"}
+    </div>
+  );
+}
+
+/**
+ * Badge "Adresse exacte / Approximative / Inconnue" selon comment le
+ * pipeline a résolu l'adresse du bien. On utilise <ConfBadge> pour le
+ * meter de confiance numérique et un libellé textuel à côté.
+ */
+function AddressConfidence({
   source,
   confidence,
 }: {
@@ -504,65 +586,44 @@ function AddressConfidenceBadge({
   confidence: number | null;
 }) {
   if (!source) return null;
-  type Tone = "success" | "warning" | "danger" | "default";
+  type Tone = "good" | "mid" | "bad";
   const config: Record<string, { label: string; tone: Tone; help: string }> = {
     ademe: {
       label: "Adresse exacte",
-      tone: "success",
-      help: "Vérifiée via le DPE déclaré à l'ADEME (numéro + rue).",
+      tone: "good",
+      help: "Vérifiée via le DPE déclaré à l'ADEME (numéro + rue).",
     },
     scraped: {
       label: "Adresse exacte",
-      tone: "success",
+      tone: "good",
       help: "Extraite directement de l'annonce.",
     },
     ban_forward: {
       label: "Adresse précise",
-      tone: "success",
+      tone: "good",
       help: "Adresse scrapée puis géocodée via la Base Adresse Nationale.",
     },
     ban_reverse: {
       label: "Rue à proximité",
-      tone: "warning",
-      help: "Reconstituée depuis les coordonnées GPS (qui peuvent être floutées par le vendeur).",
+      tone: "mid",
+      help: "Reconstituée depuis les coordonnées GPS (parfois floutées par le vendeur).",
     },
     none: {
       label: "Localisation approximative",
-      tone: "danger",
+      tone: "bad",
       help: "Aucun enrichissement n'a réussi — seuls la ville et le code postal sont fiables.",
     },
   };
   const cfg = config[source];
   if (!cfg) return null;
 
-  const pct = confidence !== null ? Math.round(confidence * 100) : null;
-
   return (
-    <div className="flex items-center gap-2">
-      <Badge
-        variant={
-          cfg.tone === "success"
-            ? "success"
-            : cfg.tone === "warning"
-              ? "warning"
-              : cfg.tone === "danger"
-                ? "danger"
-                : "default"
-        }
-      >
-        {cfg.label}
-      </Badge>
-      {pct !== null ? (
-        <span
-          className="font-mono text-[11px] text-muted-foreground"
-          title={cfg.help}
-        >
-          {pct}% confiance
-        </span>
+    <div className="flex flex-wrap items-center gap-2">
+      <VerdictPill verdict={cfg.tone}>{cfg.label}</VerdictPill>
+      {confidence !== null ? (
+        <ConfBadge confidence={confidence} title={cfg.help} />
       ) : (
-        <span className="font-mono text-[11px] text-muted-foreground">
-          {cfg.help}
-        </span>
+        <span className="text-[11.5px] text-mute-2">{cfg.help}</span>
       )}
     </div>
   );
@@ -570,18 +631,38 @@ function AddressConfidenceBadge({
 
 function Pair({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <dt className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="mt-0.5 font-mono tabular-nums">{value}</dd>
+    <div className="rounded-r-sm border border-line bg-card px-3 py-2">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-0.5 font-mono text-[13px] font-medium tnum text-ink">
+        {value}
+      </div>
     </div>
   );
 }
 
-function Tag({ children }: { children: React.ReactNode }) {
+function PairDpe({
+  label,
+  letter,
+}: {
+  label: string;
+  letter: DpeLetter | null;
+}) {
   return (
-    <span className="inline-flex items-center rounded-full border border-border bg-secondary/40 px-2.5 py-0.5 text-[11px] text-muted-foreground">
+    <div className="rounded-r-sm border border-line bg-card px-3 py-2">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-1 flex items-center gap-2">
+        <DpePill letter={letter} />
+        {letter ? null : (
+          <span className="text-[12px] text-mute-2">non renseigné</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Chip({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex h-6 items-center rounded-full border border-line bg-bg-2 px-2.5 text-[11.5px] font-medium text-ink-2">
       {children}
     </span>
   );
@@ -598,16 +679,31 @@ function ListingGallery({
 }) {
   // index de la photo affichée en grand. Cliquer une thumb la met en hero.
   const [activeIdx, setActiveIdx] = React.useState(0);
+
+  if (photos.length === 0) {
+    return (
+      <div className="flex aspect-[16/10] items-center justify-center rounded-r-lg border border-line bg-bg-2 text-faint">
+        <div className="flex flex-col items-center gap-2">
+          <ImageOff className="h-7 w-7" />
+          <span className="text-[12px]">Aucune photo</span>
+        </div>
+      </div>
+    );
+  }
+
   const safeIdx = Math.min(activeIdx, photos.length - 1);
   const heroSrc = photos[safeIdx]!;
 
   return (
     <div>
-      <div className="overflow-hidden rounded-lg border border-border">
+      <div className="overflow-hidden rounded-r-lg border border-line">
         <img
           src={heroSrc}
           alt={alt}
-          className={`aspect-[16/10] w-full bg-secondary object-cover ${blurred ? "blur-md select-none" : ""}`}
+          className={cn(
+            "aspect-[16/10] w-full bg-bg-2 object-cover",
+            blurred && "select-none blur-md",
+          )}
         />
       </div>
       {photos.length > 1 ? (
@@ -617,48 +713,159 @@ function ListingGallery({
               key={url}
               type="button"
               onClick={() => setActiveIdx(i)}
-              className={`flex-shrink-0 overflow-hidden rounded-md border-2 transition-colors ${
+              className={cn(
+                "shrink-0 overflow-hidden rounded-r-sm border-2 transition-colors",
                 i === safeIdx
-                  ? "border-primary"
-                  : "border-transparent hover:border-border"
-              }`}
+                  ? "border-violet"
+                  : "border-transparent hover:border-line-2",
+              )}
               aria-label={`Photo ${i + 1}`}
             >
               <img
                 src={url}
                 alt=""
                 loading="lazy"
-                className={`h-14 w-20 object-cover ${blurred ? "blur-sm" : ""}`}
+                className={cn("h-14 w-20 object-cover", blurred && "blur-sm")}
               />
             </button>
           ))}
         </div>
       ) : null}
-      <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+      <p className="mt-1.5 font-mono text-[11px] tnum text-mute-2">
         {photos.length} photo{photos.length > 1 ? "s" : ""}
       </p>
     </div>
   );
 }
 
-function SubScore({ label, score }: { label: string; score: number | null }) {
+function SubScore({
+  label,
+  hint,
+  score,
+}: {
+  label: string;
+  hint?: string;
+  score: number | null;
+}) {
   const value = score ?? 0;
-  const tone =
-    value >= 70 ? "bg-success" : value >= 50 ? "bg-warning" : "bg-destructive";
+  // Couleur barre selon score (sage / warning / destructive).
+  const fillCls =
+    value >= 70
+      ? "bg-sage"
+      : value >= 50
+        ? "bg-warning"
+        : "bg-destructive";
   return (
-    <div className="flex items-center gap-3">
-      <div className="w-24 text-[12px] text-muted-foreground">{label}</div>
-      <div className="flex-1">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
-          <div
-            className={`h-full ${tone} transition-all`}
-            style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
-          />
-        </div>
+    <div className="grid grid-cols-[110px_1fr_36px] items-center gap-3">
+      <div className="text-[12.5px] text-ink-2">
+        {label}
+        {hint ? (
+          <span className="ml-1.5 text-[11px] text-mute-2">{hint}</span>
+        ) : null}
       </div>
-      <div className="w-8 text-right font-mono tabular-nums text-[12px]">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg-2">
+        <div
+          className={cn("h-full rounded-full transition-all", fillCls)}
+          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+        />
+      </div>
+      <div className="text-right font-mono text-[12.5px] font-semibold tnum text-ink">
         {score ?? "—"}
       </div>
     </div>
+  );
+}
+
+function FinCell({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "good" | "bad";
+}) {
+  const toneCls =
+    tone === "good" ? "text-sage-2" : tone === "bad" ? "text-destructive" : "text-ink";
+  return (
+    <div className="rounded-r-md border border-line bg-card p-4">
+      <Eyebrow>{label}</Eyebrow>
+      <div
+        className={cn(
+          "mt-1.5 font-mono text-xl font-semibold tnum tracking-[-0.02em]",
+          toneCls,
+        )}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * NegoRail — barre statique 3 marqueurs : offre cible / prix demandé /
+ * marché. On positionne la cible et le prix demandé entre 0 (min) et le
+ * marché (max), avec une petite marge pour que les marqueurs soient
+ * visibles si la cible est trop basse / le marché trop bas.
+ */
+function NegoRail({
+  target,
+  asking,
+  market,
+}: {
+  target: number;
+  asking: number;
+  market: number;
+}) {
+  // Échelle : min = 90% de min(target,asking,market), max = 110% de max.
+  const lo = Math.min(target, asking, market) * 0.92;
+  const hi = Math.max(target, asking, market) * 1.08;
+  const span = Math.max(1, hi - lo);
+  const pos = (v: number) => `${((v - lo) / span) * 100}%`;
+
+  return (
+    <div className="mt-5 pt-2">
+      <div className="relative h-1.5 w-full rounded-full bg-bg-2">
+        {/* Cible (violet) */}
+        <Marker label={`Cible ${fmtEur(target)}`} left={pos(target)} tone="violet" />
+        {/* Demandé (ink) */}
+        <Marker label={`Demandé ${fmtEur(asking)}`} left={pos(asking)} tone="ink" />
+        {/* Marché (mute) */}
+        <Marker label={`Marché ${fmtEur(market)}`} left={pos(market)} tone="mute" />
+      </div>
+    </div>
+  );
+}
+
+function Marker({
+  label,
+  left,
+  tone,
+}: {
+  label: string;
+  left: string;
+  tone: "violet" | "ink" | "mute";
+}) {
+  const cls = {
+    violet: "bg-violet text-violet",
+    ink: "bg-ink text-ink",
+    mute: "bg-mute-2 text-mute-2",
+  }[tone];
+  return (
+    <span
+      className="absolute -top-1.5 -translate-x-1/2"
+      style={{ left }}
+      aria-label={label}
+    >
+      <span className={cn("block h-4 w-0.5", cls.split(" ")[0])} />
+      <span
+        className={cn(
+          "absolute left-1/2 top-5 -translate-x-1/2 whitespace-nowrap rounded-r-xs border border-line bg-card px-1.5 py-0.5 font-mono text-[10px] tnum",
+          cls.split(" ")[1],
+        )}
+      >
+        {label}
+      </span>
+    </span>
   );
 }

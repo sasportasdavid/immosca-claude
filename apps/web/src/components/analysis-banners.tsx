@@ -92,13 +92,17 @@ export function QuotaUpsellBanner({
   if (!parsed) return null;
   const copy = quotaCopy(parsed, currentPlan);
 
+  // Surface "appel à l'action premium" : wash violet doux + bordure violet/20.
+  // Cohérent avec les blocs upsell du handoff (analyse done · upgrade card).
   return (
-    <div className="rounded-lg border border-primary/40 bg-primary/5 p-5">
+    <div className="rounded-r-lg border border-violet/20 bg-violet-soft/40 p-5 shadow-lvl-1">
       <div className="flex items-start gap-3">
-        <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+        <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-violet" />
         <div className="flex-1 space-y-2">
-          <div className="text-sm font-medium text-foreground">{copy.title}</div>
-          <p className="text-[13px] leading-relaxed text-muted-foreground">{copy.body}</p>
+          <div className="text-[14px] font-semibold tracking-[-0.005em] text-ink">
+            {copy.title}
+          </div>
+          <p className="text-[13px] leading-relaxed text-ink-2">{copy.body}</p>
           <Button
             size="sm"
             onClick={() => navigate({ to: "/app/billing" })}
@@ -126,15 +130,18 @@ export function TruncateBanner({
   const cap = itemsCapApplied ?? PLANS[currentPlan].itemsMaxPerAnalysis;
   const total = totalListings ?? cap;
   const canUpgrade = currentPlan !== "business";
+  // Migration amber-* → tokens terra (chaud, attention non-bloquante,
+  // cf. brief §banners — la maquette utilise warn-soft mais terra est la
+  // teinte "frottement utile" établie par la DA pour ce genre de notice).
   return (
-    <div className="rounded-lg border border-amber-400/40 bg-amber-50/60 p-4 dark:bg-amber-950/20">
+    <div className="rounded-r-lg border border-terra-soft-2 bg-terra-soft/60 p-4">
       <div className="flex items-start gap-3">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-terra-deep" />
         <div className="flex-1 space-y-1.5">
-          <div className="text-sm font-medium text-amber-900 dark:text-amber-100">
+          <div className="text-[14px] font-semibold tracking-[-0.005em] text-terra-deep">
             Ta recherche couvrait plus de {cap} biens
           </div>
-          <p className="text-[13px] leading-relaxed text-amber-800 dark:text-amber-200">
+          <p className="text-[13px] leading-relaxed text-ink-2">
             On a analysé les {total} plus récents pour respecter le cap de ton plan ({PLANS[currentPlan].name} ·
             cap {cap}). Affine les filtres pour cibler les plus pertinents, ou passe à un plan supérieur pour analyser jusqu'à{" "}
             {currentPlan === "free"
@@ -148,7 +155,7 @@ export function TruncateBanner({
             <div className="flex flex-wrap gap-2 pt-1">
               <Button
                 size="sm"
-                variant="outline"
+                variant="terra"
                 onClick={() => navigate({ to: "/app/billing" })}
               >
                 Voir les plans

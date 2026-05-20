@@ -242,15 +242,15 @@ function NewWatchPage() {
         <button
           type="button"
           onClick={() => navigate({ to: "/app/veilles" })}
-          className="inline-flex items-center text-xs text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center text-xs text-mute-2 hover:text-ink"
         >
           <ArrowLeft className="mr-1 h-3 w-3" />
           Mes veilles
         </button>
 
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Nouvelle veille</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Nouvelle veille</h1>
+          <p className="mt-1 text-sm text-muted-ink">
             {plan === "free"
               ? "Ta veille gratuite tournera 3×/semaine pendant 60 jours."
               : `${planDef.watchFrequency === "daily" ? "Scout quotidien" : "Scout 3 fois/sem"} · jusqu'à ${planDef.itemsMaxPerWatchRun} biens par run.`}
@@ -272,36 +272,36 @@ function NewWatchPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Mode A : préfill depuis analyse → bloc récapitulatif */}
               {fromAnalysis && prefillLoading && (
-                <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 rounded-r-md border border-line bg-bg-2/60 p-3 text-sm text-muted-ink">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Chargement de l'analyse source…
                 </div>
               )}
 
               {fromAnalysis && !prefillLoading && prefill && (
-                <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
+                <div className="rounded-r-md border border-violet/20 bg-violet-soft p-4">
                   <div className="flex items-start gap-2">
-                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet" />
                     <div className="flex-1 space-y-1">
-                      <div className="text-sm font-medium text-foreground">
+                      <div className="text-sm font-medium text-violet-deep">
                         Veille basée sur ton analyse
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-violet-deep/80">
                         {prefill.summary}
                       </div>
-                      <div className="text-[11px] text-muted-foreground">
+                      <div className="text-[11px] text-violet-deep/70 font-mono tnum">
                         {prefill.mode === "filters"
                           ? "Mode multi-source (LBC + SeLoger + PAP + Bien'ici)"
                           : `Source unique : ${SOURCE_OPTIONS.find((o) => o.value === prefill.source_site)?.label ?? prefill.source_site}`}
                       </div>
                     </div>
                   </div>
-                  <p className="mt-3 border-t border-primary/20 pt-2 text-[11px] text-muted-foreground">
+                  <p className="mt-3 border-t border-violet/20 pt-2 text-[11px] text-violet-deep/70">
                     Pour changer les critères, recrée une veille depuis{" "}
                     <button
                       type="button"
                       onClick={() => navigate({ to: "/app/veilles/nouvelle" })}
-                      className="font-medium text-primary hover:underline"
+                      className="font-medium text-violet hover:underline"
                     >
                       ce lien
                     </button>
@@ -335,7 +335,7 @@ function NewWatchPage() {
                       placeholder="https://www.seloger.com/list.htm?…"
                       required
                     />
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-[11px] text-mute-2">
                       Colle ici l'URL de ta recherche enregistrée sur SeLoger /
                       LBC / PAP.
                     </p>
@@ -352,7 +352,7 @@ function NewWatchPage() {
                         <Label
                           key={opt.value}
                           htmlFor={`src-${opt.value}`}
-                          className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40"
+                          className="flex cursor-pointer items-center gap-1.5 rounded-r-sm border border-line px-3 py-1.5 text-sm hover:bg-bg-2"
                         >
                           <RadioGroupItem id={`src-${opt.value}`} value={opt.value} />
                           {opt.label}
@@ -378,9 +378,9 @@ function NewWatchPage() {
                   onChange={(e) => setScoreThreshold(parseInt(e.target.value, 10))}
                   className="w-full"
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[11px] text-mute-2">
                   Seuls les biens ≥ {scoreThreshold} déclenchent un événement
-                  "nouveau bien" dans le digest.
+                  «&nbsp;nouveau bien&nbsp;» dans le digest.
                 </p>
               </div>
 
@@ -402,7 +402,7 @@ function NewWatchPage() {
                     <Label
                       key={val}
                       htmlFor={`sens-${val}`}
-                      className="flex cursor-pointer items-start gap-2 rounded-md border border-border px-3 py-2 hover:bg-muted/40"
+                      className="flex cursor-pointer items-start gap-2 rounded-r-sm border border-line px-3 py-2 hover:bg-bg-2"
                     >
                       <RadioGroupItem
                         id={`sens-${val}`}
@@ -410,8 +410,8 @@ function NewWatchPage() {
                         className="mt-0.5"
                       />
                       <div>
-                        <div className="text-sm font-medium">{label}</div>
-                        <div className="text-xs text-muted-foreground">{hint}</div>
+                        <div className="text-sm font-medium text-ink">{label}</div>
+                        <div className="text-xs text-mute-2">{hint}</div>
                       </div>
                     </Label>
                   ))}
@@ -420,8 +420,8 @@ function NewWatchPage() {
 
               <div className="space-y-2">
                 <Label>Canaux de notification</Label>
-                <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                  📧 Email digest uniquement
+                <div className="rounded-r-sm border border-line bg-bg-2/60 px-3 py-2 text-sm text-mute-2">
+                  Email digest uniquement
                   <span className="ml-2 text-xs">
                     (push/Telegram arrivent en V2)
                   </span>
