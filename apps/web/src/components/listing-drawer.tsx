@@ -11,18 +11,25 @@
 // sensibles (prix, adresse, thèse) arrivent déjà à null si `is_masked`.
 
 import {
+  AlertTriangle,
+  Banknote,
   Bookmark,
   BookmarkCheck,
   ExternalLink,
+  Euro,
+  Flame,
   ImageOff,
   Lock,
+  Map,
   MapPin,
+  Wallet,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { ListingMap } from "@/components/listing-map";
 import { ListingSimulator } from "@/components/listing-simulator";
+import { AdjustmentItem, type AdjustmentTone } from "@/components/ui/adjustment-item";
 import { Button } from "@/components/ui/button";
 import { ConfBadge } from "@/components/ui/conf-badge";
 import { DpePill, type DpeLetter } from "@/components/ui/dpe-pill";
@@ -355,35 +362,69 @@ export function ListingDrawer({
                 </section>
               ) : null}
 
-              {/* 5. Scoring 6 critères */}
+              {/* 5. Scoring 6 critères — PR-DA-U3 : pattern .adj-item (icône
+                  + critère + impact + source) inspiré des ajustements de prix
+                  Immovalue. Chaque sous-score devient une ligne argumentée :
+                  on rend le score lisible (Prix · 78/100) et son sens (raison
+                  textuelle dérivée du score). */}
               {listing.score_total !== null ? (
                 <section>
                   <div className="mb-4 flex items-center justify-between gap-3">
-                    <Eyebrow>Scoring détaillé</Eyebrow>
+                    <div>
+                      <span className="eyebrow eyebrow-accent">
+                        Scoring détaillé · 6 critères
+                      </span>
+                      <h3 className="display-serif mt-1.5 text-[22px] font-semibold leading-[1.06] tracking-[-0.022em] text-ink">
+                        Pourquoi{" "}
+                        <em className="font-serif font-normal italic text-[var(--accent)]">
+                          {listing.score_total}/100.
+                        </em>
+                      </h3>
+                    </div>
                     <ScoreBadge value={listing.score_total} size="sm" />
                   </div>
                   <div className="space-y-2.5">
-                    <SubScore label="Prix" hint="vs DVF" score={listing.score_prix} />
-                    <SubScore
-                      label="Rendement"
-                      hint="brut"
+                    <ScoringRow
+                      icon={<Euro className="h-4 w-4" strokeWidth={2} />}
+                      criterion="Prix vs marché"
+                      hint="Comparé au médian DVF de la zone (Cerema)."
+                      score={listing.score_prix}
+                      source="DVF"
+                    />
+                    <ScoringRow
+                      icon={<Flame className="h-4 w-4" strokeWidth={2} />}
+                      criterion="Rendement brut"
+                      hint="Loyer marché annuel / prix d'achat affiché."
                       score={listing.score_rendement}
+                      source="OLL · annonces"
                     />
-                    <SubScore
-                      label="Cashflow"
-                      hint="mensuel"
+                    <ScoringRow
+                      icon={<Wallet className="h-4 w-4" strokeWidth={2} />}
+                      criterion="Cashflow mensuel"
+                      hint="Loyer net de charges et fiscalité − mensualité crédit."
                       score={listing.score_cashflow}
+                      source="Simulation"
                     />
-                    <SubScore label="DPE" hint="/ GES" score={listing.score_dpe} />
-                    <SubScore
-                      label="Quartier"
-                      hint="attractivité"
+                    <ScoringRow
+                      icon={<Banknote className="h-4 w-4" strokeWidth={2} />}
+                      criterion="DPE / GES"
+                      hint="Performance énergétique et émissions du logement."
+                      score={listing.score_dpe}
+                      source="ADEME"
+                    />
+                    <ScoringRow
+                      icon={<Map className="h-4 w-4" strokeWidth={2} />}
+                      criterion="Quartier"
+                      hint="Attractivité INSEE, transports, écoles, commerces."
                       score={listing.score_quartier}
+                      source="INSEE · IGN"
                     />
-                    <SubScore
-                      label="Risques"
-                      hint="Géorisques"
+                    <ScoringRow
+                      icon={<AlertTriangle className="h-4 w-4" strokeWidth={2} />}
+                      criterion="Risques"
+                      hint="PPRI inondation, argile, sismicité, radon, BASOL."
                       score={listing.score_risques}
+                      source="Géorisques"
                     />
                   </div>
                 </section>
@@ -738,41 +779,42 @@ function ListingGallery({
   );
 }
 
-function SubScore({
-  label,
+/**
+ * ScoringRow — wrapper de `AdjustmentItem` pour les 6 critères de scoring
+ * ImmoScan (PR-DA-U3). Convertit un score /100 en :
+ *   - tone        : pos (≥ 60) | neg (< 60)  → couleur d'icône + impact
+ *   - impactPct   : "+X" / "-X" (écart au seuil de neutralité 50)
+ *   - impactEur   : "X/100" pour rendre le score absolu lisible
+ *   - sources     : un tag origin (DVF / ADEME / Géorisques…)
+ *
+ * Quand `score === null`, on rend un état atténué cohérent (—/100, neutre).
+ */
+function ScoringRow({
+  icon,
+  criterion,
   hint,
   score,
+  source,
 }: {
-  label: string;
-  hint?: string;
+  icon: React.ReactNode;
+  criterion: string;
+  hint: string;
   score: number | null;
+  source: string;
 }) {
-  const value = score ?? 0;
-  // Couleur barre selon score (sage / warning / destructive).
-  const fillCls =
-    value >= 70
-      ? "bg-sage"
-      : value >= 50
-        ? "bg-warning"
-        : "bg-destructive";
+  const v = score ?? 0;
+  const tone: AdjustmentTone = score === null || v < 60 ? "neg" : "pos";
+  const delta = score === null ? "—" : `${v >= 50 ? "+" : ""}${v - 50}`;
   return (
-    <div className="grid grid-cols-[110px_1fr_36px] items-center gap-3">
-      <div className="text-[12.5px] text-ink-2">
-        {label}
-        {hint ? (
-          <span className="ml-1.5 text-[11px] text-mute-2">{hint}</span>
-        ) : null}
-      </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-bg-2">
-        <div
-          className={cn("h-full rounded-full transition-all", fillCls)}
-          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
-        />
-      </div>
-      <div className="text-right font-mono text-[12.5px] font-semibold tnum text-ink">
-        {score ?? "—"}
-      </div>
-    </div>
+    <AdjustmentItem
+      tone={tone}
+      icon={icon}
+      criterion={criterion}
+      reason={hint}
+      impactPct={delta}
+      impactEur={`${score ?? "—"}/100`}
+      sources={[{ label: source }]}
+    />
   );
 }
 

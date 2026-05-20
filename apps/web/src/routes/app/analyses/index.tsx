@@ -82,12 +82,15 @@ function AnalysesListPage() {
       <div className="mx-auto max-w-[1080px] px-6 py-12">
         <div className="mb-8 flex items-baseline justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="eyebrow eyebrow-accent">
               {showArchived ? "Analyses archivées" : "Mes analyses"}
             </span>
-            <h1 className="mt-2 text-[28px] font-semibold leading-[1.1] tracking-[-0.02em]">
+            <h1 className="display-serif mt-2 text-[32px] font-semibold leading-[1.06] tracking-[-0.025em] text-ink [text-wrap:balance]">
               {visibleAnalyses.length}{" "}
-              {visibleAnalyses.length > 1 ? "analyses" : "analyse"}
+              {visibleAnalyses.length > 1 ? "analyses " : "analyse "}
+              <em className="font-serif font-normal italic text-[var(--accent)] tracking-[-0.012em]">
+                {showArchived ? "rangées." : "à comparer."}
+              </em>
             </h1>
           </div>
           <div className="flex items-center gap-2">
