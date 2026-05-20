@@ -6,6 +6,7 @@
 
 import { SCORING_WEIGHTS_DEFAULT } from "../constants.js";
 import type { DpeClass } from "../schemas/listing.js";
+
 import {
   cashflowMensuel,
   coutTotalAcquisition,

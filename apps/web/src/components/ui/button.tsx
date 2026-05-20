@@ -18,11 +18,13 @@ const buttonVariants = cva(
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      // Tailles alignées sur le handoff design (écran 1 §05 Boutons) :
+      // sm 28px / md 36px (= default) / lg 44px / icon 36px carré.
       size: {
-        sm: "h-8 px-3 text-[13px]",
+        sm: "h-7 px-3 text-[13px]",
         default: "h-9 px-4 py-2",
-        lg: "h-10 px-6",
-        icon: "h-8 w-8",
+        lg: "h-11 px-5 text-[15px]",
+        icon: "h-9 w-9",
       },
     },
     defaultVariants: {

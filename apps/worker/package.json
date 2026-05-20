@@ -13,21 +13,25 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@immoscan/shared": "workspace:*",
-    "@immoscan/db": "workspace:*",
     "@anthropic-ai/sdk": "^0.32.0",
+    "@immoscan/db": "workspace:*",
+    "@immoscan/shared": "workspace:*",
     "@sentry/node": "^8.30.0",
     "@supabase/supabase-js": "^2.45.4",
-    "@trigger.dev/sdk": "^3.0.0",
-    "apify-client": "^2.10.0",
+    "@trigger.dev/sdk": "4.4.6",
+    "csv-parse": "^6.2.1",
+    "https-proxy-agent": "^9.0.0",
+    "p-queue": "^9.3.0",
     "p-retry": "^6.2.0",
     "resend": "^4.0.0",
     "stripe": "^17.0.0",
+    "ws": "^8.20.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@trigger.dev/build": "^3.0.0",
-    "trigger.dev": "^3.0.0",
+    "@trigger.dev/build": "4.4.6",
+    "@types/ws": "^8.18.1",
+    "trigger.dev": "4.4.6",
     "typescript": "^5.5.4",
     "vitest": "^2.1.0"
   }

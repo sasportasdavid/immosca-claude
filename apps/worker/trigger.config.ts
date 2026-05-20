@@ -1,4 +1,8 @@
-import { defineConfig } from "@trigger.dev/sdk/v3";
+// Charge Sentry au boot du worker (side effect import). Init no-op si
+// SENTRY_DSN_WORKER absente — utile pour dev local sans Sentry configuré.
+import "./src/lib/sentry";
+
+import { defineConfig } from "@trigger.dev/sdk";
 
 export default defineConfig({
   project: process.env.TRIGGER_PROJECT_ID ?? "proj_placeholder",

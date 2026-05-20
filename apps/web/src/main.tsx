@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import posthog from "posthog-js";
 import { PostHogProvider } from "posthog-js/react";
@@ -7,30 +7,18 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import "./index.css";
+import { initPostHog } from "./lib/posthog";
+import { createQueryClient } from "./lib/query-client";
+import { initSentry } from "./lib/sentry";
 import { routeTree } from "./routeTree.gen";
 
 // ────────── Observability ──────────
-if (import.meta.env.VITE_SENTRY_DSN_WEB) {
-  Sentry.init({
-    dsn: import.meta.env.VITE_SENTRY_DSN_WEB,
-    environment: import.meta.env.MODE,
-    integrations: [
-      Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true }),
-    ],
-    tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
-    replaysSessionSampleRate: 0.1,
-    replaysOnErrorSampleRate: 1.0,
-  });
-}
-
-if (import.meta.env.VITE_POSTHOG_KEY) {
-  posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
-    api_host: import.meta.env.VITE_POSTHOG_HOST ?? "https://eu.posthog.com",
-    capture_pageview: false, // géré par le router
-    person_profiles: "identified_only",
-  });
-}
+// Sentry et PostHog initialisés via modules dédiés dans lib/. Tous deux :
+// - centralisent les options conformes à notre politique anti-PII
+// - sont idempotents et no-op si la clé d'env correspondante est absente
+// Cf lib/sentry.ts et lib/posthog.ts pour le détail des scrubs et configs.
+initSentry();
+initPostHog();
 
 // ────────── Routing ──────────
 const router = createRouter({ routeTree });
@@ -42,16 +30,9 @@ declare module "@tanstack/react-router" {
 }
 
 // ────────── React Query ──────────
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000, // 1 min
-      gcTime: 5 * 60 * 1000, // 5 min
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
+// Defaults centralisés dans lib/query-client.ts. Une factory par instance
+// (ici une seule, mais permet d'isoler en tests).
+const queryClient = createQueryClient();
 
 // ────────── Mount ──────────
 const root = document.getElementById("root");
@@ -59,7 +40,11 @@ if (!root) throw new Error("Root element #root not found");
 
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
-    <Sentry.ErrorBoundary fallback={<div>Une erreur est survenue.</div>} showDialog>
+    {/* showDialog désactivé : le formulaire feedback Sentry collecte email+nom
+        et les envoie via /user-feedback, endpoint séparé non couvert par notre
+        beforeSend. Si on veut un canal de feedback utilisateur, on construira
+        un formulaire ImmoScan qui passe par Supabase (RLS + logs sans PII). */}
+    <Sentry.ErrorBoundary fallback={<div>Une erreur est survenue.</div>}>
       <PostHogProvider client={posthog}>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />

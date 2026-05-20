@@ -4,7 +4,7 @@ import { z } from "zod";
 // Enums alignés sur la DB (immoscan-app)
 // ──────────────────────────────────────────────────────────────────
 
-export const subscriptionPlanSchema = z.enum(["free", "pro", "pro_plus"]);
+export const subscriptionPlanSchema = z.enum(["free", "pro", "pro_plus", "business"]);
 export type SubscriptionPlan = z.infer<typeof subscriptionPlanSchema>;
 
 export const subscriptionStatusSchema = z.enum([

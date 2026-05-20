@@ -68,14 +68,14 @@ export const claudeThesisOutputSchema = z.object({
   financement: z
     .string()
     .min(100)
-    .max(1500)
+    .max(2500)
     .describe(
       "Plan de financement détaillé : apport, montant emprunté, mensualité, durée, frais notaire, coût total. 100-300 mots.",
     ),
   negociation: z
     .string()
     .min(100)
-    .max(1500)
+    .max(2500)
     .describe(
       "Stratégie de négociation chiffrée : prix cible, leviers (DPE, travaux, marché), argumentaire. 100-300 mots.",
     ),

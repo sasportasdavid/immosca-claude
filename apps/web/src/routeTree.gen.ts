@@ -9,48 +9,336 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ConfidentialiteRouteImport } from './routes/confidentialite'
+import { Route as CguRouteImport } from './routes/cgu'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DevComponentsRouteImport } from './routes/dev/components'
+import { Route as OnboardingStep2RouteImport } from './routes/onboarding/step-2'
+import { Route as OnboardingStep1RouteImport } from './routes/onboarding/step-1'
+import { Route as LegalMentionsLegalesRouteImport } from './routes/legal/mentions-legales'
+import { Route as LegalConfidentialiteRouteImport } from './routes/legal/confidentialite'
+import { Route as LegalCgvRouteImport } from './routes/legal/cgv'
+import { Route as LegalCguRouteImport } from './routes/legal/cgu'
+import { Route as AuthSignupRouteImport } from './routes/auth/signup'
+import { Route as AuthLoginRouteImport } from './routes/auth/login'
+import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
+import { Route as AppPipelineRouteImport } from './routes/app/pipeline'
+import { Route as AppNouvelleAnalyseRouteImport } from './routes/app/nouvelle-analyse'
+import { Route as AppBillingRouteImport } from './routes/app/billing'
+import { Route as AppAdresseRouteImport } from './routes/app/adresse'
+import { Route as AppVeillesIndexRouteImport } from './routes/app/veilles/index'
+import { Route as AppAnalysesIndexRouteImport } from './routes/app/analyses/index'
+import { Route as AppVeillesNouvelleRouteImport } from './routes/app/veilles/nouvelle'
+import { Route as AppVeillesIdRouteImport } from './routes/app/veilles/$id'
+import { Route as AppAnalysesIdRouteImport } from './routes/app/analyses/$id'
 
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfidentialiteRoute = ConfidentialiteRouteImport.update({
+  id: '/confidentialite',
+  path: '/confidentialite',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CguRoute = CguRouteImport.update({
+  id: '/cgu',
+  path: '/cgu',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DevComponentsRoute = DevComponentsRouteImport.update({
-  id: '/dev/components',
-  path: '/dev/components',
+const OnboardingStep2Route = OnboardingStep2RouteImport.update({
+  id: '/onboarding/step-2',
+  path: '/onboarding/step-2',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingStep1Route = OnboardingStep1RouteImport.update({
+  id: '/onboarding/step-1',
+  path: '/onboarding/step-1',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalMentionsLegalesRoute = LegalMentionsLegalesRouteImport.update({
+  id: '/legal/mentions-legales',
+  path: '/legal/mentions-legales',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalConfidentialiteRoute = LegalConfidentialiteRouteImport.update({
+  id: '/legal/confidentialite',
+  path: '/legal/confidentialite',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalCgvRoute = LegalCgvRouteImport.update({
+  id: '/legal/cgv',
+  path: '/legal/cgv',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalCguRoute = LegalCguRouteImport.update({
+  id: '/legal/cgu',
+  path: '/legal/cgu',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSignupRoute = AuthSignupRouteImport.update({
+  id: '/auth/signup',
+  path: '/auth/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthLoginRoute = AuthLoginRouteImport.update({
+  id: '/auth/login',
+  path: '/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppPipelineRoute = AppPipelineRouteImport.update({
+  id: '/app/pipeline',
+  path: '/app/pipeline',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppNouvelleAnalyseRoute = AppNouvelleAnalyseRouteImport.update({
+  id: '/app/nouvelle-analyse',
+  path: '/app/nouvelle-analyse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppBillingRoute = AppBillingRouteImport.update({
+  id: '/app/billing',
+  path: '/app/billing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAdresseRoute = AppAdresseRouteImport.update({
+  id: '/app/adresse',
+  path: '/app/adresse',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppVeillesIndexRoute = AppVeillesIndexRouteImport.update({
+  id: '/app/veilles/',
+  path: '/app/veilles/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAnalysesIndexRoute = AppAnalysesIndexRouteImport.update({
+  id: '/app/analyses/',
+  path: '/app/analyses/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppVeillesNouvelleRoute = AppVeillesNouvelleRouteImport.update({
+  id: '/app/veilles/nouvelle',
+  path: '/app/veilles/nouvelle',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppVeillesIdRoute = AppVeillesIdRouteImport.update({
+  id: '/app/veilles/$id',
+  path: '/app/veilles/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAnalysesIdRoute = AppAnalysesIdRouteImport.update({
+  id: '/app/analyses/$id',
+  path: '/app/analyses/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/dev/components': typeof DevComponentsRoute
+  '/cgu': typeof CguRoute
+  '/confidentialite': typeof ConfidentialiteRoute
+  '/dashboard': typeof DashboardRoute
+  '/app/adresse': typeof AppAdresseRoute
+  '/app/billing': typeof AppBillingRoute
+  '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
+  '/app/pipeline': typeof AppPipelineRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/signup': typeof AuthSignupRoute
+  '/legal/cgu': typeof LegalCguRoute
+  '/legal/cgv': typeof LegalCgvRoute
+  '/legal/confidentialite': typeof LegalConfidentialiteRoute
+  '/legal/mentions-legales': typeof LegalMentionsLegalesRoute
+  '/onboarding/step-1': typeof OnboardingStep1Route
+  '/onboarding/step-2': typeof OnboardingStep2Route
+  '/app/analyses/$id': typeof AppAnalysesIdRoute
+  '/app/veilles/$id': typeof AppVeillesIdRoute
+  '/app/veilles/nouvelle': typeof AppVeillesNouvelleRoute
+  '/app/analyses/': typeof AppAnalysesIndexRoute
+  '/app/veilles/': typeof AppVeillesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dev/components': typeof DevComponentsRoute
+  '/cgu': typeof CguRoute
+  '/confidentialite': typeof ConfidentialiteRoute
+  '/dashboard': typeof DashboardRoute
+  '/app/adresse': typeof AppAdresseRoute
+  '/app/billing': typeof AppBillingRoute
+  '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
+  '/app/pipeline': typeof AppPipelineRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/signup': typeof AuthSignupRoute
+  '/legal/cgu': typeof LegalCguRoute
+  '/legal/cgv': typeof LegalCgvRoute
+  '/legal/confidentialite': typeof LegalConfidentialiteRoute
+  '/legal/mentions-legales': typeof LegalMentionsLegalesRoute
+  '/onboarding/step-1': typeof OnboardingStep1Route
+  '/onboarding/step-2': typeof OnboardingStep2Route
+  '/app/analyses/$id': typeof AppAnalysesIdRoute
+  '/app/veilles/$id': typeof AppVeillesIdRoute
+  '/app/veilles/nouvelle': typeof AppVeillesNouvelleRoute
+  '/app/analyses': typeof AppAnalysesIndexRoute
+  '/app/veilles': typeof AppVeillesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/dev/components': typeof DevComponentsRoute
+  '/cgu': typeof CguRoute
+  '/confidentialite': typeof ConfidentialiteRoute
+  '/dashboard': typeof DashboardRoute
+  '/app/adresse': typeof AppAdresseRoute
+  '/app/billing': typeof AppBillingRoute
+  '/app/nouvelle-analyse': typeof AppNouvelleAnalyseRoute
+  '/app/pipeline': typeof AppPipelineRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/signup': typeof AuthSignupRoute
+  '/legal/cgu': typeof LegalCguRoute
+  '/legal/cgv': typeof LegalCgvRoute
+  '/legal/confidentialite': typeof LegalConfidentialiteRoute
+  '/legal/mentions-legales': typeof LegalMentionsLegalesRoute
+  '/onboarding/step-1': typeof OnboardingStep1Route
+  '/onboarding/step-2': typeof OnboardingStep2Route
+  '/app/analyses/$id': typeof AppAnalysesIdRoute
+  '/app/veilles/$id': typeof AppVeillesIdRoute
+  '/app/veilles/nouvelle': typeof AppVeillesNouvelleRoute
+  '/app/analyses/': typeof AppAnalysesIndexRoute
+  '/app/veilles/': typeof AppVeillesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dev/components'
+  fullPaths:
+    | '/'
+    | '/cgu'
+    | '/confidentialite'
+    | '/dashboard'
+    | '/app/adresse'
+    | '/app/billing'
+    | '/app/nouvelle-analyse'
+    | '/app/pipeline'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/signup'
+    | '/legal/cgu'
+    | '/legal/cgv'
+    | '/legal/confidentialite'
+    | '/legal/mentions-legales'
+    | '/onboarding/step-1'
+    | '/onboarding/step-2'
+    | '/app/analyses/$id'
+    | '/app/veilles/$id'
+    | '/app/veilles/nouvelle'
+    | '/app/analyses/'
+    | '/app/veilles/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dev/components'
-  id: '__root__' | '/' | '/dev/components'
+  to:
+    | '/'
+    | '/cgu'
+    | '/confidentialite'
+    | '/dashboard'
+    | '/app/adresse'
+    | '/app/billing'
+    | '/app/nouvelle-analyse'
+    | '/app/pipeline'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/signup'
+    | '/legal/cgu'
+    | '/legal/cgv'
+    | '/legal/confidentialite'
+    | '/legal/mentions-legales'
+    | '/onboarding/step-1'
+    | '/onboarding/step-2'
+    | '/app/analyses/$id'
+    | '/app/veilles/$id'
+    | '/app/veilles/nouvelle'
+    | '/app/analyses'
+    | '/app/veilles'
+  id:
+    | '__root__'
+    | '/'
+    | '/cgu'
+    | '/confidentialite'
+    | '/dashboard'
+    | '/app/adresse'
+    | '/app/billing'
+    | '/app/nouvelle-analyse'
+    | '/app/pipeline'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/signup'
+    | '/legal/cgu'
+    | '/legal/cgv'
+    | '/legal/confidentialite'
+    | '/legal/mentions-legales'
+    | '/onboarding/step-1'
+    | '/onboarding/step-2'
+    | '/app/analyses/$id'
+    | '/app/veilles/$id'
+    | '/app/veilles/nouvelle'
+    | '/app/analyses/'
+    | '/app/veilles/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DevComponentsRoute: typeof DevComponentsRoute
+  CguRoute: typeof CguRoute
+  ConfidentialiteRoute: typeof ConfidentialiteRoute
+  DashboardRoute: typeof DashboardRoute
+  AppAdresseRoute: typeof AppAdresseRoute
+  AppBillingRoute: typeof AppBillingRoute
+  AppNouvelleAnalyseRoute: typeof AppNouvelleAnalyseRoute
+  AppPipelineRoute: typeof AppPipelineRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthLoginRoute: typeof AuthLoginRoute
+  AuthSignupRoute: typeof AuthSignupRoute
+  LegalCguRoute: typeof LegalCguRoute
+  LegalCgvRoute: typeof LegalCgvRoute
+  LegalConfidentialiteRoute: typeof LegalConfidentialiteRoute
+  LegalMentionsLegalesRoute: typeof LegalMentionsLegalesRoute
+  OnboardingStep1Route: typeof OnboardingStep1Route
+  OnboardingStep2Route: typeof OnboardingStep2Route
+  AppAnalysesIdRoute: typeof AppAnalysesIdRoute
+  AppVeillesIdRoute: typeof AppVeillesIdRoute
+  AppVeillesNouvelleRoute: typeof AppVeillesNouvelleRoute
+  AppAnalysesIndexRoute: typeof AppAnalysesIndexRoute
+  AppVeillesIndexRoute: typeof AppVeillesIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/confidentialite': {
+      id: '/confidentialite'
+      path: '/confidentialite'
+      fullPath: '/confidentialite'
+      preLoaderRoute: typeof ConfidentialiteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cgu': {
+      id: '/cgu'
+      path: '/cgu'
+      fullPath: '/cgu'
+      preLoaderRoute: typeof CguRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -58,11 +346,130 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dev/components': {
-      id: '/dev/components'
-      path: '/dev/components'
-      fullPath: '/dev/components'
-      preLoaderRoute: typeof DevComponentsRouteImport
+    '/onboarding/step-2': {
+      id: '/onboarding/step-2'
+      path: '/onboarding/step-2'
+      fullPath: '/onboarding/step-2'
+      preLoaderRoute: typeof OnboardingStep2RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding/step-1': {
+      id: '/onboarding/step-1'
+      path: '/onboarding/step-1'
+      fullPath: '/onboarding/step-1'
+      preLoaderRoute: typeof OnboardingStep1RouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/mentions-legales': {
+      id: '/legal/mentions-legales'
+      path: '/legal/mentions-legales'
+      fullPath: '/legal/mentions-legales'
+      preLoaderRoute: typeof LegalMentionsLegalesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/confidentialite': {
+      id: '/legal/confidentialite'
+      path: '/legal/confidentialite'
+      fullPath: '/legal/confidentialite'
+      preLoaderRoute: typeof LegalConfidentialiteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/cgv': {
+      id: '/legal/cgv'
+      path: '/legal/cgv'
+      fullPath: '/legal/cgv'
+      preLoaderRoute: typeof LegalCgvRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/cgu': {
+      id: '/legal/cgu'
+      path: '/legal/cgu'
+      fullPath: '/legal/cgu'
+      preLoaderRoute: typeof LegalCguRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/signup': {
+      id: '/auth/signup'
+      path: '/auth/signup'
+      fullPath: '/auth/signup'
+      preLoaderRoute: typeof AuthSignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/login': {
+      id: '/auth/login'
+      path: '/auth/login'
+      fullPath: '/auth/login'
+      preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/pipeline': {
+      id: '/app/pipeline'
+      path: '/app/pipeline'
+      fullPath: '/app/pipeline'
+      preLoaderRoute: typeof AppPipelineRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/nouvelle-analyse': {
+      id: '/app/nouvelle-analyse'
+      path: '/app/nouvelle-analyse'
+      fullPath: '/app/nouvelle-analyse'
+      preLoaderRoute: typeof AppNouvelleAnalyseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/billing': {
+      id: '/app/billing'
+      path: '/app/billing'
+      fullPath: '/app/billing'
+      preLoaderRoute: typeof AppBillingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/adresse': {
+      id: '/app/adresse'
+      path: '/app/adresse'
+      fullPath: '/app/adresse'
+      preLoaderRoute: typeof AppAdresseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/veilles/': {
+      id: '/app/veilles/'
+      path: '/app/veilles'
+      fullPath: '/app/veilles/'
+      preLoaderRoute: typeof AppVeillesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/analyses/': {
+      id: '/app/analyses/'
+      path: '/app/analyses'
+      fullPath: '/app/analyses/'
+      preLoaderRoute: typeof AppAnalysesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/veilles/nouvelle': {
+      id: '/app/veilles/nouvelle'
+      path: '/app/veilles/nouvelle'
+      fullPath: '/app/veilles/nouvelle'
+      preLoaderRoute: typeof AppVeillesNouvelleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/veilles/$id': {
+      id: '/app/veilles/$id'
+      path: '/app/veilles/$id'
+      fullPath: '/app/veilles/$id'
+      preLoaderRoute: typeof AppVeillesIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app/analyses/$id': {
+      id: '/app/analyses/$id'
+      path: '/app/analyses/$id'
+      fullPath: '/app/analyses/$id'
+      preLoaderRoute: typeof AppAnalysesIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -70,7 +477,27 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DevComponentsRoute: DevComponentsRoute,
+  CguRoute: CguRoute,
+  ConfidentialiteRoute: ConfidentialiteRoute,
+  DashboardRoute: DashboardRoute,
+  AppAdresseRoute: AppAdresseRoute,
+  AppBillingRoute: AppBillingRoute,
+  AppNouvelleAnalyseRoute: AppNouvelleAnalyseRoute,
+  AppPipelineRoute: AppPipelineRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
+  AuthLoginRoute: AuthLoginRoute,
+  AuthSignupRoute: AuthSignupRoute,
+  LegalCguRoute: LegalCguRoute,
+  LegalCgvRoute: LegalCgvRoute,
+  LegalConfidentialiteRoute: LegalConfidentialiteRoute,
+  LegalMentionsLegalesRoute: LegalMentionsLegalesRoute,
+  OnboardingStep1Route: OnboardingStep1Route,
+  OnboardingStep2Route: OnboardingStep2Route,
+  AppAnalysesIdRoute: AppAnalysesIdRoute,
+  AppVeillesIdRoute: AppVeillesIdRoute,
+  AppVeillesNouvelleRoute: AppVeillesNouvelleRoute,
+  AppAnalysesIndexRoute: AppAnalysesIndexRoute,
+  AppVeillesIndexRoute: AppVeillesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
