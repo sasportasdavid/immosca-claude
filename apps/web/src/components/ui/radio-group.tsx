@@ -5,12 +5,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 // RadioGroup shadcn-style wrap Radix. Item visuel = pastille 16px avec
-// indicator centré quand sélectionné. Aligné sur les tokens ImmoScan.
-//
-// Note : la <StrategyCard /> de l'onboarding (commit 2.4) implémente sa
-// propre UI radio-cards visuelles via Radix RadioGroup, sans utiliser
-// directement ce composant pour le rendu. RadioGroup ici reste utile
-// pour les cas standards (sondages, prefs, etc.).
+// indicator violet centré quand sélectionné.
 
 const RadioGroup = React.forwardRef<
   React.ElementRef<typeof RadioGroupPrimitive.Root>,
@@ -31,8 +26,9 @@ const RadioGroupItem = React.forwardRef<
   <RadioGroupPrimitive.Item
     ref={ref}
     className={cn(
-      "aspect-square h-4 w-4 rounded-full border border-input text-primary ring-offset-background",
-      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "aspect-square h-4 w-4 rounded-full border border-line-2 text-violet",
+      "focus-visible:outline-none focus-visible:shadow-ring-violet",
+      "data-[state=checked]:border-violet",
       "disabled:cursor-not-allowed disabled:opacity-50",
       className,
     )}

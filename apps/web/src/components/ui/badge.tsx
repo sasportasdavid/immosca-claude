@@ -3,17 +3,24 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+// Badge — aligné sur `.chip` du handoff : h-22 (5.5), px-2, font 11.5px,
+// rounded-full, border --line. Variants couleurs (success/warning/danger/
+// info) en complément, mappés sur les soft/* shadcn.
+
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+  "inline-flex items-center gap-1.5 h-[22px] rounded-full px-2 text-[11.5px] font-medium transition-colors whitespace-nowrap",
   {
     variants: {
       variant: {
-        default: "bg-secondary text-secondary-foreground",
-        outline: "border border-border bg-transparent text-foreground",
-        success: "bg-success-soft text-success-soft-foreground",
-        warning: "bg-warning-soft text-warning-soft-foreground",
-        danger: "bg-destructive-soft text-destructive-soft-foreground",
-        info: "bg-info-soft text-info-soft-foreground",
+        default: "bg-bg-2 text-ink-2 border border-line",
+        outline: "bg-transparent border border-line text-ink",
+        success: "bg-success-soft text-success-soft-foreground border border-transparent",
+        warning: "bg-warning-soft text-warning-soft-foreground border border-transparent",
+        danger: "bg-destructive-soft text-destructive-soft-foreground border border-transparent",
+        info: "bg-info-soft text-info-soft-foreground border border-transparent",
+        violet: "bg-violet-soft text-violet-deep border border-transparent",
+        terra: "bg-terra-soft text-terra-deep border border-transparent",
+        sage: "bg-sage-soft text-sage-2 border border-transparent",
       },
     },
     defaultVariants: {

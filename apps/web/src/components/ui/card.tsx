@@ -2,12 +2,16 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+// Card — aligné sur `.card` du handoff (tokens.css) :
+// background blanc (var(--card)), bordure --line, radius --r-lg (12px),
+// shadow --lvl-1.
+
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
-        "rounded-lg border border-border bg-card text-card-foreground",
+        "rounded-r-lg border border-line bg-card text-card-foreground shadow-lvl-1",
         className,
       )}
       {...props}
@@ -31,7 +35,7 @@ const CardTitle = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "text-[18px] font-semibold leading-tight tracking-[-0.01em]",
+      "text-[18px] font-semibold leading-tight tracking-[-0.01em] text-ink",
       className,
     )}
     {...props}
@@ -45,7 +49,7 @@ const CardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("text-[13px] text-muted-foreground", className)}
+    className={cn("text-[13px] text-muted-ink", className)}
     {...props}
   />
 ));

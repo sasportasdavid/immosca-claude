@@ -4,27 +4,76 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
+// Button — aligné sur les composants `.btn / .btn-primary / .btn-ghost /
+// .btn-terra / .btn-sm / .btn-lg` du handoff (tokens.css + value-tokens.css).
+//
+// Variants :
+// - `default`     → .btn-primary (violet-grad + white, ring violet au focus)
+// - `secondary`   → .btn (ink bg, bg/foreground inversé)
+// - `ghost`       → .btn-ghost (bg-2 hover, bordure --line)
+// - `outline`     → bordure ink, bg transparent, hover bg-2
+// - `terra`       → .btn-terra (terra-grad, à utiliser sur Immovalue)
+// - `destructive` → ok shadcn (rouge bad)
+// - `link`        → texte violet souligné
+//
+// Sizes :
+// - `sm`      → h-7  (28px) — .btn-sm
+// - `default` → h-9  (36px) — .btn
+// - `lg`      → h-11 (44px) — .btn-lg
+// - `icon`    → h-9 w-9     — bouton carré 36px
+
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  cn(
+    "inline-flex items-center justify-center gap-2 whitespace-nowrap",
+    "font-medium tracking-[-0.005em] transition-all",
+    "focus-visible:outline-none focus-visible:shadow-ring-violet",
+    "disabled:pointer-events-none disabled:opacity-50",
+  ),
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-lvl-1 hover:bg-primary-hover",
-        outline:
-          "border border-input bg-background hover:bg-secondary hover:text-secondary-foreground",
-        ghost: "hover:bg-secondary hover:text-secondary-foreground",
-        destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        link: "text-primary underline-offset-4 hover:underline",
+        // .btn-primary : violet-grad, white, inset highlight, shadow lvl-1.
+        default: cn(
+          "bg-violet-grad text-white border border-transparent",
+          "shadow-lvl-1",
+          "hover:shadow-lvl-2 hover:-translate-y-px",
+        ),
+        // .btn-terra : terra-grad (Immovalue CTA).
+        terra: cn(
+          "bg-terra-grad text-white border border-transparent",
+          "shadow-lvl-1",
+          "hover:shadow-lvl-2 hover:-translate-y-px",
+          "focus-visible:shadow-ring-terra",
+        ),
+        // .btn : ink bg, bg foreground (inverse).
+        secondary: cn(
+          "bg-ink text-bg border border-ink",
+          "hover:shadow-lvl-2 hover:-translate-y-px",
+        ),
+        // .btn-ghost : transparent + bordure --line, hover bg-2.
+        ghost: cn(
+          "bg-transparent text-ink border border-line",
+          "hover:bg-bg-2",
+        ),
+        // Variant utilitaire : bordure ink (style attio quiet primary).
+        outline: cn(
+          "bg-transparent text-ink border border-ink",
+          "hover:bg-bg-2",
+        ),
+        // Destructif : équivalent bad token.
+        destructive: cn(
+          "bg-destructive text-destructive-foreground border border-transparent",
+          "hover:bg-destructive/90",
+        ),
+        // Lien plat — pas de bordure, texte violet souligné au hover.
+        link: "text-violet underline-offset-4 hover:underline border-0 bg-transparent",
       },
-      // Tailles alignées sur le handoff design (écran 1 §05 Boutons) :
-      // sm 28px / md 36px (= default) / lg 44px / icon 36px carré.
+      // Tailles alignées sur le handoff (.btn-sm / .btn / .btn-lg).
       size: {
-        sm: "h-7 px-3 text-[13px]",
-        default: "h-9 px-4 py-2",
-        lg: "h-11 px-5 text-[15px]",
-        icon: "h-9 w-9",
+        sm: "h-7 px-2.5 text-[12px] rounded-r-sm",
+        default: "h-9 px-3.5 text-[13px] rounded-r",
+        lg: "h-11 px-5 text-[14px] rounded-r",
+        icon: "h-9 w-9 rounded-r",
       },
     },
     defaultVariants: {

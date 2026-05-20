@@ -1,5 +1,9 @@
 // Tabs basé sur Radix UI — wrapper stylé pour les onglets de navigation
 // interne (page rapport : Tableau / Top / Synthèse).
+//
+// Style aligné sur le handoff : tabs sobres avec ligne de séparation
+// border-line bottom, item actif marqué par un underline violet 2px et
+// le texte ink. Pas de pill background — c'est un trigger "rail".
 
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import * as React from "react";
@@ -15,7 +19,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center gap-1 rounded-md border border-border bg-secondary/50 p-1",
+      "inline-flex items-center gap-1 border-b border-line",
       className,
     )}
     {...props}
@@ -30,11 +34,14 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-[13px] font-medium",
-      "ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "relative inline-flex items-center justify-center whitespace-nowrap px-3 py-2.5 text-[13px] font-medium",
+      "transition-colors focus-visible:outline-none focus-visible:shadow-ring-violet",
       "disabled:pointer-events-none disabled:opacity-50",
-      "data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-lvl-1",
-      "data-[state=inactive]:text-muted-foreground data-[state=inactive]:hover:text-foreground",
+      "text-mute-2 hover:text-ink",
+      "data-[state=active]:text-ink",
+      // underline violet 2px sur l'onglet actif
+      "after:absolute after:inset-x-3 after:-bottom-px after:h-[2px] after:bg-transparent after:rounded-full",
+      "data-[state=active]:after:bg-violet",
       className,
     )}
     {...props}
@@ -49,7 +56,7 @@ const TabsContent = React.forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-6 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+      "mt-6 focus-visible:outline-none focus-visible:shadow-ring-violet",
       className,
     )}
     {...props}
