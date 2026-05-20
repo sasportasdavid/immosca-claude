@@ -19,7 +19,15 @@
    ═════════════════════════════════════════════════════════════════════ */
 
 /* ─── Accent par produit ─────────────────────────────────────────── */
-:root,
+/* NOTE Claude Code (hotfix DA-U1) : on N'écrit PAS sur :root pour ne pas
+   écraser le `--accent` HSL conventionnel de shadcn (surface hover/focus)
+   qui vit dans index.css. Le brand `--accent` n'existe que dans le scope
+   [data-product]. Comme apps/web/index.html et apps/value-web/index.html
+   posent data-product sur <body> ET sur #root, l'UI entière est toujours
+   dans ce scope — l'unification reste effective.
+
+   PR-DA-U2 renommera le token shadcn `--accent` → `--surface-hover` pour
+   supprimer définitivement la collision de noms. */
 [data-product="immoscan"] {
   --accent:        var(--violet);
   --accent-2:      var(--violet-2);
