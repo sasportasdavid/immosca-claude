@@ -107,6 +107,111 @@ export function capturePageview(pathname: string, searchStr?: string): void {
   });
 }
 
+// ──────────────────────────────────────────────────────────────────
+// Events métier ImmoScan (typés)
+// ──────────────────────────────────────────────────────────────────
+//
+// Taxonomie centralisée pour PostHog. **Tout nouvel event business
+// passe par cette union** : pas de `posthog.capture("custom-event")`
+// inline ailleurs. Ça permet de :
+//   - retrouver tous les call sites par grep
+//   - éviter les typos sur les noms d'events
+//   - documenter les properties attendues côté PostHog Insights
+
+export type ImmoscanEvent =
+  // Signup / onboarding
+  | { name: "signup_completed"; props: { method: "password" | "magic_link" | "google" } }
+  | { name: "onboarding_completed"; props: { strategy: string } }
+
+  // Analyses
+  | {
+      name: "analysis_started";
+      props: {
+        source_site: string;
+        from_url: boolean;
+        from_paste_urls: boolean;
+      };
+    }
+  | {
+      name: "analysis_completed";
+      props: {
+        analysis_id: string;
+        total_listings_raw: number;
+        total_listings_filtered: number;
+        was_truncated: boolean;
+      };
+    }
+
+  // Quotas / upsell
+  | {
+      name: "quota_exceeded";
+      props: {
+        reason: string;
+        upgrade_to: string | null;
+        used?: number;
+        limit?: number;
+      };
+    }
+  | {
+      name: "quota_modal_shown";
+      props: { reason: string; placement: string };
+    }
+
+  // Veilles
+  | {
+      name: "watch_created";
+      props: {
+        source_site: string;
+        sensitivity: string;
+        score_threshold: number;
+        from_analysis: boolean;
+      };
+    }
+  | { name: "watch_deleted"; props: { watch_id: string } }
+  | { name: "watch_reactivated"; props: { watch_id: string } }
+
+  // Billing
+  | { name: "checkout_started"; props: { sku: string; context?: string } }
+  | { name: "portal_opened"; props: Record<string, never> }
+  | {
+      name: "plan_upgraded";
+      props: { from_plan: string; to_plan: string };
+    }
+  | {
+      name: "plan_downgraded";
+      props: { from_plan: string; to_plan: string };
+    }
+  | { name: "ppu_purchased"; props: { context?: string } }
+  | { name: "addon_purchased"; props: { sku: string } }
+
+  // Emails inbound (clics)
+  | {
+      name: "email_clicked";
+      props: {
+        source:
+          | "watch_digest"
+          | "watch_expiration_warn"
+          | "watch_suspended"
+          | "unknown";
+        campaign?: string;
+      };
+    };
+
+/**
+ * Capture un event business typé. No-op si PostHog non initialisé.
+ *
+ * Exemple :
+ *   trackEvent({ name: "watch_created", props: { source_site: "seloger", … } });
+ */
+export function trackEvent<E extends ImmoscanEvent>(event: E): void {
+  if (!initialized) return;
+  posthog.capture(event.name, event.props);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Pageviews + hook router
+// ──────────────────────────────────────────────────────────────────
+
 /**
  * Hook React qui s'abonne au TanStack Router et déclenche un pageview
  * PostHog à chaque navigation résolue.
@@ -124,6 +229,10 @@ export function usePostHogPageTracking(): void {
     const initial = router.state.location;
     capturePageview(initial.pathname, initial.searchStr);
 
+    // Si l'URL contient utm_source=immoscan_email → fire `email_clicked` une
+    // seule fois au mount (clic sortant depuis Resend digest/expiration).
+    detectEmailClickFromUrl(initial.searchStr);
+
     // Pageviews sur navigation
     const unsubscribe = router.subscribe("onResolved", ({ toLocation }) => {
       capturePageview(toLocation.pathname, toLocation.searchStr);
@@ -131,4 +240,35 @@ export function usePostHogPageTracking(): void {
 
     return () => unsubscribe();
   }, [router]);
+}
+
+/**
+ * Lit utm_source + utm_campaign et déclenche un event `email_clicked`.
+ * Mécanique : nos templates de digest / expiration ajoutent
+ *   ?utm_source=immoscan_email&utm_campaign=<source>
+ * On capture une seule fois par session : si la query est présente, on
+ * stocke un flag sessionStorage pour ne pas re-trigger sur navigations.
+ */
+function detectEmailClickFromUrl(searchStr: string | undefined): void {
+  if (!initialized || !searchStr) return;
+  try {
+    const params = new URLSearchParams(searchStr);
+    const utmSource = params.get("utm_source");
+    if (utmSource !== "immoscan_email") return;
+    const sessionKey = "ph_email_click_fired";
+    if (sessionStorage.getItem(sessionKey)) return;
+    sessionStorage.setItem(sessionKey, "1");
+    const campaign = params.get("utm_campaign") ?? "unknown";
+    const source =
+      campaign === "watch_digest"
+        ? ("watch_digest" as const)
+        : campaign === "watch_expiration_warn"
+          ? ("watch_expiration_warn" as const)
+          : campaign === "watch_suspended"
+            ? ("watch_suspended" as const)
+            : ("unknown" as const);
+    trackEvent({ name: "email_clicked", props: { source, campaign } });
+  } catch {
+    // best-effort, on swallow les erreurs URL parsing
+  }
 }

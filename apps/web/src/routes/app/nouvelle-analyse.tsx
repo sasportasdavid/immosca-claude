@@ -34,6 +34,7 @@ import { useProfile } from "@/hooks/use-profile";
 import { useUserParams } from "@/hooks/use-user-params";
 import { requireAuth, requireOnboarded } from "@/lib/auth-guards";
 import { findCommunesInRadius, type Commune } from "@/lib/commune-search";
+import { trackEvent } from "@/lib/posthog";
 import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/app/nouvelle-analyse")({
@@ -364,6 +365,17 @@ function NouvelleAnalysePage() {
         .select("id")
         .single();
       if (error) throw error;
+
+      // PostHog : analyse lancée — track avant invoke pour ne pas perdre
+      // l'event si trigger-analyze échoue.
+      trackEvent({
+        name: "analysis_started",
+        props: {
+          source_site: values.mode === "urls" ? "multi" : "filters",
+          from_url: values.mode === "urls",
+          from_paste_urls: values.mode === "urls",
+        },
+      });
 
       // Déclenche la task Trigger.dev
       const invokeRes = await supabase.functions.invoke("trigger-analyze", {
