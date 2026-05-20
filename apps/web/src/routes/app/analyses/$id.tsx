@@ -36,9 +36,12 @@ import { RecomputeSheet } from "@/components/recompute-sheet";
 import { SearchCriteriaChips } from "@/components/search-criteria-chips";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfBadge } from "@/components/ui/conf-badge";
 import { DpePill } from "@/components/ui/dpe-pill";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { ScoreBadge } from "@/components/ui/score-badge";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { TheseBlock } from "@/components/ui/these-block";
 import { VerdictPill } from "@/components/ui/verdict-pill";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
@@ -158,7 +161,9 @@ function AnalysisPage() {
       <div className="mx-auto max-w-[1200px] px-6 py-10">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <Eyebrow>Analyse #{id.slice(0, 8)}</Eyebrow>
+            <Eyebrow variant="accent">
+              Analyse · #{id.slice(0, 8)}
+            </Eyebrow>
             <div className="mt-2 flex flex-wrap items-baseline gap-3">
               <RenameableTitle
                 analysisId={id}
@@ -265,39 +270,7 @@ function AnalysisPage() {
                 Sinon : KPIs résumés. L'état failed affiche l'error_message
                 en dessous, peu importe le status visuel. */}
             {analysis.data.status === "done" ? (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-                <KpiCard
-                  label="Annonces analysées"
-                  value={analysis.data.total_listings_raw ?? "—"}
-                />
-                <KpiCard
-                  label="Retenues pour notation"
-                  value={analysis.data.total_listings_filtered ?? "—"}
-                  hint={
-                    analysis.data.total_listings_raw &&
-                    analysis.data.total_listings_filtered != null
-                      ? `${
-                          analysis.data.total_listings_raw -
-                          analysis.data.total_listings_filtered
-                        } exclus`
-                      : undefined
-                  }
-                />
-                <KpiCard
-                  label="Médian €/m²"
-                  value={
-                    analysis.data.median_price_per_sqm
-                      ? `${Math.round(Number(analysis.data.median_price_per_sqm)).toLocaleString("fr-FR")}`
-                      : "—"
-                  }
-                  unit="€"
-                />
-                <KpiCard
-                  label="Statut"
-                  value="Terminé"
-                  featured
-                />
-              </div>
+              <AnalysisHero data={analysis.data} analysisId={id} />
             ) : (
               <AnalysisProgress
                 status={analysis.data.status}
@@ -365,33 +338,111 @@ function AnalysisPage() {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// KpiCard — composant local pour la grille KPI 4-cols (status=done).
-// Aligné `.kpi` du handoff : eyebrow + valeur mono XXL + sous-titre.
+// AnalysisHero — bloc d'accroche style handoff DA unifiée :
+// eyebrow-accent · "Analyse terminée"  +  display-serif "N biens.
+// <em>Top à appeler.</em>"  +  rangée stats horizontale + conf-badge.
+// Calque sur le mockup `mk-head` / `mk-stats` (handoff §Mockup).
 // ──────────────────────────────────────────────────────────────────
 
-function KpiCard({
+function AnalysisHero({
+  data,
+  analysisId,
+}: {
+  data: {
+    total_listings_raw: number | null;
+    total_listings_filtered: number | null;
+    median_price_per_sqm: number | string | null;
+  };
+  analysisId: string;
+}) {
+  const raw = data.total_listings_raw ?? 0;
+  const filtered = data.total_listings_filtered ?? 0;
+  // Confiance globale = couverture de notation. Si on a retenu tout ce qui
+  // est arrivé, on est très confiant ; sinon on rend visible que des biens
+  // ont été exclus (DPE manquant, surface aberrante, etc.).
+  const coverage = raw > 0 ? Math.max(0, Math.min(1, filtered / raw)) : 0.85;
+
+  return (
+    <section
+      className="rounded-r-xl border border-line bg-card p-7 shadow-lvl-1"
+      // Surface chaude façon `.mk-head` du handoff (gradient violet subtil).
+      style={{
+        backgroundImage:
+          "linear-gradient(180deg, var(--accent-tint), transparent 70%)",
+      }}
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <span className="eyebrow eyebrow-accent">
+          Analyse terminée
+        </span>
+        <Eyebrow>#{analysisId.slice(0, 8)}</Eyebrow>
+      </div>
+
+      {/* Titre éditorial — chiffre en bold + verbe en italique serif. */}
+      <h2 className="display-serif mt-3 max-w-[28ch] text-[36px] font-semibold leading-[1.06] tracking-[-0.025em] text-ink [text-wrap:balance]">
+        {raw > 0 ? raw : "—"}{" "}
+        {raw === 1 ? "bien scanné" : "biens scannés"}.{" "}
+        <em className="font-serif font-normal italic text-[var(--accent)] tracking-[-0.012em]">
+          {filtered > 0 ? "Voici ceux qui valent un appel." : "Synthèse en route."}
+        </em>
+      </h2>
+
+      <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-5 md:grid-cols-4 lg:[grid-template-columns:1fr_1fr_1fr_1fr_auto] lg:items-end">
+        <HeroStat
+          label="Annonces analysées"
+          value={raw > 0 ? raw.toLocaleString("fr-FR") : "—"}
+        />
+        <HeroStat
+          label="Retenues pour notation"
+          value={filtered > 0 ? filtered.toLocaleString("fr-FR") : "—"}
+          hint={
+            raw && filtered != null && raw > filtered
+              ? `${raw - filtered} exclus`
+              : undefined
+          }
+        />
+        <HeroStat
+          label="Médian €/m²"
+          value={
+            data.median_price_per_sqm
+              ? Math.round(Number(data.median_price_per_sqm)).toLocaleString(
+                  "fr-FR",
+                )
+              : "—"
+          }
+          unit="€"
+        />
+        <HeroStat label="Statut" value="Terminé" tone="accent" />
+        <div className="col-span-2 flex md:col-span-4 lg:col-span-1 lg:justify-end">
+          <div className="inline-flex flex-col gap-1.5">
+            <Eyebrow>Confiance globale</Eyebrow>
+            <ConfBadge confidence={coverage} />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HeroStat({
   label,
   value,
   unit,
   hint,
-  featured,
+  tone,
 }: {
   label: string;
   value: React.ReactNode;
   unit?: string;
   hint?: string;
-  featured?: boolean;
+  tone?: "accent";
 }) {
   return (
-    <div
-      className={`rounded-r-lg border bg-card p-5 shadow-lvl-1 ${
-        featured ? "border-violet/20 bg-violet-soft/40" : "border-line"
-      }`}
-    >
+    <div>
       <Eyebrow>{label}</Eyebrow>
       <div
         className={`mt-2 font-mono tnum text-[28px] font-semibold tracking-[-0.025em] ${
-          featured ? "text-violet-deep" : "text-ink"
+          tone === "accent" ? "text-[var(--accent-deep)]" : "text-ink"
         }`}
       >
         {value}
@@ -640,8 +691,12 @@ function ListingsSection({
           déléguée à ce composant, on garde juste le header DA ici. */}
       <section>
         <div className="mb-4">
-          <h2 className="text-[18px] font-semibold tracking-[-0.015em] text-ink">
-            Carte
+          <span className="eyebrow eyebrow-accent">Carte du marché</span>
+          <h2 className="display-serif mt-2 text-[26px] font-semibold leading-[1.06] tracking-[-0.025em] text-ink">
+            Où{" "}
+            <em className="font-serif font-normal italic text-[var(--accent)]">
+              ça bouge.
+            </em>
           </h2>
           <p className="mt-1 text-[12.5px] text-mute-2">
             Clique sur un point pour ouvrir la fiche du bien. Précision
@@ -655,19 +710,23 @@ function ListingsSection({
       </section>
 
       <section>
-      <div className="mb-4 flex items-baseline justify-between">
-        <h2 className="text-[18px] font-semibold tracking-[-0.015em] text-ink">
-          {sorted.length}{" "}
-          {sorted.length > 1 ? "biens" : "bien"}
-          {filtersActive ? (
-            <span className="ml-2 font-mono tnum text-[12px] font-normal text-mute-2">
-              · filtrés sur {listings.data.length}
-            </span>
-          ) : (
-            <span className="ml-1 text-[14px] font-normal text-mute-2">analysés</span>
-          )}
-        </h2>
-        <Eyebrow>Clique sur une ligne pour la fiche complète</Eyebrow>
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <span className="eyebrow eyebrow-accent">Tableau · vue détaillée</span>
+          <h2 className="display-serif mt-2 text-[26px] font-semibold leading-[1.06] tracking-[-0.025em] text-ink">
+            {sorted.length}{" "}
+            {sorted.length > 1 ? "biens " : "bien "}
+            <em className="font-serif font-normal italic text-[var(--accent)]">
+              {filtersActive ? "après tes filtres." : "à comparer."}
+            </em>
+            {filtersActive ? (
+              <span className="ml-2 font-mono tnum text-[12px] font-normal text-mute-2 normal-case tracking-normal">
+                sur {listings.data.length} analysés
+              </span>
+            ) : null}
+          </h2>
+        </div>
+        <Eyebrow>Clique une ligne pour la fiche complète</Eyebrow>
       </div>
 
       {/* Filter bar : type / verdict / DPE / score min. Côté client. */}
@@ -979,6 +1038,12 @@ function SortableTh({
 // ──────────────────────────────────────────────────────────────────
 // Top N avec thèse Claude (PR4) — affiche les biens qui ont une
 // `these_claude` non nulle dans la vue freemium.
+//
+// PR-DA-U3 — refonte vocabulaire éditorial :
+//  - header section : eyebrow-accent + display-serif
+//  - chaque carte : KPIs (rank · score · status · verdict · rendement · prix)
+//  - body déplié : <TheseBlock attribution="Claude"> = surface chaude
+//    accent, eyebrow accent-deep avec glyph, titre serif italique
 // ──────────────────────────────────────────────────────────────────
 
 function TopThesesSection({ analysisId }: { analysisId: string }) {
@@ -999,24 +1064,39 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
 
   if (tops.isLoading || !tops.data || tops.data.length === 0) return null;
 
+  const n = tops.data.length;
   return (
     <section>
-      <div className="mb-4 flex items-baseline gap-3">
-        <h2 className="text-[18px] font-semibold tracking-[-0.015em] text-ink">
-          Top {tops.data.length} avec thèse Claude
-        </h2>
-        <Eyebrow>Analyse argumentée par Claude Sonnet</Eyebrow>
+      <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <span className="eyebrow eyebrow-accent">
+            Top du marché · {n} {n > 1 ? "biens scorés" : "bien scoré"}
+          </span>
+          <h2 className="display-serif mt-2 text-[32px] font-semibold leading-[1.06] tracking-[-0.025em] text-ink [text-wrap:balance]">
+            {n === 1 ? "Un bien " : `${n === 5 ? "Cinq" : n} biens `}
+            <em className="font-serif font-normal italic text-[var(--accent)] tracking-[-0.012em]">
+              valent un appel.
+            </em>
+          </h2>
+        </div>
+        <Eyebrow>Argumenté par Claude Sonnet 4.6</Eyebrow>
       </div>
       <div className="space-y-3">
         {tops.data.map((l, idx) => {
           const verdict = l.verdict ? VERDICT_LABEL[l.verdict] : null;
           const isFirst = idx === 0;
+          // PR-DA-U3 statut bien : score-driven (Scoré ≥ 70, Nouveau sinon).
+          // Comme cette section ne montre que les biens avec thèse Claude,
+          // tous sont au minimum dans le Top — on reflète le seuil de
+          // "valeur ajoutée" du scoring (75 = seuil opportunité dashboard).
+          const status: "score" | "nouveau" =
+            (l.score_total ?? 0) >= 75 ? "score" : "nouveau";
           return (
             <details
               key={l.id}
               className={`group rounded-r-lg border bg-card shadow-lvl-1 transition-colors ${
                 isFirst
-                  ? "border-violet/30 open:shadow-[0_0_0_3px_rgba(91,71,224,0.06)]"
+                  ? "[border-color:color-mix(in_oklab,var(--accent)_30%,transparent)] open:shadow-[0_0_0_3px_color-mix(in_oklab,var(--accent)_6%,transparent)]"
                   : "border-line"
               }`}
               open={isFirst}
@@ -1024,7 +1104,7 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
               <summary className="flex cursor-pointer items-center gap-3 px-5 py-4 list-none hover:bg-bg-2/60 transition-colors">
                 <span
                   className={`font-mono text-[13px] font-semibold tracking-[0.02em] ${
-                    isFirst ? "text-violet" : "text-mute-2"
+                    isFirst ? "text-[var(--accent)]" : "text-mute-2"
                   }`}
                 >
                   #{idx + 1}
@@ -1054,7 +1134,7 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
                       {l.pieces ? (
                         <>
                           <span className="text-faint">·</span>
-                          <span>{l.pieces}P</span>
+                          <span>{l.pieces} pièces</span>
                         </>
                       ) : null}
                       {l.dpe ? (
@@ -1066,6 +1146,7 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
                     </div>
                   </div>
                 </div>
+                <StatusBadge status={status} />
                 {verdict ? (
                   <VerdictPill verdict={verdict.tone}>
                     {verdict.label}
@@ -1081,7 +1162,7 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
                           : "text-mute-2"
                     }`}
                   >
-                    {l.rendement_brut_pct.toFixed(1)}%
+                    {l.rendement_brut_pct.toFixed(1).replace(".", ",")} %
                   </span>
                 ) : null}
                 <span className="font-mono tnum text-[14px] font-semibold text-ink">
@@ -1089,7 +1170,7 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
                     ? `${Math.round(l.prix).toLocaleString("fr-FR")} €`
                     : (
                       <span className="inline-flex items-center gap-1 text-mute-2">
-                        <Lock className="h-3.5 w-3.5 text-violet" />
+                        <Lock className="h-3.5 w-3.5 text-[var(--accent)]" />
                         Pro
                       </span>
                     )}
@@ -1098,8 +1179,8 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
               <div className="border-t border-line px-6 py-6">
                 {l.is_masked ? (
                   <div className="py-8 text-center">
-                    <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-soft">
-                      <Lock className="h-5 w-5 text-violet" />
+                    <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-soft)]">
+                      <Lock className="h-5 w-5 text-[var(--accent)]" />
                     </div>
                     <h3 className="mt-3 text-[16px] font-semibold tracking-[-0.012em] text-ink">
                       Cette opportunité est masquée.
@@ -1113,20 +1194,20 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
                     </Button>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-violet">
-                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet" />
-                      Thèse de Claude
-                      <span className="font-normal text-mute-2 normal-case tracking-normal">
-                        · Sonnet 4.6
-                      </span>
-                    </div>
-                    {/* Moment "dramatique" du handoff : la thèse en serif
-                        italic. C'est le payoff de l'analyse. */}
-                    <div className="font-serif italic text-[16px] leading-[1.55] text-ink whitespace-pre-wrap [text-wrap:pretty]">
+                  // Moment "dramatique" du handoff : la thèse en serif
+                  // italic, encapsulée dans le bloc accent product-agnostic.
+                  <TheseBlock
+                    attribution="Claude"
+                    title={
+                      l.title
+                        ? `Pourquoi ${l.title.slice(0, 60)}${l.title.length > 60 ? "…" : ""}`
+                        : "Pourquoi ce bien"
+                    }
+                  >
+                    <p className="whitespace-pre-wrap font-serif italic [text-wrap:pretty]">
                       {l.these_claude}
-                    </div>
-                  </div>
+                    </p>
+                  </TheseBlock>
                 )}
               </div>
             </details>

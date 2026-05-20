@@ -4,9 +4,12 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 // TheseBlock — bloc "L'analyse de [attribution]" inspiré de `.these`
-// (value-tokens.css §thèse block). Surface chaude (subtle terra gradient),
-// eyebrow terra-deep avec glyph, titre serif italique, corps en lecture
+// (value-tokens.css §thèse block). Surface chaude (subtle accent gradient),
+// eyebrow accent-deep avec glyph, titre serif italique, corps en lecture
 // confortable.
+//
+// PR-DA-U2 : product-agnostic via var(--accent / --accent-deep / --accent-grad)
+// — surface violet sur Immoscan, terra sur Immovalue (suit data-product).
 //
 // Usage :
 //   <TheseBlock attribution="André" title="Pourquoi ce bien">
@@ -30,17 +33,20 @@ const TheseBlock = React.forwardRef<HTMLDivElement, TheseBlockProps>(
         ref={ref}
         className={cn(
           "relative rounded-r-xl border px-8 py-7",
-          "border-terra/15 bg-card",
-          // wash terra subtil (équivalent linear-gradient handoff)
-          "bg-gradient-to-b from-terra/[0.04] to-terra/[0.01]",
+          // PR-DA-U2 : border + wash product-agnostic via var(--accent-tint)
+          // (défini par immoscan-unified.css en fonction de data-product).
+          "bg-card",
+          "[border-color:color-mix(in_oklab,var(--accent)_16%,transparent)]",
+          // wash subtle accent (équivalent linear-gradient handoff)
+          "bg-gradient-to-b from-[var(--accent-tint)] to-transparent",
           className,
         )}
         {...props}
       >
-        <div className="flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-terra-deep">
+        <div className="flex items-center gap-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--accent-deep)]">
           <span
             aria-hidden
-            className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-r-xs bg-terra-grad text-white shadow-lvl-1"
+            className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-r-xs bg-[var(--accent-grad)] text-white shadow-lvl-1"
           >
             {glyph ?? <Sparkles className="h-3 w-3" strokeWidth={2.5} />}
           </span>

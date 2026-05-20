@@ -6,7 +6,9 @@ import { cn } from "@/lib/utils";
 // Stepper — wizard horizontal Immovalue (value-tokens.css §stepper).
 // Étapes affichées comme pills avec numéro :
 //   - antérieures (done)  : ink fond foncé + ✓
-//   - étape courante (active) : terra-soft + terra
+//   - étape courante (active) : accent brand product-agnostic (PR-DA-U2 —
+//                               auparavant terra dur). Violet sur Immoscan,
+//                               terra sur Immovalue.
 //   - suivantes (todo)    : bg-2 + mute-2
 //
 // Lignes de séparation fines entre chaque step.
@@ -50,7 +52,8 @@ const Stepper = React.forwardRef<HTMLOListElement, StepperProps>(
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full pl-1.5 pr-2.5 py-1",
                   isDone && "bg-bg-2 text-ink-2",
-                  isActive && "bg-terra-soft text-terra-deep",
+                  // PR-DA-U2 : product-agnostic via var(--accent-soft / --accent-deep).
+                  isActive && "bg-[var(--accent-soft)] text-[var(--accent-deep)]",
                   isTodo && "bg-bg-2 text-mute-2",
                 )}
               >
@@ -60,7 +63,8 @@ const Stepper = React.forwardRef<HTMLOListElement, StepperProps>(
                     "inline-flex h-[18px] w-[18px] items-center justify-center rounded-full",
                     "font-mono text-[10px] font-semibold",
                     isDone && "bg-ink text-white",
-                    isActive && "bg-terra text-white",
+                    // PR-DA-U2 : product-agnostic via var(--accent).
+                    isActive && "bg-[var(--accent)] text-white",
                     isTodo && "bg-bg-3 text-mute-2",
                   )}
                 >

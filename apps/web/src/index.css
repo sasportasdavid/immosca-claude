@@ -66,9 +66,13 @@
     --muted-foreground: 33 5% 32%;  /* #57534E */
     --tertiary-foreground: 28 6% 64%; /* stone-400 #A8A29E — captions discrètes */
 
-    /* Shadcn convention : accent = surface douce hover/focus, pas la brand */
-    --accent: 60 5% 96%;
-    --accent-foreground: 28 6% 25%;
+    /* Shadcn convention : surface douce hover/focus (renommé pour libérer --accent
+       au profit du token brand product-agnostic livré par immoscan-unified.css).
+       Aucun consumer ne lit `--surface-hover` directement : la classe Tailwind
+       `bg-accent` / `text-accent-foreground` est rebindée sur ce token via
+       tailwind.config.ts pour conserver la compat shadcn future. */
+    --surface-hover: 60 5% 96%;
+    --surface-hover-foreground: 28 6% 25%;
 
     /* Sémantique d'état — couleur principale + foreground (pour bg plein,
        typiquement blanc) + variante soft (bg doux) + soft-foreground (texte

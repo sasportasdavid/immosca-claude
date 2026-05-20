@@ -88,15 +88,17 @@ function DashboardPage() {
       onNewAnalysis={() => navigate({ to: "/app/nouvelle-analyse" })}
     >
       <div className="mx-auto max-w-6xl space-y-6 p-6">
-        {/* Header — greeting tutoyé, style handoff (serif italic violet sur l'accent) */}
+        {/* Header — greeting tutoyé, style handoff (serif italic violet sur
+            l'accent). PR-DA-U3 : eyebrow-accent + display-serif via classes
+            CSS pour cohérence avec le pattern unifié. */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <Eyebrow>Dashboard</Eyebrow>
-            <h1 className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink">
+            <span className="eyebrow eyebrow-accent">Dashboard</span>
+            <h1 className="display-serif mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink">
               Bonjour{firstName ? `, ${firstName}` : ""},{" "}
-              <span className="font-serif italic font-normal text-violet">
+              <em className="font-serif font-normal italic text-[var(--accent)] tracking-[-0.012em]">
                 prêt à scanner ?
-              </span>
+              </em>
             </h1>
             <p className="mt-2.5 max-w-[48ch] text-sm leading-relaxed text-muted-ink">
               {summary.data?.empty_state_hint

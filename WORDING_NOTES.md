@@ -246,3 +246,136 @@ dans le code applicatif.**
   arbitrage (Claude vs André)
 
 Document à mettre à jour à chaque PR si nouveau wording.
+
+---
+
+## §3 — Wording DA unifiée (PR-DA-U3)
+
+PR-DA-U3 applique le vocabulaire éditorial du handoff DA unifiée
+(`eyebrow-accent` + `display-serif` avec verbe italique serif) aux pages
+ImmoScan. Les phrases ci-dessous sont les propositions retenues, alignées
+sur le ton "designer" du handoff (cf §Mockup du `Immoscan - DA unifiée.html`)
+— elles restent challengeables par le PO.
+
+### Page Analyse-Done (`/app/analyses/$id`)
+
+#### Hero — `<AnalysisHero>` (status=done)
+
+- **Eyebrow** : `Analyse terminée`
+- **H2 .display-serif** retenu :
+  > « **{N} biens scannés.** *Voici ceux qui valent un appel.* »
+- **Alternatives notées** :
+  - « **{N} biens analysés.** *Cinq valent un coup d'œil.* » — plus
+    générique, moins urgent.
+  - « **{N} biens passés au crible.** *Voici la sélection.* » — moins
+    "appelable", plus descriptif.
+- **Confiance globale (ConfBadge)** : valeur calculée comme
+  `total_listings_filtered / total_listings_raw` (proxy "couverture de
+  notation"). À remplacer par un vrai indice de confiance scoring si la
+  table `analyses` gagne une colonne `confidence_pct` en V2.
+
+#### Section Top thèses
+
+- **Eyebrow** : `Top du marché · {N} biens scorés`
+- **H2 .display-serif** retenu :
+  > « **{N} biens** *valent un appel.* » (avec N littéral pour 1 et 5,
+  > sinon valeur numérique)
+- **Alternative notée** : « **{N} thèses** *à lire ce matin.* » —
+  centrée sur la valeur narrative plutôt que sur l'appel. Plus douce, mais
+  rate la promesse "appel à passer" du mockup.
+
+#### Section Carte
+
+- **Eyebrow** : `Carte du marché`
+- **H2 .display-serif** retenu :
+  > « Où *ça bouge.* » — court, conversationnel.
+- **Alternatives** :
+  - « Où sont *les biens.* » — neutre.
+  - « *L'écart* sur la zone. » — orienté analyse.
+
+#### Section Tableau
+
+- **Eyebrow** : `Tableau · vue détaillée`
+- **H2 .display-serif** retenu (selon filtres actifs) :
+  > « {N} biens *après tes filtres.* » ou « {N} biens *à comparer.* »
+- Le sous-titre "Clique sur une ligne pour la fiche complète" devient
+  un eyebrow neutre à droite (rôle de hint).
+
+### Page Dashboard (`/dashboard`)
+
+- **Eyebrow** : `Dashboard` (passe en `eyebrow eyebrow-accent`)
+- **H1 .display-serif** retenu :
+  > « Bonjour {prénom}, *prêt à scanner ?* » (inchangé, déjà aligné
+  > sur le pattern serif italic violet)
+- Pas d'autres section headers modifiés (les widgets `<Card>` restent
+  avec `<CardTitle>` shadcn pour l'instant — à migrer en PR ultérieure).
+
+### Page Analyses index (`/app/analyses`)
+
+- **Eyebrow** : `Mes analyses` / `Analyses archivées` (en `eyebrow-accent`)
+- **H1 .display-serif** retenu (selon état) :
+  > « {N} analyses *à comparer.* » (vue active)
+  > « {N} analyses *rangées.* » (vue archivée)
+- **Alternative** : « **{N} analyses.** *Ouvre celle qui te parle.* » —
+  trop fleuri pour une page liste.
+
+### Listing Drawer · section scoring
+
+- **Eyebrow** : `Scoring détaillé · 6 critères`
+- **H3 .display-serif** :
+  > « Pourquoi *{score}/100.* » — chiffre absolu en italique serif,
+  > comme dans le handoff `.these h3`.
+
+Les 6 critères passent en `<AdjustmentItem>` (icône Lucide à gauche,
+critère + raison textuelle, source en tag, impact = `±{score-50}` /
+`{score}/100`). Sources : DVF, OLL · annonces, Simulation, ADEME,
+INSEE · IGN, Géorisques.
+
+### Top bar `<AppHeader>` — breadcrumb
+
+Le composant `AppHeader` reste **présentationnel pur** : il accepte une
+nouvelle prop `breadcrumbs?: BreadcrumbItem[]` qui rend une seconde
+rangée `.app-nav .crumb` quand la page parente lui passe le fil.
+**Décision retenue** : option (b) — breadcrumb additionnel sous la nav
+principale, pas remplacement total. Raisons :
+
+1. `AppHeader` est principalement utilisé par les pages publiques /
+   marketing (landing, login) où le breadcrumb n'a pas de sens — garder
+   la nav horizontale existante évite une régression UX visible.
+2. Les pages app authentifiées utilisent `AppShell` (sidebar fixe +
+   topbar) plutôt que `AppHeader`, donc l'impact pratique du breadcrumb
+   reste limité aux cas où une page passerait explicitement la prop.
+3. Les snapshots Vitest de `<AppHeader>` (3 cas signed-in/out × plan)
+   restent verts car la prop `breadcrumbs` est optionnelle.
+
+Si une PR ultérieure veut migrer `AppShell.Topbar` vers le même pattern
+`.app-nav` avec breadcrumb dynamique via `useLocation()`, c'est
+indépendant — la classe `.app-nav` est déjà disponible dans
+`immoscan-unified.css`.
+
+### Status badges biens
+
+`StatusBadge` étendu avec 3 nouveaux variants ImmoScan
+(`nouveau` / `score` / `exclu`) en plus des 5 ImmoValue. Sur la page
+Analyse-Done, les cartes du Top utilisent :
+
+- **score** (sage) si `score_total >= 75` (seuil opportunité dashboard)
+- **nouveau** (accent soft) sinon
+
+Le seuil 75 reprend le `FREEMIUM_MASK_THRESHOLD` du package
+`@immoscan/shared` (cf `dashboard.tsx`) pour cohérence — un bien est
+"scoré" dès qu'il atteint le rang d'opportunité visible côté Free.
+
+### Arbitrages à valider avec le PO
+
+1. **"Cinq valent un appel" vs "Cinq valent un coup d'œil"** : le
+   handoff pousse "appel" (action concrète, conversion). Si le PO
+   trouve "appel" trop commercial, basculer en "coup d'œil".
+2. **"Voici la sélection" vs "Voici ceux qui valent un appel"** : la
+   première est plus neutre — utile si on craint le ton trop pressant
+   sur les analyses vides ou de faible qualité.
+3. **Persona "Claude" vs "André"** : conservé "Claude" partout
+   (cohérent avec §1 incohérences). À rebasculer si décision produit.
+4. **Confiance globale** : c'est aujourd'hui un proxy (couverture de
+   notation). À remplacer par un vrai score si on en calcule un côté
+   worker (variance, % de matchs DVF, % avec adresse exacte).

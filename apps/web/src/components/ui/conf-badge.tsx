@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 // pourcentage tabular mono.
 //
 // Couleur du meter :
-//   - high (>= 0.8) : sage
-//   - mid  (>= 0.6) : terra
+//   - high (>= 0.8) : sage (status-positive, ne change pas par produit)
+//   - mid  (>= 0.6) : accent brand product-agnostic (violet sur Immoscan,
+//                     terra sur Immovalue) — PR-DA-U2 (auparavant terra dur)
 //   - low           : mute-2
 //
 // Usage : <ConfBadge confidence={0.84} />
@@ -26,7 +27,9 @@ function getLevel(c: number): "high" | "mid" | "low" {
 
 const fillClasses: Record<"high" | "mid" | "low", string> = {
   high: "bg-sage",
-  mid: "bg-terra",
+  // PR-DA-U2 : mid passe de bg-terra (Immovalue dur) à var(--accent)
+  // product-agnostic — violet sur Immoscan, terra sur Immovalue.
+  mid: "bg-[var(--accent)]",
   low: "bg-mute-2",
 };
 

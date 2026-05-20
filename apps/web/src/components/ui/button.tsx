@@ -9,10 +9,16 @@ import { cn } from "@/lib/utils";
 //
 // Variants :
 // - `default`     → .btn-primary (violet-grad + white, ring violet au focus)
+// - `accent`      → .btn-accent product-agnostic (suit var(--accent-grad) :
+//                   violet sur Immoscan, terra sur Immovalue). PRÉFÉRER cette
+//                   variant pour les CTA neutres qui doivent s'adapter au
+//                   produit courant (PR-DA-U2).
 // - `secondary`   → .btn (ink bg, bg/foreground inversé)
 // - `ghost`       → .btn-ghost (bg-2 hover, bordure --line)
 // - `outline`     → bordure ink, bg transparent, hover bg-2
-// - `terra`       → .btn-terra (terra-grad, à utiliser sur Immovalue)
+// - `terra`       → .btn-terra (terra-grad, à utiliser sur Immovalue —
+//                   conservé pour rétrocompat ; préférer `accent` pour les
+//                   nouveaux usages product-agnostic)
 // - `destructive` → ok shadcn (rouge bad)
 // - `link`        → texte violet souligné
 //
@@ -37,6 +43,16 @@ const buttonVariants = cva(
           "bg-violet-grad text-white border border-transparent",
           "shadow-lvl-1",
           "hover:shadow-lvl-2 hover:-translate-y-px",
+        ),
+        // .btn-accent : product-agnostic, suit data-product
+        // (violet sur Immoscan, terra sur Immovalue, etc.). Préférée à
+        // `default` (violet hardcodé) et `terra` (terra hardcodé) pour
+        // les CTA neutres qui doivent s'adapter au produit courant.
+        accent: cn(
+          "bg-[var(--accent-grad)] text-white border border-transparent",
+          "shadow-lvl-1",
+          "hover:shadow-lvl-2 hover:-translate-y-px",
+          "focus-visible:shadow-[var(--accent-ring)]",
         ),
         // .btn-terra : terra-grad (Immovalue CTA).
         terra: cn(

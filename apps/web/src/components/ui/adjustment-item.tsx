@@ -9,8 +9,11 @@ import { cn } from "@/lib/utils";
 // Layout grid : icône 36 / corps / impact aligné à droite.
 //
 // Variants :
-//   - pos : impact positif (sage-soft icon, sage-2 pct)
-//   - neg : impact négatif (terra-soft icon, terra-2 pct)
+//   - pos : impact positif (sage-soft icon, sage-2 pct) — status-positive,
+//           ne change pas par produit
+//   - neg : impact négatif — PR-DA-U2 : product-agnostic via var(--accent-*)
+//           (auparavant terra dur). Sur Immoscan : violet-soft / violet-deep,
+//           sur Immovalue : terra-soft / terra-deep. Le tag user-saisie idem.
 
 export type AdjustmentTone = "pos" | "neg";
 
@@ -21,7 +24,7 @@ export interface AdjustmentItemProps
   criterion: string;
   reason: string;
   /** Sources / tags affichés sous la raison. Tag `user: true` = mis en
-   *  évidence terra (saisie utilisateur). */
+   *  évidence avec la brand accent (saisie utilisateur) — suit data-product. */
   sources?: Array<{ label: string; user?: boolean }>;
   /** Pourcentage signé (ex. "+6%", "-12%"). */
   impactPct: string;
@@ -31,12 +34,15 @@ export interface AdjustmentItemProps
 
 const iconBgClasses: Record<AdjustmentTone, string> = {
   pos: "bg-sage-soft text-sage-2",
-  neg: "bg-terra-soft text-terra-deep",
+  // PR-DA-U2 : product-agnostic (violet sur Immoscan, terra sur Immovalue).
+  neg: "bg-[var(--accent-soft)] text-[var(--accent-deep)]",
 };
 
 const pctClasses: Record<AdjustmentTone, string> = {
   pos: "text-sage-2",
-  neg: "text-terra-2",
+  // PR-DA-U2 : product-agnostic — on retombe sur --accent-deep (suffisamment
+  // contrasté sur les deux brands ; --accent-2 serait un peu trop clair).
+  neg: "text-[var(--accent-deep)]",
 };
 
 const AdjustmentItem = React.forwardRef<HTMLDivElement, AdjustmentItemProps>(
@@ -89,7 +95,8 @@ const AdjustmentItem = React.forwardRef<HTMLDivElement, AdjustmentItemProps>(
                   className={cn(
                     "rounded-full px-1.5 py-0.5 font-mono text-[10px] font-medium tracking-[0.02em]",
                     src.user
-                      ? "bg-terra-soft text-terra-deep"
+                      // PR-DA-U2 : tag user-saisie product-agnostic.
+                      ? "bg-[var(--accent-soft)] text-[var(--accent-deep)]"
                       : "bg-bg-2 text-mute-2",
                   )}
                 >

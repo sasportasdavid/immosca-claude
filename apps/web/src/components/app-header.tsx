@@ -13,11 +13,27 @@ import {
 
 type Plan = "free" | "pro" | "pro_plus";
 
+// PR-DA-U3 — breadcrumb dynamique. Un crumb final sans `href` est rendu
+// comme `.here` (texte foncé), les autres comme liens `.crumb a`.
+export type BreadcrumbItem = {
+  label: string;
+  /** Si absent → segment courant (`.here`), sinon lien navigable. */
+  href?: string;
+};
+
 export type AppHeaderProps = {
   userEmail: string | null;
   userPlan: Plan | null;
   onLogout?: () => void;
   onUpgradeClick?: () => void;
+  /**
+   * Breadcrumb dynamique affiché en seconde rangée sous la nav principale,
+   * en suivant le pattern `.app-nav .crumb` du handoff DA unifiée. Composé
+   * côté route via `useLocation()` ou statiquement par la page parente. Si
+   * absent, la rangée breadcrumb n'est pas rendue (rétrocompat marketing /
+   * pages publiques où la nav reste neutre).
+   */
+  breadcrumbs?: BreadcrumbItem[];
 };
 
 const PLAN_LABEL: Record<Plan, string> = {
@@ -40,13 +56,23 @@ export function AppHeader({
   userPlan,
   onLogout,
   onUpgradeClick,
+  breadcrumbs,
 }: AppHeaderProps) {
   const isAuthenticated = userEmail !== null;
   const isFree = userPlan === "free";
+  const hasBreadcrumb = !!breadcrumbs && breadcrumbs.length > 0;
 
   return (
-    <header className="sticky top-0 z-30 h-14 w-full border-b border-border bg-card/85 backdrop-blur supports-[backdrop-filter]:bg-card/70">
-      <div className="mx-auto flex h-full max-w-[1280px] items-center gap-4 px-6">
+    <header
+      className={
+        // app-nav pattern (immoscan-unified.css §7) : sticky + backdrop blur +
+        // border-bottom soft. Le wrapping `app-nav` est appliqué pour que les
+        // classes `.crumb / .here / .sep` du CSS d'unification descendent
+        // correctement.
+        "app-nav sticky top-0 z-30 w-full border-b border-border bg-card/85 backdrop-blur supports-[backdrop-filter]:bg-card/70"
+      }
+    >
+      <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-4 px-6">
         {/* Logo */}
         <a href="/" className="flex items-center gap-2">
           <span
@@ -170,6 +196,41 @@ export function AppHeader({
           )}
         </div>
       </div>
+
+      {/* Seconde rangée — breadcrumb dynamique `.crumb` (pattern app-nav du
+          handoff). Rendue uniquement si la page parente fournit `breadcrumbs`.
+          Voir docs/design-integration.md pour le contrat composeur. */}
+      {hasBreadcrumb ? (
+        <div className="border-t border-line bg-bg/60">
+          <div className="mx-auto flex h-9 max-w-[1280px] items-center px-6">
+            <nav aria-label="Fil d'Ariane" className="crumb text-[12px]">
+              {breadcrumbs.map((item, i) => {
+                const isLast = i === breadcrumbs.length - 1;
+                const isCurrent = isLast || !item.href;
+                return (
+                  <span key={`${item.label}-${i}`} className="inline-flex items-baseline">
+                    {isCurrent ? (
+                      <span className="here text-ink font-medium">{item.label}</span>
+                    ) : (
+                      <a
+                        href={item.href}
+                        className="text-muted-foreground hover:text-ink transition-colors"
+                      >
+                        {item.label}
+                      </a>
+                    )}
+                    {!isLast ? (
+                      <span className="sep mx-2 text-faint" aria-hidden>
+                        ›
+                      </span>
+                    ) : null}
+                  </span>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
+      ) : null}
     </header>
   );
 }

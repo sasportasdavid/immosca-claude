@@ -2,17 +2,36 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-// StatusBadge — pastille de statut d'un bien Immovalue (value-tokens.css
-// §status badge). H24, font 11.5px, dot couleur courante.
+// StatusBadge — pastille de statut produit-agnostique (value-tokens.css
+// §status badge + immoscan-unified.css §8). H24, font 11.5px, dot couleur
+// courante.
 //
-// 5 status :
+// Vocabulaire ImmoValue (statuts d'un bien suivi) :
 //   - suivi   : neutre (gris)
-//   - discret : terra (à l'étude, privé)
-//   - public  : sage (publié, en vente publique)
+//   - discret : accent brand product-agnostic (PR-DA-U2 — auparavant terra
+//               dur). Violet sur Immoscan, terra sur Immovalue. À l'étude,
+//               privé : utilise la couleur de marque pour signifier "interne".
+//   - public  : sage (publié, en vente publique — status-positive,
+//               ne change pas par produit)
 //   - vendu   : ink fort (transaction conclue)
 //   - retire  : faint (retiré du marché)
+//
+// Vocabulaire ImmoScan (statuts d'un bien dans une analyse — PR-DA-U3) :
+//   - nouveau : accent soft (équivalent de discret côté ImmoValue — fraîcheur)
+//   - suivi   : neutre (réutilise le variant ImmoValue)
+//   - score   : sage soft (équivalent public — bien noté et publié dans
+//               l'analyse)
+//   - exclu   : ink (équivalent vendu — exclu du périmètre de notation)
 
-export type ListingStatus = "suivi" | "discret" | "public" | "vendu" | "retire";
+export type ListingStatus =
+  | "suivi"
+  | "discret"
+  | "public"
+  | "vendu"
+  | "retire"
+  | "nouveau"
+  | "score"
+  | "exclu";
 
 export interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   status: ListingStatus;
@@ -20,10 +39,18 @@ export interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> 
 
 const statusClasses: Record<ListingStatus, string> = {
   suivi: "bg-bg-2 text-muted-ink border-line",
-  discret: "bg-terra-soft text-terra-deep border-terra/20",
+  // PR-DA-U2 : product-agnostic via var(--accent-*).
+  discret:
+    "bg-[var(--accent-soft)] text-[var(--accent-deep)] [border-color:color-mix(in_oklab,var(--accent)_20%,transparent)]",
   public: "bg-sage-soft text-sage-2 border-sage/30",
   vendu: "bg-ink text-bg border-ink",
   retire: "bg-bg-2 text-faint border-line",
+  // PR-DA-U3 — vocabulaire ImmoScan, mêmes recettes que ci-dessus pour
+  // cohérence visuelle inter-produits.
+  nouveau:
+    "bg-[var(--accent-soft)] text-[var(--accent-deep)] [border-color:color-mix(in_oklab,var(--accent)_20%,transparent)]",
+  score: "bg-sage-soft text-sage-2 border-sage/30",
+  exclu: "bg-ink text-bg border-ink",
 };
 
 const statusLabels: Record<ListingStatus, string> = {
@@ -32,6 +59,9 @@ const statusLabels: Record<ListingStatus, string> = {
   public: "Public",
   vendu: "Vendu",
   retire: "Retiré",
+  nouveau: "Nouveau",
+  score: "Scoré",
+  exclu: "Exclu",
 };
 
 const StatusBadge = React.forwardRef<HTMLSpanElement, StatusBadgeProps>(
