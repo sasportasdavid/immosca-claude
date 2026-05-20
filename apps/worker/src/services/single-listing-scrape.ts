@@ -384,38 +384,73 @@ async function pageFunction(context) {
  * pour permettre au moins le fallback ville/CP côté pipeline.
  */
 async function scrapePapViaApify(url: string): Promise<SingleListing | null> {
-  try {
-    const result = await runApifyActor<Record<string, unknown>>({
-      actorId: "abotapi~pap-fr-scraper",
-      runInput: {
-        mode: "url",
-        urls: [url],
-        maxListings: 1,
-        maxPages: 1,
-        fetchDetails: true,
-        proxy: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"] },
-      },
-      timeoutSecs: 180,
-      memoryMbytes: 2048,
-    });
+  // Stratégie : extraire CP + type de bien depuis l'URL detail, construire
+  // une URL de SEARCH PAP de la commune, et utiliser l'actor azzouzana
+  // by-search-url (qu'on sait fonctionner — c'est celui qu'on utilise pour
+  // les analyses multi-URL avec succès). On filtre ensuite les résultats
+  // par `id` pour retrouver l'annonce.
+  //
+  // Format URL PAP detail :
+  //   /annonces/maison-saint-maur-des-fosses-94100-r438201542
+  // Type = "maison" / "appartement" / "terrain" / ...
+  const slugMatch = url.match(/\/annonces\/([^/?#]+)/);
+  if (slugMatch) {
+    const slug = slugMatch[1]!;
+    const cpMatch = slug.match(/-(\d{5})-r\d+$/);
+    const idMatch = slug.match(/-r(\d+)$/);
+    const typeMatch = slug.match(
+      /^(maison|appartement|terrain|immeuble|parking|garage|local|chambre|loft|studio)-/i,
+    );
 
-    const item = result.items[0];
-    if (item) {
-      return normalizePapApifyItem(item, url, result.runId);
+    if (cpMatch && idMatch) {
+      const codePostal = cpMatch[1]!;
+      const targetId = Number(idMatch[1]!);
+      const bienType = typeMatch ? typeMatch[1]!.toLowerCase() : "maison";
+
+      // Slug PAP search format :
+      //   https://www.pap.fr/annonce/vente-<type>s-<ville-slug>-<cp>
+      const villeSlug = slug
+        .replace(/-\d{5}-r\d+$/, "")
+        .replace(
+          /^(maison|appartement|terrain|immeuble|parking|garage|local|chambre|loft|studio)-/i,
+          "",
+        );
+      const searchUrl = `https://www.pap.fr/annonce/vente-${bienType}s-${villeSlug}-${codePostal}`;
+
+      logger.info("PAP search-by-commune strategy", {
+        targetId,
+        searchUrl,
+      });
+
+      try {
+        const result = await runApifyActor<Record<string, unknown>>({
+          actorId: "azzouzana~pap-fr-mass-products-scraper-by-search-url",
+          runInput: { startUrl: searchUrl, maxItemsToScrape: 200 },
+          timeoutSecs: 240,
+          memoryMbytes: 2048,
+        });
+        // Recherche l'annonce qui matche notre ID
+        const match = result.items.find((it) => Number(it.id) === targetId);
+        if (match) {
+          logger.info("PAP search-by-commune match found", { targetId });
+          return normalizePapApifyItem(match, url, result.runId);
+        }
+        logger.warn("PAP search-by-commune : aucun item ne matche l'ID", {
+          targetId,
+          totalScraped: result.items.length,
+        });
+      } catch (err) {
+        logger.warn("PAP search-by-commune failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
-  } catch (err) {
-    logger.warn("PAP Apify fallback failed", {
-      url,
-      error: err instanceof Error ? err.message : String(err),
-    });
   }
 
-  // Dernier recours : extraire le minimum depuis l'URL pour permettre
-  // au moins un fallback ville+CP en aval. Format URL PAP detail :
-  //   /annonces/maison-saint-maur-des-fosses-94100-r438201542
-  const slugMatch = url.match(/\/annonces\/([^/?#]+)/);
-  if (!slugMatch) return null;
-  const slug = slugMatch[1]!;
+  // Ultime fallback : extraction minimale depuis l'URL
+  const slugMatch2 = url.match(/\/annonces\/([^/?#]+)/);
+  if (!slugMatch2) return null;
+  const slug = slugMatch2[1]!;
   const cpMatch = slug.match(/-(\d{5})-r\d+$/);
   const idMatch = slug.match(/-r(\d+)$/);
   if (!cpMatch || !idMatch) return null;

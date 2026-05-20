@@ -216,6 +216,18 @@ function AdressePage() {
           </Button>
         </form>
 
+        {/* Warning PAP : leur anti-bot (Cloudflare Turnstile) bloque
+            même les navigateurs headless. L'extraction est instable. */}
+        {/pap\.fr/i.test(url) ? (
+          <div className="mt-3 rounded-md border border-warning/40 bg-warning-soft/50 p-3 text-[12.5px]">
+            <span className="font-semibold">PAP a un anti-bot Cloudflare strict</span>
+            {" — "}
+            l'extraction prend ~1 minute et peut échouer. Si possible, cherche
+            la même annonce sur SeLoger, Leboncoin ou Bien'ici (taux de succès
+            bien meilleur).
+          </div>
+        ) : null}
+
         {/* Active lookup */}
         {activeLookupId ? (
           <div className="mt-8">

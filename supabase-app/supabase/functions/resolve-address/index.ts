@@ -151,9 +151,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const urlHash = await sha256Hex(normalized);
 
   // 1. Check cache (any user's recent done lookup — partagé volontairement
-  //    pour économiser les coûts Apify, l'adresse n'est pas du PII)
+  //    pour économiser les coûts Apify, l'adresse n'est pas du PII).
+  //
+  // IMPORTANT : on n'inclut PAS les résultats avec resolution_source=none
+  // qui sont des "échecs déguisés" (le pipeline n'a rien trouvé de précis
+  // et a juste retourné ville+CP par fallback URL). Servir ces lookups en
+  // cache empêcherait toute nouvelle tentative — alors qu'on veut justement
+  // pouvoir retry (PAP par exemple où le scraping est instable).
   const cacheRes = await fetch(
-    `${SUPABASE_URL}/rest/v1/address_lookups?url_hash=eq.${urlHash}&status=eq.done&expires_at=gt.now&order=created_at.desc&limit=1`,
+    `${SUPABASE_URL}/rest/v1/address_lookups?url_hash=eq.${urlHash}&status=eq.done&resolution_source=in.(ademe,ban_reverse,scraped)&expires_at=gt.now&order=created_at.desc&limit=1`,
     {
       headers: {
         apikey: SUPABASE_SERVICE_ROLE_KEY,
