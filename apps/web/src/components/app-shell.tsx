@@ -53,7 +53,8 @@ export type AppShellRoute =
   | "pipeline"
   | "adresse"
   | "veilles"
-  | "plan";
+  | "plan"
+  | "billing";
 
 export type AppShellProps = {
   userEmail: string;
@@ -90,12 +91,12 @@ const NAV_ITEMS: readonly NavItem[] = [
   // on évite de promouvoir un point d'entrée qui marche mal sur PAP.
   // L'enrichissement adresse est maintenant systématique côté analyse
   // (cf. listings.resolution_source + address_confidence).
-  { id: "veilles", label: "Veilles", href: "/app/veilles", icon: Radar, enabled: false },
+  { id: "veilles", label: "Veilles", href: "/app/veilles", icon: Radar, enabled: true },
   { id: "pipeline", label: "Pipeline", href: "/app/pipeline", icon: KanbanSquare, enabled: true },
 ];
 
 const BOTTOM_ITEMS: readonly NavItem[] = [
-  { id: "plan", label: "Plan & facturation", href: "/app/plan", icon: Cog, enabled: false },
+  { id: "billing", label: "Plan & facturation", href: "/app/billing", icon: Cog, enabled: true },
 ];
 
 function initialsOf(email: string): string {
