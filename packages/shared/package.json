@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./schemas": "./src/schemas/index.ts",
     "./scoring": "./src/scoring/index.ts",
-    "./constants": "./src/constants.ts"
+    "./constants": "./src/constants.ts",
+    "./value": "./src/value/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
