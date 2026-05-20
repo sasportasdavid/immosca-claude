@@ -25,7 +25,10 @@ import {
 import * as React from "react";
 
 import { Wordmark } from "@/components/value/EstimationStepperLayout";
-import { useEstimerState } from "@/hooks/use-estimer-state";
+import {
+  useEstimerState,
+  type EstimerState,
+} from "@/hooks/use-estimer-state";
 import { requireAuth } from "@/lib/auth-guards";
 import { postEstimer } from "@/lib/value-api";
 import { cn } from "@/lib/utils";
@@ -42,86 +45,135 @@ interface StreamStep {
   duration: number;
 }
 
-const STEPS: StreamStep[] = [
-  {
-    key: "geo",
-    label: (
-      <>
-        On situe ton bien à <b className="text-ink">Gagny</b>
-      </>
-    ),
-    icon: <MapPinned className="h-4 w-4" strokeWidth={2} />,
-    startAt: 200,
-    duration: 1500,
-  },
-  {
-    key: "scan",
-    label: (
-      <>
-        On scanne ton quartier · <b className="text-ink">23 transactions</b>
-      </>
-    ),
-    icon: <Search className="h-4 w-4" strokeWidth={2} />,
-    startAt: 1700,
-    duration: 1800,
-  },
-  {
-    key: "photos",
-    label: (
-      <>
-        Analyse de tes <b className="text-ink">photos</b>
-      </>
-    ),
-    icon: <Camera className="h-4 w-4" strokeWidth={2} />,
-    startAt: 3500,
-    duration: 2000,
-  },
-  {
-    key: "comparables",
-    label: (
-      <>
-        Lecture de tes recherches{" "}
-        <b className="text-ink">SeLoger / Leboncoin</b>
-      </>
-    ),
-    icon: <Building2 className="h-4 w-4" strokeWidth={2} />,
-    startAt: 5500,
-    duration: 1700,
-  },
-  {
-    key: "risks",
-    label: <>Risques environnementaux & nuisances</>,
-    icon: <TriangleAlert className="h-4 w-4" strokeWidth={2} />,
-    startAt: 7200,
-    duration: 1100,
-  },
-  {
-    key: "transports",
-    label: <>Transports, écoles, services</>,
-    icon: <Train className="h-4 w-4" strokeWidth={2} />,
-    startAt: 8300,
-    duration: 900,
-  },
-  {
-    key: "these",
-    label: (
-      <>
-        Rédaction de la <b className="text-ink">thèse</b>
-      </>
-    ),
-    icon: <FileText className="h-4 w-4" strokeWidth={2} />,
-    startAt: 9200,
-    duration: 1100,
-  },
-];
+/**
+ * Construit la liste d'étapes à partir des inputs utilisateur. Les labels
+ * sont entièrement dérivés de `state` (ville, nombre de photos, nombre de
+ * liens comparables, type de bien) — JAMAIS de valeur en dur.
+ *
+ * Les étapes qui n'ont rien à traiter (0 photos, 0 liens) sont retirées
+ * pour ne pas mentir à l'utilisateur. Le timing relatif (startAt/duration)
+ * est recalculé en cascade pour rester cohérent.
+ */
+function buildSteps(state: EstimerState): StreamStep[] {
+  const ville =
+    state.ville?.trim() ||
+    state.address?.split(",")[0]?.trim() ||
+    "ton bien";
+  const isMaison = state.bien_data.type === "maison";
+  const typeLabel = isMaison ? "ta maison" : `ton ${state.bien_data.type ?? "appartement"}`;
+  const surface = state.bien_data.surface_carrez;
+  const nbPhotos = state.photos_urls.length;
+  const nbLiens = state.user_provided_urls.length;
 
-const TOTAL_DURATION = 10500;
+  // Timings cibles par étape (ms). On accumule en cascade pour calculer
+  // les startAt/duration sans recalcul manuel.
+  const timings: Array<{ key: string; duration: number; node: StreamStep }> = [];
+
+  let cursor = 200;
+  const pushStep = (
+    key: string,
+    label: React.ReactNode,
+    icon: React.ReactNode,
+    duration: number,
+  ) => {
+    timings.push({
+      key,
+      duration,
+      node: { key, label, icon, startAt: cursor, duration },
+    });
+    cursor += duration + 200; // gap entre étapes
+  };
+
+  pushStep(
+    "geo",
+    <>
+      On situe <b className="text-ink">{typeLabel}</b> à{" "}
+      <b className="text-ink">{ville}</b>
+    </>,
+    <MapPinned className="h-4 w-4" strokeWidth={2} />,
+    1500,
+  );
+
+  pushStep(
+    "scan",
+    <>
+      On scanne le quartier · <b className="text-ink">DVF, IRIS, OLL</b>
+    </>,
+    <Search className="h-4 w-4" strokeWidth={2} />,
+    1800,
+  );
+
+  if (nbPhotos > 0) {
+    pushStep(
+      "photos",
+      <>
+        Analyse de tes{" "}
+        <b className="text-ink">
+          {nbPhotos} photo{nbPhotos > 1 ? "s" : ""}
+        </b>
+      </>,
+      <Camera className="h-4 w-4" strokeWidth={2} />,
+      2000,
+    );
+  }
+
+  if (nbLiens > 0) {
+    pushStep(
+      "comparables",
+      <>
+        Lecture de tes{" "}
+        <b className="text-ink">
+          {nbLiens} lien{nbLiens > 1 ? "s" : ""} comparable{nbLiens > 1 ? "s" : ""}
+        </b>
+      </>,
+      <Building2 className="h-4 w-4" strokeWidth={2} />,
+      1700,
+    );
+  }
+
+  pushStep(
+    "risks",
+    <>Risques environnementaux & nuisances</>,
+    <TriangleAlert className="h-4 w-4" strokeWidth={2} />,
+    1100,
+  );
+
+  pushStep(
+    "transports",
+    <>Transports, écoles, services</>,
+    <Train className="h-4 w-4" strokeWidth={2} />,
+    900,
+  );
+
+  pushStep(
+    "these",
+    <>
+      Rédaction de la <b className="text-ink">thèse</b> ·{" "}
+      <b className="text-ink">
+        {surface > 0 ? `${surface} m²` : ""}
+      </b>
+    </>,
+    <FileText className="h-4 w-4" strokeWidth={2} />,
+    1100,
+  );
+
+  return timings.map((t) => t.node);
+}
 
 function StepCalculPage() {
   const navigate = useNavigate();
   const { state, patch } = useEstimerState();
   const [now, setNow] = React.useState(0);
   const startRef = React.useRef<number>(Date.now());
+
+  // Étapes recalculées à chaque rendu (memo sur state). Les labels sont
+  // dérivés des inputs utilisateur (ville, photos, liens) — pas de
+  // valeur hardcodée.
+  const steps = React.useMemo(() => buildSteps(state), [state]);
+  const totalDuration = React.useMemo(
+    () => steps.reduce((max, s) => Math.max(max, s.startAt + s.duration), 0),
+    [steps],
+  );
 
   // Ticker visuel (60 fps n'est pas nécessaire, 4 fps suffit pour
   // animer la liste).
@@ -169,13 +221,13 @@ function StepCalculPage() {
 
   // Quand la simulation est terminée, on redirige.
   React.useEffect(() => {
-    if (now >= TOTAL_DURATION) {
+    if (totalDuration > 0 && now >= totalDuration) {
       void navigate({
         to: "/estimer/resultat",
         search: { id: state.bien_id ?? "mock-bien-id" },
       });
     }
-  }, [now]);
+  }, [now, totalDuration]);
 
   return (
     <main
@@ -212,9 +264,9 @@ function StepCalculPage() {
           quartier, on lit tes photos, on relit tes recherches comparables.
         </p>
 
-        {/* Liste d'étapes */}
+        {/* Liste d'étapes — entièrement dérivée de state (user inputs) */}
         <ol className="mt-10 space-y-3">
-          {STEPS.map((s) => {
+          {steps.map((s) => {
             const status: StepStatus =
               now < s.startAt
                 ? "todo"

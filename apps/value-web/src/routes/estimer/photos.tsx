@@ -1,42 +1,131 @@
 // Tunnel · Étape 3 — Photos
 //
 // Drag & drop zone (input file natif), preview grid 3 colonnes avec X,
-// compteur N/10, info-bulle pédagogique. V1 : les URLs créées par
-// URL.createObjectURL() sont stockées en sessionStorage — pas d'upload
-// réel. Cf brief : "photos plus présentes que dans ImmoScan, plus de
-// blanc, moins de cards empilées".
+// compteur N/10, info-bulle pédagogique.
+//
+// Upload Supabase Storage (bucket `bien-photos`, privé, TTL signed URL 1h).
+// Path : `{auth.uid()}/{ts}-{n}.{ext}` si user loggé, `draft-{uuid}/...`
+// sinon. Les URLs stockées dans `state.photos_urls` sont des URLs signées
+// que le worker Claude Vision peut fetch directement.
+//
+// Avant cette PR le code utilisait URL.createObjectURL() qui crée des
+// `blob:https://...` côté browser uniquement — Claude Vision recevait
+// des 404 silencieux. Corrigé.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { ImagePlus, Sparkles, Upload, X } from "lucide-react";
+import { ImagePlus, Loader2, Sparkles, Upload, X } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@web/components/ui/button";
 import { EstimationStepperLayout } from "@/components/value/EstimationStepperLayout";
+import { useAuth } from "@/hooks/use-auth";
 import { useEstimerState } from "@/hooks/use-estimer-state";
+import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
 const MAX_PHOTOS = 10;
 const MIN_PHOTOS = 3;
+const BUCKET = "bien-photos";
+const SIGNED_URL_TTL_SECONDS = 3600; // 1h, ample pour que le worker fetch
+
+/**
+ * Récupère ou crée l'identifiant de session draft pour les uploads
+ * anonymes. Persiste dans sessionStorage pour qu'un rafraîchissement
+ * de page ne crée pas un nouveau dossier.
+ */
+function getOrCreateDraftId(): string {
+  const key = "immovalue.estimer.draftId";
+  if (typeof window === "undefined") return `draft-${crypto.randomUUID()}`;
+  let id = window.sessionStorage.getItem(key);
+  if (!id) {
+    id = `draft-${crypto.randomUUID()}`;
+    window.sessionStorage.setItem(key, id);
+  }
+  return id;
+}
 
 function StepPhotosPage() {
   const { state, patch } = useEstimerState();
+  const { session } = useAuth();
   const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
 
-  function handleFiles(files: FileList | null) {
+  async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
-    const urls = Array.from(files)
-      .filter((f) => f.type.startsWith("image/"))
-      // V1 : URL.createObjectURL() — pas d'upload S3/Supabase Storage.
-      // Limitation : ces URLs sont éphémères (réinitialisées au reload).
-      .map((f) => URL.createObjectURL(f));
-    const merged = [...state.photos_urls, ...urls].slice(0, MAX_PHOTOS);
-    patch("photos_urls", merged);
+    setUploadError(null);
+    setUploading(true);
+
+    const userScope = session?.user?.id ?? getOrCreateDraftId();
+    const images = Array.from(files).filter((f) => f.type.startsWith("image/"));
+
+    try {
+      // Upload séquentiel pour éviter de saturer Supabase Storage
+      // (latence < 500ms par photo, ordre déterministe pour preview).
+      const uploaded: string[] = [];
+      for (let i = 0; i < images.length; i++) {
+        const file = images[i];
+        if (!file) continue;
+        const ext = (file.name.split(".").pop() ?? "jpg").toLowerCase();
+        const path = `${userScope}/${Date.now()}-${i}.${ext}`;
+
+        const { error: uploadErr } = await supabase.storage
+          .from(BUCKET)
+          .upload(path, file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: file.type,
+          });
+        if (uploadErr) {
+          // eslint-disable-next-line no-console
+          console.error("[photos] upload failed", path, uploadErr);
+          throw uploadErr;
+        }
+
+        // URL signée publique-pendant-TTL → le worker Claude Vision la fetch
+        const { data: signed, error: signErr } = await supabase.storage
+          .from(BUCKET)
+          .createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
+        if (signErr || !signed) {
+          // eslint-disable-next-line no-console
+          console.error("[photos] sign failed", path, signErr);
+          throw signErr ?? new Error("sign_url_failed");
+        }
+        uploaded.push(signed.signedUrl);
+      }
+
+      const merged = [...state.photos_urls, ...uploaded].slice(0, MAX_PHOTOS);
+      patch("photos_urls", merged);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setUploadError(
+        `Upload échoué : ${msg}. Réessaye, ou continue sans photos (estimation moins précise).`,
+      );
+    } finally {
+      setUploading(false);
+    }
   }
 
-  function handleRemove(url: string) {
+  async function handleRemove(signedUrl: string) {
+    // Extrait le path depuis l'URL signée pour delete côté Storage.
+    // Format URL signée Supabase :
+    //   {origin}/storage/v1/object/sign/{bucket}/{path}?token=...
+    try {
+      const u = new URL(signedUrl);
+      const marker = `/object/sign/${BUCKET}/`;
+      const idx = u.pathname.indexOf(marker);
+      if (idx >= 0) {
+        const path = u.pathname.slice(idx + marker.length);
+        await supabase.storage.from(BUCKET).remove([path]);
+      }
+    } catch {
+      // best-effort — si la delete échoue (URL inattendue, perms),
+      // on retire quand même de la liste locale, le cron de nettoyage
+      // 24h s'occupera des orphelins draft-*.
+    }
     patch(
       "photos_urls",
-      state.photos_urls.filter((u) => u !== url),
+      state.photos_urls.filter((u) => u !== signedUrl),
     );
   }
 
@@ -69,9 +158,11 @@ function StepPhotosPage() {
       <button
         type="button"
         onClick={() => inputRef.current?.click()}
+        disabled={uploading}
         className={cn(
           "block w-full cursor-pointer rounded-r-xl border-2 border-dashed border-line-2 bg-card px-8 py-14 text-center transition-all",
           "hover:border-terra hover:bg-terra-soft",
+          uploading && "cursor-wait opacity-70",
         )}
       >
         <span className="mx-auto mb-3.5 inline-flex h-14 w-14 items-center justify-center rounded-r-lg bg-terra-soft text-terra-deep">
@@ -87,18 +178,34 @@ function StepPhotosPage() {
           JPG, PNG, HEIC · 25 Mo max par photo · compression automatique.
         </p>
         <span className="mt-4 inline-flex h-10 items-center gap-2 rounded-r bg-ink px-4 text-[13px] font-medium text-white">
-          <ImagePlus className="h-3.5 w-3.5" strokeWidth={2} />
-          Parcourir mes fichiers
+          {uploading ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+              Upload en cours…
+            </>
+          ) : (
+            <>
+              <ImagePlus className="h-3.5 w-3.5" strokeWidth={2} />
+              Parcourir mes fichiers
+            </>
+          )}
         </span>
         <input
           ref={inputRef}
           type="file"
           accept="image/*"
           multiple
+          disabled={uploading}
           className="hidden"
-          onChange={(e) => handleFiles(e.target.files)}
+          onChange={(e) => void handleFiles(e.target.files)}
         />
       </button>
+
+      {uploadError && (
+        <p className="mt-3 rounded-r border border-bad/30 bg-bad-soft px-4 py-2 text-[12.5px] text-bad-deep">
+          {uploadError}
+        </p>
+      )}
 
       {/* Compteur + progress */}
       <div className="mt-7 flex items-center gap-4">
