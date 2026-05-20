@@ -36,6 +36,7 @@ import {
   resolveSkuFromPriceId,
 } from "../_shared/stripe-skus.ts";
 import { createAdminClient } from "../_shared/supabase-admin.ts";
+import { triggerTask } from "../_shared/trigger-dev.ts";
 
 const STRIPE_SECRET = Deno.env.get("STRIPE_SECRET_KEY");
 const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET");
@@ -146,6 +147,15 @@ async function handleCheckoutCompleted(
   supabase: ReturnType<typeof createAdminClient>,
   session: Stripe.Checkout.Session,
 ) {
+  // ── ImmoValue : paywall publication (one-shot 49€) ───────────────
+  // On branche AVANT la logique ImmoScan car ces sessions n'ont pas
+  // de `immoscan_profile_id` mais un `product='value_publish'` +
+  // `bien_id` + `user_id` (cf. value-biens-publish/index.ts).
+  if (session.metadata?.product === "value_publish") {
+    await handleValuePublishCompleted(supabase, session);
+    return;
+  }
+
   const profileId = session.metadata?.immoscan_profile_id;
   const sku = (session.metadata?.immoscan_sku ?? null) as BillingSku | null;
   if (!profileId) {
@@ -430,4 +440,80 @@ async function handleInvoiceFailed(
     .update({ subscription_status: "past_due" })
     .eq("stripe_customer_id", String(invoice.customer));
   console.log(`[invoice.failed] sub=${subId} marked past_due`);
+}
+
+// ──────────────────────────────────────────────────────────────────
+// ImmoValue : paywall publication (cf. spec IMMOVALUE §6.3)
+// ──────────────────────────────────────────────────────────────────
+async function handleValuePublishCompleted(
+  supabase: ReturnType<typeof createAdminClient>,
+  session: Stripe.Checkout.Session,
+) {
+  const bienId = session.metadata?.bien_id;
+  const userId = session.metadata?.user_id;
+  if (!bienId) {
+    console.warn("[value_publish] no bien_id in metadata, session=", session.id);
+    return;
+  }
+
+  const nowIso = new Date().toISOString();
+
+  // Idempotence : on n'écrase `paywall_unlocked_at` que s'il est NULL.
+  // Si le webhook est rejoué après une bascule déjà effectuée (cas rare,
+  // ex. user clique 2× et 2 sessions sont créées), on ne perd pas le
+  // timestamp initial.
+  const { data: bienBefore, error: selErr } = await supabase
+    .schema("value" as any)
+    .from("biens")
+    .select("id, status, paywall_unlocked_at")
+    .eq("id", bienId)
+    .maybeSingle();
+
+  if (selErr) {
+    console.error(`[value_publish] select bien=${bienId} failed:`, selErr);
+    throw new Error(`select bien failed: ${selErr.message}`);
+  }
+  if (!bienBefore) {
+    console.warn(`[value_publish] bien=${bienId} not found (deleted ?)`);
+    return;
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    status: "public",
+    published_at: bienBefore.status === "public" ? undefined : nowIso,
+    stripe_payment_id: session.id,
+    updated_at: nowIso,
+  };
+  if (!bienBefore.paywall_unlocked_at) {
+    updatePayload.paywall_unlocked_at = nowIso;
+  }
+  // Cleanup undefined keys (Supabase JS ne les ignore pas toujours).
+  for (const k of Object.keys(updatePayload)) {
+    if (updatePayload[k] === undefined) delete updatePayload[k];
+  }
+
+  const { error: updErr } = await supabase
+    .schema("value" as any)
+    .from("biens")
+    .update(updatePayload)
+    .eq("id", bienId);
+
+  if (updErr) {
+    console.error(`[value_publish] update bien=${bienId} failed:`, updErr);
+    throw new Error(`update bien failed: ${updErr.message}`);
+  }
+
+  // Déclenche la task d'envoi d'emails aux favoris (best-effort).
+  try {
+    await triggerTask("value-notify-public-switch", { bien_id: bienId });
+  } catch (err) {
+    console.error(`[value_publish] notify task failed for bien=${bienId}:`, err);
+    // On ne re-throw pas : la bascule DB est faite, c'est le critère
+    // de réussite Stripe. Le worker veille-marche / un retry manuel
+    // pourra rejouer la notif si besoin.
+  }
+
+  console.log(
+    `[value_publish] bien=${bienId} → public (user=${userId ?? "?"}, session=${session.id})`,
+  );
 }
