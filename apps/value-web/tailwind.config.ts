@@ -73,9 +73,13 @@ export default {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
         },
+        // Tailwind utility `bg-accent` / `text-accent-foreground` rebindée sur le
+        // nouveau nom de token shadcn `--surface-hover` (le `--accent` brut est
+        // désormais réservé à la brand product-agnostic livrée par
+        // immoscan-unified.css). Compat shadcn future garantie sans collision.
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: "hsl(var(--surface-hover))",
+          foreground: "hsl(var(--surface-hover-foreground))",
         },
         popover: {
           DEFAULT: "hsl(var(--popover))",

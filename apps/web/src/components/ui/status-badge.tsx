@@ -7,8 +7,11 @@ import { cn } from "@/lib/utils";
 //
 // 5 status :
 //   - suivi   : neutre (gris)
-//   - discret : terra (à l'étude, privé)
-//   - public  : sage (publié, en vente publique)
+//   - discret : accent brand product-agnostic (PR-DA-U2 — auparavant terra
+//               dur). Violet sur Immoscan, terra sur Immovalue. À l'étude,
+//               privé : utilise la couleur de marque pour signifier "interne".
+//   - public  : sage (publié, en vente publique — status-positive,
+//               ne change pas par produit)
 //   - vendu   : ink fort (transaction conclue)
 //   - retire  : faint (retiré du marché)
 
@@ -20,7 +23,9 @@ export interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> 
 
 const statusClasses: Record<ListingStatus, string> = {
   suivi: "bg-bg-2 text-muted-ink border-line",
-  discret: "bg-terra-soft text-terra-deep border-terra/20",
+  // PR-DA-U2 : product-agnostic via var(--accent-*).
+  discret:
+    "bg-[var(--accent-soft)] text-[var(--accent-deep)] [border-color:color-mix(in_oklab,var(--accent)_20%,transparent)]",
   public: "bg-sage-soft text-sage-2 border-sage/30",
   vendu: "bg-ink text-bg border-ink",
   retire: "bg-bg-2 text-faint border-line",

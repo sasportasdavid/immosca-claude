@@ -6,6 +6,11 @@ import { cn } from "@/lib/utils";
 // Badge — aligné sur `.chip` du handoff : h-22 (5.5), px-2, font 11.5px,
 // rounded-full, border --line. Variants couleurs (success/warning/danger/
 // info) en complément, mappés sur les soft/* shadcn.
+//
+// Variant `accent` (PR-DA-U2) : product-agnostic, lit var(--accent-soft) +
+// var(--accent-deep) — violet/violet-soft sur Immoscan, terra/terra-soft sur
+// Immovalue. Préférer `accent` pour les nouveaux usages product-agnostic ;
+// `violet` / `terra` restent disponibles quand on veut une teinte explicite.
 
 const badgeVariants = cva(
   "inline-flex items-center gap-1.5 h-[22px] rounded-full px-2 text-[11.5px] font-medium transition-colors whitespace-nowrap",
@@ -21,6 +26,9 @@ const badgeVariants = cva(
         violet: "bg-violet-soft text-violet-deep border border-transparent",
         terra: "bg-terra-soft text-terra-deep border border-transparent",
         sage: "bg-sage-soft text-sage-2 border border-transparent",
+        // PR-DA-U2 : product-agnostic via var(--accent-soft / --accent-deep).
+        accent:
+          "bg-[var(--accent-soft)] text-[var(--accent-deep)] border border-transparent",
       },
     },
     defaultVariants: {

@@ -19,15 +19,13 @@
    ═════════════════════════════════════════════════════════════════════ */
 
 /* ─── Accent par produit ─────────────────────────────────────────── */
-/* NOTE Claude Code (hotfix DA-U1) : on N'écrit PAS sur :root pour ne pas
-   écraser le `--accent` HSL conventionnel de shadcn (surface hover/focus)
-   qui vit dans index.css. Le brand `--accent` n'existe que dans le scope
-   [data-product]. Comme apps/web/index.html et apps/value-web/index.html
-   posent data-product sur <body> ET sur #root, l'UI entière est toujours
-   dans ce scope — l'unification reste effective.
-
-   PR-DA-U2 renommera le token shadcn `--accent` → `--surface-hover` pour
-   supprimer définitivement la collision de noms. */
+/* PR-DA-U2 : la collision avec le `--accent` HSL shadcn a été éliminée
+   en renommant ce dernier en `--surface-hover` dans index.css (et en
+   rebindant la classe Tailwind `bg-accent` dessus via tailwind.config).
+   On peut donc poser le brand `--accent` sur :root comme l'intention
+   originale du handoff — la valeur :root sert de défaut Immoscan et
+   reste surchargeable par n'importe quel scope [data-product]. */
+:root,
 [data-product="immoscan"] {
   --accent:        var(--violet);
   --accent-2:      var(--violet-2);
@@ -163,3 +161,29 @@
 
 /* ─── 10. Focus ring suit l'accent ───────────────────────────────── */
 :focus-visible { box-shadow: var(--accent-ring); }
+
+/* ─── Aliases rétrocompat ────────────────────────────────────────── */
+/* Pour les emplacements qui utiliseraient encore .btn-terra ou .btn-primary
+   en CSS brut (sans passer par le composant <Button>). Inoffensif sinon. */
+.btn-terra,
+.btn-primary {
+  background: var(--accent-grad);
+  color: white;
+  border: 1px solid transparent;
+  box-shadow: var(--lvl-1), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.btn-terra:hover,
+.btn-primary:hover {
+  box-shadow: var(--lvl-2), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+
+/* ─── Roadmap PR2 handoff — statut ───────────────────────────────── */
+/* □ .iv-nav → .app-nav : honoré par construction (zéro occurrence
+     .iv-nav dans le code, .app-nav défini ci-dessus).
+   □ .iv-logo : zéro occurrence dans le code TSX/CSS (rien à préserver).
+   □ Atoms éditoriaux (.conf-badge, .these, .adj-item, .status-badge,
+     .stepper) : déjà partagés via apps/web/src/components/ui/*. La
+     variabilisation par var(--accent-*) est posée ci-dessus pour les
+     classes CSS résiduelles ; les composants React équivalents sont
+     rendus product-agnostic dans le même PR.
+   □ .btn-terra alias .btn-accent : posé ci-dessus. */
