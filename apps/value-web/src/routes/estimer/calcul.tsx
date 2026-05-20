@@ -26,6 +26,7 @@ import * as React from "react";
 
 import { Wordmark } from "@/components/value/EstimationStepperLayout";
 import { useEstimerState } from "@/hooks/use-estimer-state";
+import { requireAuth } from "@/lib/auth-guards";
 import { postEstimer } from "@/lib/value-api";
 import { cn } from "@/lib/utils";
 
@@ -283,4 +284,12 @@ function StepRow({ step, status }: { step: StreamStep; status: StepStatus }) {
 
 export const Route = createFileRoute("/estimer/calcul")({
   component: StepCalculPage,
+  // Auth requise pour créer un bien : on linke le bien_id retourné par
+  // l'edge fn `value-estimer` au user_id courant. Si pas auth, retour
+  // sur /estimer/compte (qui reprendra le tunnel après signup).
+  beforeLoad: () =>
+    requireAuth({
+      from: "/estimer/calcul",
+      loginPath: "/estimer/compte?afterAuth=calcul",
+    }),
 });

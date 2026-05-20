@@ -14,21 +14,41 @@ import { Button } from "@web/components/ui/button";
 import { Eyebrow } from "@web/components/ui/eyebrow";
 import { EstimationStepperLayout } from "@/components/value/EstimationStepperLayout";
 import { LiensComparablesInput } from "@/components/value/LiensComparablesInput";
+import { useAuth } from "@/hooks/use-auth";
 import { useEstimerState } from "@/hooks/use-estimer-state";
 
 function StepLiensComparablesPage() {
   const navigate = useNavigate();
   const { state, patch } = useEstimerState();
+  const { isAuthenticated } = useAuth();
 
+  // Auth gate : si l'user n'est pas loggé, on intercale /estimer/compte
+  // (avec afterAuth=calcul) pour qu'il crée son compte avant le call
+  // à l'edge fn `value-estimer`. Sinon on enchaîne directement sur
+  // l'écran de calcul.
   function handleContinue() {
-    void navigate({ to: "/estimer/compte" });
+    if (isAuthenticated) {
+      void navigate({ to: "/estimer/calcul" });
+    } else {
+      void navigate({
+        to: "/estimer/compte",
+        search: { afterAuth: "calcul" } as never,
+      });
+    }
   }
 
   function handleSkip() {
     // On efface les URLs au cas où l'utilisateur en avait saisi puis
     // change d'avis — comportement explicite "sans lien".
     patch("user_provided_urls", []);
-    void navigate({ to: "/estimer/compte" });
+    if (isAuthenticated) {
+      void navigate({ to: "/estimer/calcul" });
+    } else {
+      void navigate({
+        to: "/estimer/compte",
+        search: { afterAuth: "calcul" } as never,
+      });
+    }
   }
 
   return (

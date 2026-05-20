@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as EstimerIndexRouteImport } from './routes/estimer/index'
+import { Route as BiensIndexRouteImport } from './routes/biens/index'
 import { Route as AnnoncesIndexRouteImport } from './routes/annonces/index'
 import { Route as EstimerResultatRouteImport } from './routes/estimer/resultat'
 import { Route as EstimerPhotosRouteImport } from './routes/estimer/photos'
@@ -18,6 +19,10 @@ import { Route as EstimerLiensComparablesRouteImport } from './routes/estimer/li
 import { Route as EstimerDescriptionRouteImport } from './routes/estimer/description'
 import { Route as EstimerCompteRouteImport } from './routes/estimer/compte'
 import { Route as EstimerCalculRouteImport } from './routes/estimer/calcul'
+import { Route as AuthVerifierEmailRouteImport } from './routes/auth/verifier-email'
+import { Route as AuthSignupRouteImport } from './routes/auth/signup'
+import { Route as AuthLoginRouteImport } from './routes/auth/login'
+import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 import { Route as AnnoncesBienIdRouteImport } from './routes/annonces/$bienId'
 import { Route as BiensBienIdIndexRouteImport } from './routes/biens/$bienId/index'
 
@@ -29,6 +34,11 @@ const IndexRoute = IndexRouteImport.update({
 const EstimerIndexRoute = EstimerIndexRouteImport.update({
   id: '/estimer/',
   path: '/estimer/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BiensIndexRoute = BiensIndexRouteImport.update({
+  id: '/biens/',
+  path: '/biens/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AnnoncesIndexRoute = AnnoncesIndexRouteImport.update({
@@ -66,6 +76,26 @@ const EstimerCalculRoute = EstimerCalculRouteImport.update({
   path: '/estimer/calcul',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthVerifierEmailRoute = AuthVerifierEmailRouteImport.update({
+  id: '/auth/verifier-email',
+  path: '/auth/verifier-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSignupRoute = AuthSignupRouteImport.update({
+  id: '/auth/signup',
+  path: '/auth/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthLoginRoute = AuthLoginRouteImport.update({
+  id: '/auth/login',
+  path: '/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AnnoncesBienIdRoute = AnnoncesBienIdRouteImport.update({
   id: '/annonces/$bienId',
   path: '/annonces/$bienId',
@@ -80,6 +110,10 @@ const BiensBienIdIndexRoute = BiensBienIdIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/annonces/$bienId': typeof AnnoncesBienIdRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/signup': typeof AuthSignupRoute
+  '/auth/verifier-email': typeof AuthVerifierEmailRoute
   '/estimer/calcul': typeof EstimerCalculRoute
   '/estimer/compte': typeof EstimerCompteRoute
   '/estimer/description': typeof EstimerDescriptionRoute
@@ -87,12 +121,17 @@ export interface FileRoutesByFullPath {
   '/estimer/photos': typeof EstimerPhotosRoute
   '/estimer/resultat': typeof EstimerResultatRoute
   '/annonces/': typeof AnnoncesIndexRoute
+  '/biens/': typeof BiensIndexRoute
   '/estimer/': typeof EstimerIndexRoute
   '/biens/$bienId/': typeof BiensBienIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/annonces/$bienId': typeof AnnoncesBienIdRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/signup': typeof AuthSignupRoute
+  '/auth/verifier-email': typeof AuthVerifierEmailRoute
   '/estimer/calcul': typeof EstimerCalculRoute
   '/estimer/compte': typeof EstimerCompteRoute
   '/estimer/description': typeof EstimerDescriptionRoute
@@ -100,6 +139,7 @@ export interface FileRoutesByTo {
   '/estimer/photos': typeof EstimerPhotosRoute
   '/estimer/resultat': typeof EstimerResultatRoute
   '/annonces': typeof AnnoncesIndexRoute
+  '/biens': typeof BiensIndexRoute
   '/estimer': typeof EstimerIndexRoute
   '/biens/$bienId': typeof BiensBienIdIndexRoute
 }
@@ -107,6 +147,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/annonces/$bienId': typeof AnnoncesBienIdRoute
+  '/auth/callback': typeof AuthCallbackRoute
+  '/auth/login': typeof AuthLoginRoute
+  '/auth/signup': typeof AuthSignupRoute
+  '/auth/verifier-email': typeof AuthVerifierEmailRoute
   '/estimer/calcul': typeof EstimerCalculRoute
   '/estimer/compte': typeof EstimerCompteRoute
   '/estimer/description': typeof EstimerDescriptionRoute
@@ -114,6 +158,7 @@ export interface FileRoutesById {
   '/estimer/photos': typeof EstimerPhotosRoute
   '/estimer/resultat': typeof EstimerResultatRoute
   '/annonces/': typeof AnnoncesIndexRoute
+  '/biens/': typeof BiensIndexRoute
   '/estimer/': typeof EstimerIndexRoute
   '/biens/$bienId/': typeof BiensBienIdIndexRoute
 }
@@ -122,6 +167,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/annonces/$bienId'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/signup'
+    | '/auth/verifier-email'
     | '/estimer/calcul'
     | '/estimer/compte'
     | '/estimer/description'
@@ -129,12 +178,17 @@ export interface FileRouteTypes {
     | '/estimer/photos'
     | '/estimer/resultat'
     | '/annonces/'
+    | '/biens/'
     | '/estimer/'
     | '/biens/$bienId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/annonces/$bienId'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/signup'
+    | '/auth/verifier-email'
     | '/estimer/calcul'
     | '/estimer/compte'
     | '/estimer/description'
@@ -142,12 +196,17 @@ export interface FileRouteTypes {
     | '/estimer/photos'
     | '/estimer/resultat'
     | '/annonces'
+    | '/biens'
     | '/estimer'
     | '/biens/$bienId'
   id:
     | '__root__'
     | '/'
     | '/annonces/$bienId'
+    | '/auth/callback'
+    | '/auth/login'
+    | '/auth/signup'
+    | '/auth/verifier-email'
     | '/estimer/calcul'
     | '/estimer/compte'
     | '/estimer/description'
@@ -155,6 +214,7 @@ export interface FileRouteTypes {
     | '/estimer/photos'
     | '/estimer/resultat'
     | '/annonces/'
+    | '/biens/'
     | '/estimer/'
     | '/biens/$bienId/'
   fileRoutesById: FileRoutesById
@@ -162,6 +222,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AnnoncesBienIdRoute: typeof AnnoncesBienIdRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthLoginRoute: typeof AuthLoginRoute
+  AuthSignupRoute: typeof AuthSignupRoute
+  AuthVerifierEmailRoute: typeof AuthVerifierEmailRoute
   EstimerCalculRoute: typeof EstimerCalculRoute
   EstimerCompteRoute: typeof EstimerCompteRoute
   EstimerDescriptionRoute: typeof EstimerDescriptionRoute
@@ -169,6 +233,7 @@ export interface RootRouteChildren {
   EstimerPhotosRoute: typeof EstimerPhotosRoute
   EstimerResultatRoute: typeof EstimerResultatRoute
   AnnoncesIndexRoute: typeof AnnoncesIndexRoute
+  BiensIndexRoute: typeof BiensIndexRoute
   EstimerIndexRoute: typeof EstimerIndexRoute
   BiensBienIdIndexRoute: typeof BiensBienIdIndexRoute
 }
@@ -187,6 +252,13 @@ declare module '@tanstack/react-router' {
       path: '/estimer'
       fullPath: '/estimer/'
       preLoaderRoute: typeof EstimerIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/biens/': {
+      id: '/biens/'
+      path: '/biens'
+      fullPath: '/biens/'
+      preLoaderRoute: typeof BiensIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/annonces/': {
@@ -238,6 +310,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EstimerCalculRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/verifier-email': {
+      id: '/auth/verifier-email'
+      path: '/auth/verifier-email'
+      fullPath: '/auth/verifier-email'
+      preLoaderRoute: typeof AuthVerifierEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/signup': {
+      id: '/auth/signup'
+      path: '/auth/signup'
+      fullPath: '/auth/signup'
+      preLoaderRoute: typeof AuthSignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/login': {
+      id: '/auth/login'
+      path: '/auth/login'
+      fullPath: '/auth/login'
+      preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/annonces/$bienId': {
       id: '/annonces/$bienId'
       path: '/annonces/$bienId'
@@ -258,6 +358,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AnnoncesBienIdRoute: AnnoncesBienIdRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
+  AuthLoginRoute: AuthLoginRoute,
+  AuthSignupRoute: AuthSignupRoute,
+  AuthVerifierEmailRoute: AuthVerifierEmailRoute,
   EstimerCalculRoute: EstimerCalculRoute,
   EstimerCompteRoute: EstimerCompteRoute,
   EstimerDescriptionRoute: EstimerDescriptionRoute,
@@ -265,6 +369,7 @@ const rootRouteChildren: RootRouteChildren = {
   EstimerPhotosRoute: EstimerPhotosRoute,
   EstimerResultatRoute: EstimerResultatRoute,
   AnnoncesIndexRoute: AnnoncesIndexRoute,
+  BiensIndexRoute: BiensIndexRoute,
   EstimerIndexRoute: EstimerIndexRoute,
   BiensBienIdIndexRoute: BiensBienIdIndexRoute,
 }

@@ -17,22 +17,63 @@ import { Wordmark } from "@/components/value/EstimationStepperLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
+// Search params attendus :
+// - afterAuth : 'calcul' (par défaut, depuis le tunnel) ou 'resultat'
+//   (depuis le gate de /estimer/resultat).
+// - bienId   : (optionnel) bien à afficher si afterAuth=resultat.
+export interface CompteSearch {
+  afterAuth?: "calcul" | "resultat";
+  bienId?: string;
+}
+
+function validateCompteSearch(raw: Record<string, unknown>): CompteSearch {
+  const afterAuth =
+    raw.afterAuth === "calcul" || raw.afterAuth === "resultat"
+      ? raw.afterAuth
+      : undefined;
+  const bienId = typeof raw.bienId === "string" ? raw.bienId : undefined;
+  return { afterAuth, bienId };
+}
+
 function StepComptePage() {
   const navigate = useNavigate();
-  const { isAuthenticated, signInWithPassword, signUpWithPassword, signInWithGoogle } =
-    useAuth();
+  const search = Route.useSearch();
+  const {
+    isAuthenticated,
+    signInWithPassword,
+    signUpWithPassword,
+    signInWithGoogle,
+  } = useAuth();
   const [mode, setMode] = React.useState<"signup" | "login">("signup");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
 
-  // Si déjà loggé → skip direct au calcul.
+  // Décide la destination post-auth selon le contexte d'arrivée.
+  function goAfterAuth() {
+    if (search.afterAuth === "resultat" && search.bienId) {
+      void navigate({
+        to: "/estimer/resultat",
+        search: { id: search.bienId },
+      });
+      return;
+    }
+    // Défaut tunnel : on enchaîne sur le calcul streaming (qui fait
+    // l'appel à value-estimer maintenant que l'user est authentifié).
+    void navigate({ to: "/estimer/calcul" });
+  }
+
+  // Si déjà loggé en arrivant → on saute l'écran. `goAfterAuth` n'est
+  // volontairement pas dans deps : on n'a besoin de réagir qu'au flip
+  // de l'état auth (et `goAfterAuth` lit `search` à chaque appel).
+  const goRef = React.useRef(goAfterAuth);
+  goRef.current = goAfterAuth;
   React.useEffect(() => {
     if (isAuthenticated) {
-      void navigate({ to: "/estimer/calcul" });
+      goRef.current();
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -40,11 +81,24 @@ function StepComptePage() {
     setLoading(true);
     try {
       if (mode === "signup") {
-        await signUpWithPassword(email.trim(), password);
+        const data = await signUpWithPassword(email.trim(), password);
+        // Si Supabase exige une confirmation email, on bascule sur la
+        // page d'attente — l'user reviendra via /auth/callback.
+        if (data.session === null) {
+          const nextPath =
+            search.afterAuth === "resultat" && search.bienId
+              ? `/estimer/resultat?id=${encodeURIComponent(search.bienId)}`
+              : "/estimer/calcul";
+          void navigate({
+            to: "/auth/verifier-email",
+            search: { email: email.trim(), next: nextPath } as never,
+          });
+          return;
+        }
       } else {
         await signInWithPassword(email.trim(), password);
       }
-      void navigate({ to: "/estimer/calcul" });
+      goAfterAuth();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Une erreur est survenue.";
@@ -59,7 +113,10 @@ function StepComptePage() {
     setLoading(true);
     try {
       await signInWithGoogle();
-      // Redirection OAuth — pas besoin de navigate ici.
+      // Redirection OAuth — la suite se passe dans /auth/callback puis
+      // on atterrit sur /biens par défaut. Pour préserver le tunnel, on
+      // devra à terme passer `next` au callback — V1 : l'user revient
+      // sur /biens et peut relancer une estimation s'il le souhaite.
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Connexion Google indisponible.";
@@ -250,4 +307,5 @@ function GoogleIcon() {
 
 export const Route = createFileRoute("/estimer/compte")({
   component: StepComptePage,
+  validateSearch: validateCompteSearch,
 });

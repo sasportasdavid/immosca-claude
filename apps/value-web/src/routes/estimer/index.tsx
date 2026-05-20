@@ -1,8 +1,9 @@
 // Tunnel · Étape 1 — Adresse
 //
-// Input adresse plein largeur, autocomplete BAN mock (suggestions
-// hard-codées V1), carte placeholder en SVG, CTA Continuer → /estimer/description.
-// Le bouton "Comment ça marche ?" ouvre un Sheet pédagogique.
+// Input adresse plein largeur avec autocomplete BAN réel (api-adresse.data.gouv.fr),
+// carte placeholder avec un pin centré sur les coords lat/lng quand on a une
+// suggestion résolue, CTA Continuer → /estimer/description. Le bouton "Comment
+// ça marche ?" ouvre un Sheet pédagogique.
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
@@ -25,40 +26,82 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@web/components/ui/sheet";
+import { AddressAutocompleteInput } from "@/components/value/AddressAutocompleteInput";
 import { EstimationStepperLayout } from "@/components/value/EstimationStepperLayout";
+import {
+  resolveBanAddress,
+  useBanAutocomplete,
+  type BanSuggestion,
+} from "@/hooks/use-ban-autocomplete";
 import { useEstimerState } from "@/hooks/use-estimer-state";
-import { cn } from "@/lib/utils";
-
-// Suggestions BAN mockées V1 — quand l'utilisateur tape, on filtre
-// par includes. Pas de vrai appel à api-adresse.data.gouv.fr ici.
-const MOCK_SUGGESTIONS = [
-  { label: "12 rue de la Gare, 93220 Gagny", confidence: 99, iris: "Le Chénay" },
-  { label: "12 rue de la Gare, 75001 Paris", confidence: 92, iris: "Halles" },
-  {
-    label: "12 rue de la Garenne, 92250 La Garenne-Colombes",
-    confidence: 78,
-    iris: "Centre",
-  },
-] as const;
 
 function StepAdressePage() {
   const navigate = useNavigate();
-  const { state, patch } = useEstimerState();
+  const { state, patchAddress } = useEstimerState();
   const [address, setAddress] = React.useState(state.address);
-  const [showSuggestions, setShowSuggestions] = React.useState(false);
+  const { suggestions, isLoading, error } = useBanAutocomplete(address);
 
   const trimmed = address.trim();
-  const selected = trimmed.length >= 3;
+  // On considère qu'on a une "vraie" sélection si on a un couple lat/lng
+  // résolu par BAN. Sinon on accepte aussi le texte libre >= 3 chars
+  // (l'utilisateur peut continuer même si BAN est down).
+  const hasResolvedCoords = state.lat !== null && state.lng !== null;
+  const canContinue = trimmed.length >= 3;
 
-  const filtered = React.useMemo(() => {
-    if (trimmed.length < 2) return [];
-    const q = trimmed.toLowerCase();
-    return MOCK_SUGGESTIONS.filter((s) => s.label.toLowerCase().includes(q));
-  }, [trimmed]);
+  function commitSuggestion(s: BanSuggestion) {
+    setAddress(s.label);
+    patchAddress({
+      address: s.label,
+      lat: s.lat,
+      lng: s.lng,
+      code_postal: s.postcode || null,
+      ville: s.city || null,
+      code_insee: s.codeInsee,
+    });
+  }
 
-  function handleContinue() {
-    if (!selected) return;
-    patch("address", trimmed);
+  function handleAddressChange(text: string) {
+    setAddress(text);
+    // Quand l'utilisateur modifie manuellement l'adresse, on invalide les
+    // coords précédemment résolues (sinon on garderait des lat/lng obsolètes).
+    if (text !== state.address) {
+      patchAddress({
+        address: text,
+        lat: null,
+        lng: null,
+        code_postal: null,
+        ville: null,
+        code_insee: null,
+      });
+    }
+  }
+
+  async function handleContinue() {
+    if (!canContinue) return;
+
+    // Si on a déjà des coords résolues et que le texte n'a pas changé, on go.
+    if (hasResolvedCoords && trimmed === state.address) {
+      void navigate({ to: "/estimer/description" });
+      return;
+    }
+
+    // Sinon : last call BAN pour résoudre l'adresse libre.
+    const resolved = await resolveBanAddress(trimmed);
+    if (resolved) {
+      commitSuggestion(resolved);
+      void navigate({ to: "/estimer/description" });
+      return;
+    }
+
+    // BAN down ou rien trouvé : on stocke quand même le texte libre.
+    patchAddress({
+      address: trimmed,
+      lat: null,
+      lng: null,
+      code_postal: null,
+      ville: null,
+      code_insee: null,
+    });
     void navigate({ to: "/estimer/description" });
   }
 
@@ -88,8 +131,10 @@ function StepAdressePage() {
             type="button"
             variant="terra"
             size="lg"
-            disabled={!selected}
-            onClick={handleContinue}
+            disabled={!canContinue}
+            onClick={() => {
+              void handleContinue();
+            }}
           >
             Continuer
             <ArrowRight className="h-4 w-4" strokeWidth={2.5} />
@@ -97,112 +142,58 @@ function StepAdressePage() {
         </div>
       }
     >
-      {/* Input + suggestions */}
-      <div className="relative">
-        <MapPin
-          aria-hidden
-          className="absolute left-5 top-[18px] h-[18px] w-[18px] text-mute-2"
-          strokeWidth={2}
-        />
-        <input
-          type="text"
-          value={address}
-          onChange={(e) => {
-            setAddress(e.target.value);
-            setShowSuggestions(true);
-          }}
-          onFocus={() => setShowSuggestions(true)}
-          onBlur={() => {
-            // Délai pour permettre le click sur une suggestion.
-            setTimeout(() => setShowSuggestions(false), 150);
-          }}
-          placeholder="Numéro, rue, ville, code postal"
-          autoComplete="off"
-          className={cn(
-            "h-[60px] w-full rounded-r-lg border border-line-2 bg-card pl-13 pr-12 text-[16px] text-ink shadow-lvl-1",
-            "focus-visible:border-terra focus-visible:outline-none focus-visible:shadow-ring-terra",
-          )}
-          style={{ paddingLeft: 52 }}
-        />
-        {trimmed.length > 0 && (
-          <button
-            type="button"
-            aria-label="Effacer"
-            onClick={() => setAddress("")}
-            className="absolute right-4 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full bg-bg-2 text-mute-2 hover:text-ink"
-          >
-            <X className="h-3 w-3" strokeWidth={2.5} />
-          </button>
-        )}
+      {/* Input + suggestions BAN (réel) */}
+      <AddressAutocompleteInput
+        value={address}
+        onChange={handleAddressChange}
+        onSelectSuggestion={commitSuggestion}
+        suggestions={suggestions}
+        isLoading={isLoading}
+        error={error}
+        placeholder="Numéro, rue, ville, code postal"
+        rightSlot={
+          trimmed.length > 0 ? (
+            <button
+              type="button"
+              aria-label="Effacer"
+              onClick={() => handleAddressChange("")}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-bg-2 text-mute-2 hover:text-ink"
+            >
+              <X className="h-3 w-3" strokeWidth={2.5} />
+            </button>
+          ) : undefined
+        }
+      />
 
-        {showSuggestions && filtered.length > 0 && (
-          <ul className="absolute z-10 mt-1.5 w-full overflow-hidden rounded-r-lg border border-line bg-card p-1.5 shadow-lvl-2">
-            {filtered.map((s, i) => (
-              <li key={s.label}>
-                <button
-                  type="button"
-                  onMouseDown={(e) => {
-                    // onMouseDown pour devancer le onBlur.
-                    e.preventDefault();
-                    setAddress(s.label);
-                    setShowSuggestions(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-r-sm px-3 py-2.5 text-left text-[13.5px] text-ink-2 hover:bg-bg-2",
-                    i === 0 && "bg-terra-soft text-terra-deep",
-                  )}
-                >
-                  <MapPin
-                    aria-hidden
-                    className={cn(
-                      "h-3.5 w-3.5",
-                      i === 0 ? "text-terra" : "text-mute-2",
-                    )}
-                    strokeWidth={2}
-                  />
-                  <span className="flex-1">{s.label}</span>
-                  <span
-                    className={cn(
-                      "rounded-r-xs px-1.5 py-0.5 font-mono text-[10px]",
-                      i === 0
-                        ? "bg-terra/20 text-terra-deep"
-                        : "bg-bg-2 text-mute-2",
-                    )}
-                  >
-                    BAN · {s.confidence}%
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Confirmation card. Affichée quand une adresse "résolue" est
-          sélectionnée — V1 : on l'affiche dès qu'il y a 3+ caractères
-          pour ne pas mentir sur un appel BAN qu'on ne fait pas. */}
-      {selected && (
+      {/* Confirmation card. Affichée seulement quand BAN a résolu des coords. */}
+      {hasResolvedCoords && (
         <div className="mt-5 grid grid-cols-[36px_1fr_auto] items-center gap-3.5 rounded-r-lg border border-line bg-card px-4 py-4">
           <span className="flex h-9 w-9 items-center justify-center rounded-r bg-sage-soft text-[#2F5340]">
             <Check className="h-4 w-4" strokeWidth={2.5} />
           </span>
           <div>
             <div className="text-[14px] font-medium text-ink">
-              {address || "Adresse à confirmer"}
+              {state.address || "Adresse à confirmer"}
             </div>
             <div className="mt-1 flex flex-wrap gap-2 font-mono text-[11px] text-mute-2">
-              <span className="rounded-r-xs bg-bg-2 px-1.5 py-0.5">
-                INSEE 93032
-              </span>
-              <span className="rounded-r-xs bg-bg-2 px-1.5 py-0.5">
-                IRIS 930320206
-              </span>
-              <span className="rounded-r-xs bg-bg-2 px-1.5 py-0.5">
-                Le Chénay
-              </span>
+              {state.code_insee && (
+                <span className="rounded-r-xs bg-bg-2 px-1.5 py-0.5">
+                  INSEE {state.code_insee}
+                </span>
+              )}
+              {state.code_postal && (
+                <span className="rounded-r-xs bg-bg-2 px-1.5 py-0.5">
+                  CP {state.code_postal}
+                </span>
+              )}
+              {state.ville && (
+                <span className="rounded-r-xs bg-bg-2 px-1.5 py-0.5">
+                  {state.ville}
+                </span>
+              )}
             </div>
           </div>
-          <span className="text-[12.5px] text-violet">Métadonnées indicatives</span>
+          <span className="text-[12.5px] text-violet">Géocodage BAN</span>
         </div>
       )}
 
@@ -277,6 +268,11 @@ function StepAdressePage() {
         <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-r-xs border border-line bg-white/95 px-3 py-2 text-[12px]">
           <span className="h-1.5 w-1.5 rounded-full bg-terra" />
           {trimmed || "Adresse à saisir"}
+          {hasResolvedCoords && state.lat !== null && state.lng !== null && (
+            <span className="ml-1 font-mono text-[10.5px] text-mute-2 tnum">
+              {state.lat.toFixed(4)}, {state.lng.toFixed(4)}
+            </span>
+          )}
         </div>
       </div>
     </EstimationStepperLayout>

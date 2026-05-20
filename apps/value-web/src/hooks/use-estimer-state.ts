@@ -55,6 +55,14 @@ export interface EstimerBienData {
 
 export interface EstimerState {
   address: string;
+  // Coordonnées + métadonnées BAN issues de l'autocomplete. `null` tant
+  // qu'aucune suggestion n'a été résolue (ex: utilisateur a tapé une adresse
+  // libre et le call de résolution a échoué).
+  lat: number | null;
+  lng: number | null;
+  code_postal: string | null;
+  ville: string | null;
+  code_insee: string | null;
   bien_data: EstimerBienData;
   photos_urls: string[];
   user_provided_urls: string[];
@@ -64,6 +72,11 @@ export interface EstimerState {
 
 const defaultState: EstimerState = {
   address: "",
+  lat: null,
+  lng: null,
+  code_postal: null,
+  ville: null,
+  code_insee: null,
   bien_data: {
     type: "T3",
     surface_carrez: 62,
@@ -133,6 +146,24 @@ export function useEstimerState() {
     setState((s) => ({ ...s, bien_data: { ...s.bien_data, ...bien } }));
   }, []);
 
+  /**
+   * Applique d'un coup une suggestion BAN au state (label + coords + meta).
+   * Plus pratique que d'enchaîner 6 `patch()` séparés depuis l'autocomplete.
+   */
+  const patchAddress = useCallback(
+    (addr: {
+      address: string;
+      lat: number | null;
+      lng: number | null;
+      code_postal: string | null;
+      ville: string | null;
+      code_insee: string | null;
+    }) => {
+      setState((s) => ({ ...s, ...addr }));
+    },
+    [],
+  );
+
   const reset = useCallback(() => {
     setState(defaultState);
     if (typeof window !== "undefined") {
@@ -144,6 +175,7 @@ export function useEstimerState() {
     state,
     patch,
     patchBien,
+    patchAddress,
     reset,
   };
 }
