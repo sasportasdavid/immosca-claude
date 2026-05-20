@@ -1,0 +1,258 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;450;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  ImmoValue — Design tokens (duplique apps/web/src/index.css).
+  Direction Linear / Attio / Qonto (validée mai 2026).
+  Palette stone warm-neutral + violet brand + accent terra (Immovalue).
+  Mode clair uniquement.
+  Source : design system handoff Claude Design (tokens.css + value-tokens.css).
+
+  Convention :
+  - Variables shadcn (--background, --primary, --border, ...) en HSL :
+    consommées par les composants shadcn/ui via hsl(var(--*)).
+  - Variables handoff (--bg, --violet, --terra, --ink, ...) en HEX/RGB :
+    consommées par les composants UI custom et les helpers (.eyebrow, .mono...).
+  Les deux décrivent les MÊMES couleurs. Le double registre est volontaire
+  pour permettre un diff lisible avec le handoff original.
+*/
+
+@layer base {
+  :root {
+    /* ─────────────────────────────────────────────────────────────
+       1) Tokens shadcn (HSL) — convention shadcn/ui (hsl(var(--*)))
+       ───────────────────────────────────────────────────────────── */
+
+    /* Typo */
+    --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+    --font-display: "Inter", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+    --font-serif: "Instrument Serif", "Times New Roman", serif;
+
+    /* Radius. Échelle handoff : 4 (badges) / 6 (inputs, buttons) / 8 (cards)
+       / 12 (modals, sheets). --radius est la base "lg" des cards. */
+    --radius: 0.5rem;
+    --radius-xl: 0.75rem;           /* 12px — modals, sheets */
+
+    /* Surfaces & texte — stone warm-neutral */
+    --background: 60 9% 98%;        /* #FAFAF9 */
+    --foreground: 24 10% 10%;       /* #1C1917 */
+
+    --card: 0 0% 100%;              /* #FFFFFF */
+    --card-foreground: 24 10% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 10% 10%;
+
+    /* Brand violet — équivalent design "accent" */
+    --primary: 248 71% 58%;         /* #5B47E0 */
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 250 56% 50%;   /* #4A38C7 */
+    --primary-soft: 251 67% 95%;    /* #EEEBFB */
+    /* Gradient CTA primary subtil (handoff écran 1, seul gradient autorisé). */
+    --primary-gradient-from: 246 73% 60%; /* #6452E3 */
+    --primary-gradient-to:   248 71% 58%; /* #5B47E0 (= --primary) */
+
+    --secondary: 60 5% 96%;         /* stone-100 */
+    --secondary-foreground: 28 6% 25%; /* stone-700 #44403C */
+
+    --muted: 60 5% 96%;
+    --muted-foreground: 33 5% 32%;  /* #57534E */
+    --tertiary-foreground: 28 6% 64%; /* stone-400 #A8A29E — captions discrètes */
+
+    /* Shadcn convention : accent = surface douce hover/focus, pas la brand */
+    --accent: 60 5% 96%;
+    --accent-foreground: 28 6% 25%;
+
+    /* Sémantique d'état */
+    --success: 142 76% 36%;             /* #16A34A */
+    --success-foreground: 0 0% 100%;
+    --success-soft: 141 84% 93%;        /* #DCFCE7 */
+    --success-soft-foreground: 142 76% 29%; /* #15803D */
+
+    --warning: 21 90% 48%;              /* #EA580C */
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 32 100% 92%;        /* #FFEDD5 */
+    --warning-soft-foreground: 17 80% 34%; /* #9A3412 */
+
+    --destructive: 0 73% 50%;           /* #DC2626 */
+    --destructive-foreground: 0 0% 100%;
+    --destructive-soft: 0 93% 94%;      /* #FEE2E2 */
+    --destructive-soft-foreground: 0 73% 35%; /* #991B1B */
+
+    --info: 217 91% 53%;                /* #2563EB */
+    --info-foreground: 0 0% 100%;
+    --info-soft: 213 97% 92%;           /* #DBEAFE */
+    --info-soft-foreground: 220 71% 40%; /* #1E40AF */
+
+    --border: 20 6% 90%;            /* stone-200 #E7E5E4 — bordures fines */
+    --input: 20 6% 83%;             /* stone-300 #D6D3D1 — bordure inputs (plus contrasté) */
+    --ring: 28 6% 25%;              /* #44403C focus border */
+
+    /* Scoring couleurs sémantiques */
+    --score-excellent: 142 76% 36%; /* #16A34A — score >= 75 */
+    --score-good: 21 90% 48%;       /* #EA580C — score 50-74 */
+    --score-poor: 0 73% 50%;        /* #DC2626 — score < 50 */
+
+    /* DPE — couleurs ADEME officielles */
+    --dpe-a: 122 51% 39%;           /* #319834 */
+    --dpe-b: 117 44% 50%;           /* #50B848 */
+    --dpe-c: 74 60% 52%;            /* #AED136 */
+    --dpe-d: 57 100% 50%;           /* #FFF200 */
+    --dpe-e: 43 98% 53%;            /* #FDB913 */
+    --dpe-f: 20 89% 54%;            /* #F36F21 */
+    --dpe-g: 358 84% 52%;           /* #ED1C24 */
+
+    /* ─────────────────────────────────────────────────────────────
+       2) Tokens handoff (HEX/RGB) — convention tokens.css / value-tokens.css
+       ───────────────────────────────────────────────────────────── */
+
+    /* Surfaces — stone warm */
+    --bg: #FAFAF9;
+    --bg-2: #F5F5F4;            /* stone-100 */
+    --bg-3: #EFEDEB;
+    --card-bg: #FFFFFF;
+    --ink: #1C1917;             /* stone-900 */
+    --ink-2: #292524;           /* stone-800 */
+    --muted-ink: #57534E;       /* stone-600 */
+    --mute-2: #78716C;          /* stone-500 */
+    --faint: #A8A29E;           /* stone-400 */
+    --line: #E7E5E4;            /* stone-200 */
+    --line-2: #D6D3D1;          /* stone-300 */
+    --line-soft: rgba(28, 25, 23, 0.06);
+
+    /* Brand violet */
+    --violet: #5B47E0;
+    --violet-2: #6452E3;
+    --violet-deep: #4A37C7;
+    --violet-soft: #EEEBFB;
+    --violet-grad: linear-gradient(180deg, #6452E3 0%, #5B47E0 100%);
+    --violet-grad-2: linear-gradient(135deg, #7C6CF0 0%, #5B47E0 60%, #4A37C7 100%);
+
+    /* Accent terra (Immovalue) */
+    --terra: #D97757;
+    --terra-2: #C76544;
+    --terra-deep: #A8482A;
+    --terra-soft: #FBEDE5;
+    --terra-soft-2: #F6DFD2;
+    --terra-grad: linear-gradient(180deg, #E08767 0%, #D97757 100%);
+    --terra-grad-2: linear-gradient(135deg, #E8957A 0%, #D97757 55%, #B8593A 100%);
+
+    /* Sage — positif doux Immovalue */
+    --sage: #7C9885;
+    --sage-2: #6A8773;
+    --sage-soft: #E8EFE9;
+
+    /* Status (alignés avec --success/--warning/--destructive/--info shadcn) */
+    --ok: #16A34A;
+    --ok-soft: #DCFCE7;
+    --warn: #EA580C;
+    --warn-soft: #FFEDD5;
+    --bad: #DC2626;
+    --bad-soft: #FEE2E2;
+    --info-hex: #2563EB;
+    --info-soft-hex: #DBEAFE;
+
+    /* DPE (alias hex) */
+    --dpe-a-hex: #319834;
+    --dpe-b-hex: #50B848;
+    --dpe-c-hex: #AED136;
+    --dpe-d-hex: #FFF200;
+    --dpe-e-hex: #FDB913;
+    --dpe-f-hex: #F36F21;
+    --dpe-g-hex: #ED1C24;
+
+    /* Confiance / photos Immovalue */
+    --conf-high: var(--sage);
+    --conf-mid: var(--terra);
+    --conf-low: var(--mute-2);
+    --photo-bg: #EFE9E4;
+    --photo-bg-2: #E5DDD5;
+
+    /* Type (alias direct des --font-* shadcn, noms handoff) */
+    --sans: "Inter", system-ui, -apple-system, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --serif: "Instrument Serif", "Times New Roman", serif;
+
+    /* Radii */
+    --r-xs: 4px;
+    --r-sm: 6px;
+    --r:    8px;
+    --r-md: 10px;
+    --r-lg: 12px;
+    --r-xl: 16px;
+    --r-2xl: 24px;
+
+    /* Shadows */
+    --lvl-1: 0 1px 2px rgba(28, 25, 23, 0.04), 0 1px 1px rgba(28, 25, 23, 0.02);
+    --lvl-2: 0 4px 12px -2px rgba(28, 25, 23, 0.08), 0 2px 4px rgba(28, 25, 23, 0.04);
+    --lvl-3: 0 20px 40px -12px rgba(28, 25, 23, 0.16), 0 8px 16px -4px rgba(28, 25, 23, 0.06);
+    --ring-violet: 0 0 0 3px rgba(91, 71, 224, 0.18);
+    --ring-terra: 0 0 0 3px rgba(217, 119, 87, 0.20);
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv11", "ss01", "ss03";
+  }
+
+  /* Focus visible — ring violet du handoff sur tous les éléments focusables. */
+  :focus-visible {
+    outline: none;
+    box-shadow: var(--ring-violet);
+    border-radius: 4px;
+  }
+}
+
+@layer utilities {
+  /* Tabular numerics — pour les colonnes de chiffres alignés. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Mono helper (handoff) — JetBrains Mono + tnum + zero (zéro slashé). */
+  .mono {
+    font-family: var(--mono);
+    font-feature-settings: "tnum", "zero";
+  }
+
+  /* Eyebrow — petit label all-caps tracking large (handoff). */
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--mute-2);
+  }
+  .eyebrow-violet {
+    color: var(--violet);
+  }
+
+  /* Serif italique — accents éditoriaux (titres thèse, wordmark Immovalue). */
+  .serif-it {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+  }
+
+  /* Gradient subtil CTA primary (seul gradient autorisé par la DA). */
+  .bg-primary-gradient {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--primary-gradient-from)) 0%,
+      hsl(var(--primary-gradient-to)) 100%
+    );
+  }
+}

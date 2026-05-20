@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      // Local d'abord (overrides ImmoValue), puis fallback apps/web pour les
+      // composants ui partagés (@/components/ui/X, @/lib/utils). Ce fallback
+      // permet à un fichier d'apps/web/src/components/ui/form.tsx (qui fait
+      // `import { Label } from "@/components/ui/label"`) de résoudre correctement
+      // depuis value-web — l'alias @web/* dépend du même mécanisme.
+      "@/*": ["./src/*", "../web/src/*"],
+      "@web/*": ["../web/src/*"]
+    },
+    "types": ["vite/client"],
+    "noEmit": true
+  },
+  "include": ["src/**/*", "vite.config.ts"],
+  "exclude": ["node_modules", "dist"]
+}
