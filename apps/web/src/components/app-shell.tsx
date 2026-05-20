@@ -3,8 +3,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Cog,
   Folder,
+  Heart,
   Home,
   KanbanSquare,
   LogOut,
@@ -14,7 +14,6 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -32,18 +31,19 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-// AppShell : sidebar 232px fixe + topbar 48px sticky + slot main.
-// Chrome canonique de l'app authentifiée (handoff écrans 6 et 7).
+// AppShell — chrome canonique de l'app authentifiée (handoff Phase 2).
+// Sidebar 232px fixe + topbar 48px sticky + slot main.
+// Re-skin tokens stone/violet : voir Dashboard.html / Veilles.html handoff.
 //
-// PR1 — seul "Dashboard" est navigable. "Mes analyses / Pipeline / Veilles /
-// Plan" sont rendus mais en état disabled avec tooltip "Disponible bientôt"
-// (décision PO : on pose le chrome final dès PR1, pas de header marketing
-// horizontal sur /dashboard).
+// Layout handoff :
+// - Sidebar : bg-bg (#FAFAF9), border-r line, sections "Travail" / "À venir"
+// - Logo : mark violet-grad 22×22 avec "I" blanc + "Immoscan" + point violet
+// - CTA "Nouvelle analyse" : violet-grad sticky en haut de la sidebar
+// - Plan widget : bloc violet-soft gradient en bas de sidebar (Pro/Pro+/Business)
+// - Topbar : back/forward chevrons + cmdK placeholder + user cluster (avatar + plan badge)
 //
-// Sections sidebar manquantes intentionnellement en PR1 :
-// - section "Récents" : pas d'analyses encore → masquée
-// - widget Plan usage : besoin du compteur d'analyses du mois → PR3
-// Le slot bottom de la sidebar reste vide pour l'instant, on l'enrichira.
+// Active state nav : bg-bg-2 + text-ink + icon violet (pas border-l, c'est la
+// version handoff actuelle — voir lignes 28-32 de Dashboard.html).
 
 type Plan = "free" | "pro" | "pro_plus" | "business";
 
@@ -91,12 +91,15 @@ const NAV_ITEMS: readonly NavItem[] = [
   // on évite de promouvoir un point d'entrée qui marche mal sur PAP.
   // L'enrichissement adresse est maintenant systématique côté analyse
   // (cf. listings.resolution_source + address_confidence).
-  { id: "veilles", label: "Veilles", href: "/app/veilles", icon: Radar, enabled: true },
   { id: "pipeline", label: "Pipeline", href: "/app/pipeline", icon: KanbanSquare, enabled: true },
 ];
 
+const COMING_ITEMS: readonly NavItem[] = [
+  { id: "veilles", label: "Veilles", href: "/app/veilles", icon: Radar, enabled: true },
+];
+
 const BOTTOM_ITEMS: readonly NavItem[] = [
-  { id: "billing", label: "Plan & facturation", href: "/app/billing", icon: Cog, enabled: true },
+  { id: "billing", label: "Plan & facturation", href: "/app/billing", icon: Heart, enabled: true },
 ];
 
 function initialsOf(email: string): string {
@@ -108,6 +111,19 @@ function initialsOf(email: string): string {
   return (local.slice(0, 2) || "??").toUpperCase();
 }
 
+function nameOf(email: string): string {
+  const local = email.split("@")[0] ?? "";
+  const parts = local.split(/[._-]+/).filter(Boolean);
+  if (parts[0]) {
+    const first = parts[0]!;
+    const last = parts[1];
+    const capFirst = first.charAt(0).toUpperCase() + first.slice(1);
+    if (last) return `${capFirst} ${last.charAt(0).toUpperCase()}.`;
+    return capFirst;
+  }
+  return email;
+}
+
 function SidebarItem({
   item,
   isActive,
@@ -116,8 +132,9 @@ function SidebarItem({
   isActive: boolean;
 }) {
   const Icon = item.icon;
+  // .sb-link handoff : h-30, padding 0 10px, rounded r-sm, gap 10px, text 13px
   const baseClasses =
-    "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors w-full";
+    "flex items-center gap-2.5 h-[30px] px-2.5 rounded-r-sm text-[13px] font-normal tracking-[-0.005em] transition-colors w-full";
 
   if (!item.enabled) {
     return (
@@ -125,13 +142,13 @@ function SidebarItem({
         <TooltipTrigger asChild>
           <span
             aria-disabled="true"
-            className={cn(
-              baseClasses,
-              "cursor-not-allowed text-tertiary-foreground select-none",
-            )}
+            className={cn(baseClasses, "cursor-not-allowed text-faint select-none")}
           >
-            <Icon className="h-4 w-4 shrink-0" />
+            <Icon className="h-3.5 w-3.5 shrink-0 stroke-[1.8]" />
             <span className="flex-1">{item.label}</span>
+            <span className="font-mono text-[9px] tracking-[0.08em] uppercase text-faint">
+              Bientôt
+            </span>
           </span>
         </TooltipTrigger>
         <TooltipContent side="right">Disponible bientôt</TooltipContent>
@@ -144,84 +161,147 @@ function SidebarItem({
       href={item.href}
       className={cn(
         baseClasses,
+        "[&>svg]:text-mute-2",
         isActive
-          ? "bg-primary-soft text-primary"
-          : "text-secondary-foreground hover:bg-secondary hover:text-foreground",
+          ? "bg-bg-2 text-ink font-medium [&>svg]:text-violet"
+          : "text-muted-ink hover:bg-bg-2 hover:text-ink",
       )}
     >
-      <Icon className="h-4 w-4 shrink-0" />
+      <Icon className="h-3.5 w-3.5 shrink-0 stroke-[1.8]" />
       <span className="flex-1">{item.label}</span>
     </a>
+  );
+}
+
+function SidebarSection({ label }: { label: string }) {
+  return (
+    <div className="mt-[18px] px-2.5 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-mute-2">
+      {label}
+    </div>
+  );
+}
+
+function PlanWidget({ userPlan }: { userPlan: Plan }) {
+  // Bloc "Plan Pro" handoff : violet-soft gradient + border violet 18% + r
+  // Affiché uniquement pour les plans payants (Free a son CTA "Passer Pro" dans la topbar)
+  if (userPlan === "free") return null;
+  const planLabel = PLAN_LABEL[userPlan];
+  return (
+    <div
+      className={cn(
+        "mt-2 rounded-r p-3",
+        "border border-violet/20",
+        "bg-gradient-to-b from-violet-soft to-violet-soft/40",
+      )}
+    >
+      <div className="text-[11px] font-semibold uppercase tracking-[0.04em] text-violet-deep">
+        Plan {planLabel}
+      </div>
+      <div className="mt-1.5 text-[12px] leading-[1.4] text-ink-2">
+        <span className="font-mono">8/10</span> analyses ·{" "}
+        <span className="font-mono">3/3</span> veilles
+        <br />
+        Renouvellement le 28 mai.
+      </div>
+    </div>
+  );
+}
+
+function BrandLogo() {
+  // .sb-brand handoff : mark violet-grad 22×22 + nom Immoscan + dot violet
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 text-[14px] font-semibold tracking-[-0.012em] text-ink">
+      <span
+        aria-hidden="true"
+        className={cn(
+          "inline-flex h-[22px] w-[22px] items-center justify-center rounded-r-sm",
+          "bg-violet-grad text-white text-[12px] font-bold",
+          "shadow-lvl-1",
+        )}
+        style={{ boxShadow: "var(--lvl-1), inset 0 1px 0 rgba(255,255,255,0.25)" }}
+      >
+        I
+      </span>
+      <span>
+        Immoscan
+        <span className="ml-[-3px] font-bold text-violet">.</span>
+      </span>
+    </div>
   );
 }
 
 function Sidebar({
   currentRoute,
   onNewAnalysis,
+  userPlan,
 }: {
   currentRoute?: AppShellRoute;
   onNewAnalysis?: () => void;
+  userPlan: Plan;
 }) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-20 hidden w-[232px] flex-col border-r border-border bg-card md:flex">
+    <aside
+      className={cn(
+        "fixed inset-y-0 left-0 z-20 hidden w-[232px] flex-col px-3 py-3.5 md:flex",
+        "bg-bg border-r border-line",
+      )}
+    >
       {/* Logo */}
-      <div className="flex h-12 items-center gap-2 border-b border-border px-4">
-        <span
-          aria-hidden="true"
-          className="inline-flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground"
-        >
-          <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-            <path
-              d="M5 13V8.5A1.5 1.5 0 0 1 6.5 7h2A1.5 1.5 0 0 1 10 8.5V13M3 13h13M10 13v-2.5A1.5 1.5 0 0 1 11.5 9h1A1.5 1.5 0 0 1 14 10.5V13M14 13h3"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
-        </span>
-        <span className="font-display text-[14px] font-semibold tracking-tight">
-          ImmoScan
-        </span>
-      </div>
+      <BrandLogo />
 
-      {/* CTA "Nouvelle analyse" */}
-      <div className="p-3">
-        <Button
-          type="button"
-          size="default"
-          className="w-full justify-start"
-          onClick={onNewAnalysis}
-          disabled={!onNewAnalysis}
+      {/* CTA "Nouvelle analyse" — violet-grad, h-32, kbd N à droite */}
+      <button
+        type="button"
+        onClick={onNewAnalysis}
+        disabled={!onNewAnalysis}
+        className={cn(
+          "mt-4 mb-1.5 flex h-8 items-center gap-2 px-2.5",
+          "rounded-r-sm bg-violet-grad text-white",
+          "text-[12.5px] font-medium",
+          "shadow-lvl-1",
+          "transition-shadow hover:shadow-lvl-2",
+          "focus-visible:outline-none focus-visible:shadow-ring-violet",
+          "disabled:opacity-50 disabled:cursor-not-allowed",
+        )}
+        style={{ boxShadow: "var(--lvl-1), inset 0 1px 0 rgba(255,255,255,0.18)" }}
+      >
+        <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+        <span>Nouvelle analyse</span>
+        <kbd
+          className={cn(
+            "ml-auto px-1.5 py-0.5 rounded-[3px]",
+            "font-mono text-[10px]",
+            "bg-white/20 border border-white/20 text-white",
+          )}
         >
-          <Plus className="h-4 w-4" />
-          Nouvelle analyse
-          <kbd className="ml-auto rounded border border-primary-foreground/30 bg-primary-foreground/10 px-1.5 py-0.5 font-mono text-[10px]">
-            N
-          </kbd>
-        </Button>
-      </div>
+          N
+        </kbd>
+      </button>
 
-      {/* Nav primary */}
-      <nav className="flex-1 overflow-y-auto px-3 py-1">
-        <ul className="space-y-0.5">
-          {NAV_ITEMS.map((item) => (
-            <li key={item.id}>
-              <SidebarItem item={item} isActive={currentRoute === item.id} />
-            </li>
-          ))}
-        </ul>
+      {/* Section "Travail" */}
+      <SidebarSection label="Travail" />
+      <nav className="flex flex-col gap-px">
+        {NAV_ITEMS.map((item) => (
+          <SidebarItem key={item.id} item={item} isActive={currentRoute === item.id} />
+        ))}
       </nav>
 
-      {/* Bottom nav */}
-      <div className="border-t border-border p-3">
-        <ul className="space-y-0.5">
-          {BOTTOM_ITEMS.map((item) => (
-            <li key={item.id}>
-              <SidebarItem item={item} isActive={currentRoute === item.id} />
-            </li>
-          ))}
-        </ul>
-      </div>
+      {/* Section "À venir" */}
+      <SidebarSection label="À venir" />
+      <nav className="flex flex-col gap-px">
+        {COMING_ITEMS.map((item) => (
+          <SidebarItem key={item.id} item={item} isActive={currentRoute === item.id} />
+        ))}
+        {BOTTOM_ITEMS.map((item) => (
+          <SidebarItem key={item.id} item={item} isActive={currentRoute === item.id} />
+        ))}
+      </nav>
+
+      {/* Spacer */}
+      <div className="flex-1" />
+
+      {/* Plan widget en bas */}
+      <PlanWidget userPlan={userPlan} />
     </aside>
   );
 }
@@ -238,38 +318,58 @@ function Topbar({
   onUpgradeClick?: () => void;
 }) {
   const isFree = userPlan === "free";
-  return (
-    <header className="sticky top-0 z-10 flex h-12 items-center gap-2 border-b border-border bg-card/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/70">
-      {/* Back/forward placeholders (history navigation, à câbler PR2+) */}
-      <div className="flex items-center gap-1 text-tertiary-foreground">
-        <button
-          type="button"
-          aria-label="Précédent"
-          className="inline-flex h-7 w-7 cursor-not-allowed items-center justify-center rounded transition-colors"
-          disabled
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          aria-label="Suivant"
-          className="inline-flex h-7 w-7 cursor-not-allowed items-center justify-center rounded transition-colors"
-          disabled
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
+  const initials = initialsOf(userEmail);
+  const displayName = nameOf(userEmail);
+  const planLabel = PLAN_LABEL[userPlan].toUpperCase();
 
-      {/* Command bar ⌘K (placeholder visuel — palette en PR2 via cmdk) */}
+  return (
+    <header
+      className={cn(
+        "sticky top-0 z-10 flex h-12 items-center gap-2 px-4",
+        "bg-bg/85 backdrop-blur",
+        "border-b border-line",
+        "supports-[backdrop-filter]:bg-bg/70",
+      )}
+    >
+      {/* Back/forward — placeholders (history navigation, à câbler PR2+) */}
       <button
         type="button"
-        className="ml-2 inline-flex h-8 max-w-[420px] flex-1 items-center gap-2 rounded-md border border-border bg-background px-2.5 text-[12.5px] text-tertiary-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        aria-label="Précédent"
+        className="inline-flex h-7 w-7 cursor-not-allowed items-center justify-center text-faint"
         disabled
       >
-        <Search className="h-3.5 w-3.5" />
-        <span>Rechercher (disponible bientôt)…</span>
-        <kbd className="ml-auto rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-          ⌘K
+        <ChevronLeft className="h-3.5 w-3.5 stroke-[2]" />
+      </button>
+      <button
+        type="button"
+        aria-label="Suivant"
+        className="inline-flex h-7 w-7 cursor-not-allowed items-center justify-center text-faint"
+        disabled
+      >
+        <ChevronRight className="h-3.5 w-3.5 stroke-[2]" />
+      </button>
+
+      {/* Command bar ⌘K (palette en PR2 via cmdk) */}
+      <button
+        type="button"
+        className={cn(
+          "ml-1 inline-flex h-7 max-w-[480px] flex-1 items-center gap-2 px-2.5",
+          "rounded-r-sm bg-bg-2 border border-line",
+          "text-[12.5px] text-mute-2",
+          "transition-colors hover:bg-bg-3",
+          "disabled:cursor-not-allowed",
+        )}
+        disabled
+      >
+        <Search className="h-3 w-3" />
+        <span className="flex-1 text-left">Rechercher · bientôt disponible</span>
+        <kbd
+          className={cn(
+            "rounded-[3px] border border-line bg-bg px-1.5 py-0.5",
+            "font-mono text-[10px] text-mute-2",
+          )}
+        >
+          ⌘ K
         </kbd>
       </button>
 
@@ -277,7 +377,7 @@ function Topbar({
       <div className="ml-auto flex items-center gap-2">
         {isFree ? (
           <Button type="button" size="sm" onClick={onUpgradeClick}>
-            <Sparkles className="h-3.5 w-3.5" />
+            <Sparkles className="h-3 w-3" />
             Passer Pro
           </Button>
         ) : null}
@@ -285,37 +385,53 @@ function Topbar({
         <button
           type="button"
           aria-label="Notifications"
-          className="relative inline-flex h-8 w-8 cursor-not-allowed items-center justify-center rounded text-tertiary-foreground transition-colors"
+          className="relative inline-flex h-7 w-7 cursor-not-allowed items-center justify-center text-faint"
           disabled
         >
-          <Bell className="h-4 w-4" />
+          <Bell className="h-3.5 w-3.5" />
         </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="inline-flex items-center gap-2 rounded-md border-l border-border pl-3 pr-1 py-1 transition-colors hover:bg-secondary"
+              className={cn(
+                "inline-flex items-center gap-2 px-1 py-0.5 rounded-r-sm",
+                "transition-colors hover:bg-bg-2",
+                "focus-visible:outline-none focus-visible:shadow-ring-violet",
+              )}
             >
               <span
                 aria-hidden="true"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-secondary-foreground"
+                className={cn(
+                  "inline-flex h-6 w-6 items-center justify-center rounded-full",
+                  "bg-violet-soft text-violet-deep",
+                  "text-[11px] font-semibold",
+                )}
               >
-                {initialsOf(userEmail)}
+                {initials}
               </span>
-              <Badge
-                variant="outline"
-                className="font-mono text-[10px] uppercase tracking-[0.08em]"
+              <span className="text-[12.5px] font-medium text-ink">{displayName}</span>
+              <span
+                className={cn(
+                  "rounded-[3px] px-1.5 py-px",
+                  "font-mono text-[9.5px] font-semibold tracking-[0.04em] uppercase",
+                  isFree
+                    ? "bg-mute-2 text-white"
+                    : userPlan === "business"
+                      ? "bg-terra text-white"
+                      : "bg-ink text-white",
+                )}
               >
-                {PLAN_LABEL[userPlan]}
-              </Badge>
-              <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                {planLabel}
+              </span>
+              <ChevronDown className="h-3 w-3 text-faint" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Compte</DropdownMenuLabel>
             <DropdownMenuItem disabled>
-              <span className="truncate text-muted-foreground">{userEmail}</span>
+              <span className="truncate text-mute-2">{userEmail}</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={onLogout} disabled={!onLogout}>
@@ -338,10 +454,18 @@ export function AppShell({
   onNewAnalysis,
   children,
 }: AppShellProps) {
+  // Hidden helper class — utilisée par la version réduite mobile (sidebar
+  // collapsée tablette). Côté mobile (<768px) la sidebar est masquée
+  // (cf. `md:flex` sur l'aside). Burger Sheet à câbler en PR suivante si
+  // besoin — pour PR1 on garde le shell desktop-first comme l'existant.
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="min-h-screen bg-background">
-        <Sidebar currentRoute={currentRoute} onNewAnalysis={onNewAnalysis} />
+      <div className="min-h-screen bg-bg">
+        <Sidebar
+          currentRoute={currentRoute}
+          onNewAnalysis={onNewAnalysis}
+          userPlan={userPlan}
+        />
         <div className="md:pl-[232px]">
           <Topbar
             userEmail={userEmail}

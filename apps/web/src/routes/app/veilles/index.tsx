@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import { useAuth } from "@/hooks/use-auth";
 import { useBilling } from "@/hooks/use-billing";
 import { useProfile } from "@/hooks/use-profile";
@@ -88,8 +89,8 @@ function WatchesListPage() {
       <div className="mx-auto max-w-6xl space-y-6 p-6">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Mes veilles</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-ink">Mes veilles</h1>
+            <p className="mt-1 text-sm text-muted-ink">
               {isFreemiumLike
                 ? `1 veille active maximum · ${planDef.watchFrequency === "thrice_weekly" ? "3 fois/sem" : "quotidien"}`
                 : `${activeWatches.length} / ${effectiveLimit} veille${effectiveLimit > 1 ? "s" : ""} active${effectiveLimit > 1 ? "s" : ""} · ${planDef.watchFrequency === "thrice_weekly" ? "3 fois/sem" : "quotidien"}`}
@@ -105,7 +106,7 @@ function WatchesListPage() {
             ) : (
               <Button
                 onClick={() => navigate({ to: "/app/billing" })}
-                variant="outline"
+                variant="ghost"
                 disabled={activeWatches.length >= planDef.watchTotalCap}
                 title={
                   activeWatches.length >= planDef.watchTotalCap
@@ -124,7 +125,7 @@ function WatchesListPage() {
 
         {/* Empty state */}
         {watches.isLoading ? (
-          <div className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+          <div className="rounded-r-lg border border-line bg-card p-8 text-center text-sm text-muted-ink shadow-lvl-1">
             Chargement…
           </div>
         ) : activeWatches.length === 0 && suspendedWatches.length === 0 ? (
@@ -143,7 +144,7 @@ function WatchesListPage() {
             {/* Suspended watches */}
             {suspendedWatches.length > 0 && (
               <section className="space-y-3">
-                <h2 className="text-base font-medium text-muted-foreground">
+                <h2 className="text-base font-medium text-mute-2">
                   Veilles suspendues ({suspendedWatches.length})
                 </h2>
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -166,10 +167,10 @@ function WatchesListPage() {
 
 function EmptyState({ plan }: { plan: PlanId }) {
   return (
-    <div className="rounded-lg border border-dashed border-border bg-muted/40 p-10 text-center">
-      <Radar className="mx-auto h-10 w-10 text-muted-foreground" />
-      <h3 className="mt-4 text-base font-medium">Pas encore de veille</h3>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+    <div className="rounded-r-lg border border-dashed border-line bg-bg-2/60 p-10 text-center">
+      <Radar className="mx-auto h-10 w-10 text-mute-2" />
+      <h3 className="mt-4 text-base font-medium text-ink">Pas encore de veille</h3>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted-ink">
         {plan === "free"
           ? "Crée ta veille gratuite (60 jours, 50 items max) pour recevoir un digest 3×/sem des biens qui matchent tes critères."
           : "Crée ta première veille pour recevoir un digest des opportunités sur ta zone."}
@@ -216,11 +217,11 @@ function WatchCard({
             </CardDescription>
           </div>
           {suspended ? (
-            <Badge variant="outline" className="shrink-0">
+            <Badge variant="default" className="shrink-0">
               <Lock className="mr-1 h-3 w-3" /> Suspendue
             </Badge>
           ) : isUrgent ? (
-            <Badge variant="outline" className="shrink-0 border-amber-400 text-amber-700">
+            <Badge variant="terra" className="shrink-0">
               <AlertCircle className="mr-1 h-3 w-3" /> {daysLeft}j restants
             </Badge>
           ) : null}
@@ -228,13 +229,13 @@ function WatchCard({
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-3 gap-3 text-sm">
-          <StatBlock label="Nouveaux" value={stats.new ?? 0} accent="emerald" />
-          <StatBlock label="Baisses" value={stats.drops ?? 0} accent="blue" />
-          <StatBlock label="Décotes" value={stats.signals ?? 0} accent="amber" />
+          <StatBlock label="Nouveaux" value={stats.new ?? 0} accent="sage" />
+          <StatBlock label="Baisses" value={stats.drops ?? 0} accent="violet" />
+          <StatBlock label="Décotes" value={stats.signals ?? 0} accent="terra" />
         </div>
-        <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-xs text-muted-foreground">
+        <div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-xs text-mute-2">
           <span>
-            Dernier scout :{" "}
+            Dernier scout&nbsp;:{" "}
             {watch.last_run_at
               ? new Date(watch.last_run_at).toLocaleDateString("fr-FR")
               : "—"}
@@ -242,15 +243,15 @@ function WatchCard({
           <Link
             to="/app/veilles/$id"
             params={{ id: watch.id }}
-            className="font-medium text-primary hover:underline"
+            className="font-medium text-violet hover:underline"
           >
             Voir →
           </Link>
         </div>
         {suspended && plan === "free" && (
-          <div className="mt-3 rounded border border-primary/30 bg-primary/5 p-2 text-xs">
-            <Link to="/app/billing" className="font-medium text-primary hover:underline">
-              Réactiver via Pro (7j gratuits)
+          <div className="mt-3 rounded-r-md border border-terra-soft-2 bg-terra-soft p-2 text-xs text-terra-deep">
+            <Link to="/app/billing" className="font-medium hover:underline">
+              Réactiver via Pro (7&nbsp;jours gratuits)
             </Link>
           </div>
         )}
@@ -266,19 +267,17 @@ function StatBlock({
 }: {
   label: string;
   value: number;
-  accent: "emerald" | "blue" | "amber";
+  accent: "sage" | "violet" | "terra";
 }) {
   const colors = {
-    emerald: "text-emerald-600",
-    blue: "text-blue-600",
-    amber: "text-amber-600",
+    sage: "text-sage-2",
+    violet: "text-violet",
+    terra: "text-terra-deep",
   };
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <div className={`mt-0.5 text-xl font-semibold tabular-nums ${colors[accent]}`}>
+      <Eyebrow>{label}</Eyebrow>
+      <div className={`mt-1 text-xl font-semibold font-mono tnum ${colors[accent]}`}>
         {value}
       </div>
     </div>

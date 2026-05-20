@@ -37,6 +37,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { ScoreBadge } from "@/components/ui/score-badge";
 import { useAuth } from "@/hooks/use-auth";
 import {
   useDashboardSummary,
@@ -86,16 +88,17 @@ function DashboardPage() {
       onNewAnalysis={() => navigate({ to: "/app/nouvelle-analyse" })}
     >
       <div className="mx-auto max-w-6xl space-y-6 p-6">
-        {/* Header */}
+        {/* Header — greeting tutoyé, style handoff (serif italic violet sur l'accent) */}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-              Dashboard
-            </span>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight">
-              Bonjour{firstName ? `, ${firstName}` : ""}.
+            <Eyebrow>Dashboard</Eyebrow>
+            <h1 className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.025em] text-ink">
+              Bonjour{firstName ? `, ${firstName}` : ""},{" "}
+              <span className="font-serif italic font-normal text-violet">
+                prêt à scanner ?
+              </span>
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-2.5 max-w-[48ch] text-sm leading-relaxed text-muted-ink">
               {summary.data?.empty_state_hint
                 ? "Bienvenue sur ImmoScan."
                 : "Voici ce qui mérite ton œil aujourd'hui."}
@@ -106,7 +109,7 @@ function DashboardPage() {
               <Plus className="mr-1 h-4 w-4" /> Nouvelle analyse
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => navigate({ to: "/app/veilles/nouvelle" })}
             >
               <Radar className="mr-1 h-4 w-4" /> Nouvelle veille
@@ -116,7 +119,7 @@ function DashboardPage() {
 
         {/* Loading */}
         {summary.isLoading && (
-          <div className="rounded-lg border border-border bg-card p-12 text-center text-sm text-muted-foreground">
+          <div className="rounded-r-lg border border-line bg-card p-12 text-center text-sm text-muted-ink shadow-lvl-1">
             Chargement…
           </div>
         )}
@@ -170,11 +173,11 @@ function DashboardPage() {
 function OnboardingState({ plan }: { plan: PlanId }) {
   const planDef = PLANS[plan];
   return (
-    <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+    <Card className="border-violet/30 bg-gradient-to-br from-violet-soft/40 to-transparent">
       <CardHeader>
         <CardTitle className="text-xl">
-          <Sparkles className="mr-1 inline h-5 w-5 text-primary" />
-          4 étapes pour commencer à investir mieux
+          <Sparkles className="mr-1 inline h-5 w-5 text-violet" />4 étapes pour
+          commencer à investir mieux
         </CardTitle>
         <CardDescription>
           {plan === "free"
@@ -187,7 +190,7 @@ function OnboardingState({ plan }: { plan: PlanId }) {
           {[
             {
               n: "①",
-              title: "Lance ta 1ère analyse",
+              title: "Lance ta 1re analyse",
               hint: "Colle une URL SeLoger ou utilise le form structuré, on scoute 50 à 500 biens en 8 min",
               cta: { label: "Démarrer", to: "/app/nouvelle-analyse" as const },
               active: true,
@@ -208,7 +211,7 @@ function OnboardingState({ plan }: { plan: PlanId }) {
             },
             {
               n: "④",
-              title: "Conclus ton 1er deal ⭐",
+              title: "Conclus ton 1er deal",
               hint: "On reste actif sur ta zone pour le suivant",
               cta: null,
               active: false,
@@ -216,20 +219,20 @@ function OnboardingState({ plan }: { plan: PlanId }) {
           ].map((step) => (
             <li
               key={step.n}
-              className={`flex items-start gap-3 rounded-lg border p-4 ${
-                step.active ? "border-primary/40 bg-card" : "border-border bg-muted/30"
+              className={`flex items-start gap-3 rounded-r border p-4 ${
+                step.active
+                  ? "border-violet/40 bg-card shadow-lvl-1"
+                  : "border-line bg-bg-2/50"
               }`}
             >
               <div
-                className={`text-xl font-semibold ${step.active ? "text-primary" : "text-muted-foreground"}`}
+                className={`font-mono text-xl font-semibold ${step.active ? "text-violet" : "text-mute-2"}`}
               >
                 {step.n}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium">{step.title}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  {step.hint}
-                </div>
+                <div className="text-sm font-medium text-ink">{step.title}</div>
+                <div className="mt-0.5 text-xs text-muted-ink">{step.hint}</div>
               </div>
               {step.cta && step.active && (
                 <Button size="sm" asChild>
@@ -254,22 +257,27 @@ function AlertsSection({
   alerts: DashboardSummary["alerts"];
 }) {
   return (
-    <div className="rounded-lg border border-amber-400/40 bg-amber-50/50 p-4 dark:bg-amber-950/20">
+    <div className="rounded-r-lg border border-terra-soft-2 bg-terra-soft/60 p-4 shadow-lvl-1">
       <div className="mb-2 flex items-center gap-2">
-        <AlertCircle className="h-4 w-4 text-amber-600" />
-        <span className="text-sm font-medium text-amber-900">
+        <AlertCircle className="h-4 w-4 text-terra-deep" />
+        <Eyebrow variant="terra">
           Alertes & signaux ({alerts.length})
-        </span>
+        </Eyebrow>
       </div>
       <ul className="space-y-1.5">
         {alerts.slice(0, 4).map((alert, i) => (
-          <li key={i} className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-amber-800">• {alert.label}</span>
+          <li
+            key={i}
+            className="flex items-center justify-between gap-3 text-sm"
+          >
+            <span className="text-terra-deep">• {alert.label}</span>
             <Link
               to={alert.cta_link as never}
-              className="shrink-0 text-xs font-medium text-amber-700 hover:underline"
+              className="shrink-0 text-xs font-medium text-terra-deep hover:underline"
             >
-              {alert.kind === "watch_expiring" || alert.kind === "trial_ending" || alert.kind === "quota_analyses"
+              {alert.kind === "watch_expiring" ||
+              alert.kind === "trial_ending" ||
+              alert.kind === "quota_analyses"
                 ? "Passer Pro"
                 : "Affiner →"}
             </Link>
@@ -340,20 +348,23 @@ function StatCard({
   progress: number | null;
   accent: "primary" | "success" | "amber" | "muted";
 }) {
+  // Mapping accent → token handoff (plus de couleurs Tailwind brutes).
+  // primary→violet (brand), success→sage (positif doux), amber→warning,
+  // muted→mute-2.
   const colorMap: Record<typeof accent, string> = {
-    primary: "bg-primary",
-    success: "bg-emerald-500",
-    amber: "bg-amber-500",
-    muted: "bg-muted-foreground",
+    primary: "bg-violet",
+    success: "bg-sage",
+    amber: "bg-warning",
+    muted: "bg-mute-2",
   };
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-        {label}
+    <div className="rounded-r-lg border border-line bg-card p-4 shadow-lvl-1">
+      <Eyebrow>{label}</Eyebrow>
+      <div className="mt-2 font-mono text-[26px] font-semibold tnum tracking-[-0.025em] text-ink">
+        {value}
       </div>
-      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
       {progress !== null && (
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
+        <div className="mt-3 h-1 overflow-hidden rounded-full bg-bg-2">
           <div
             className={`h-full ${colorMap[accent]} transition-all`}
             style={{ width: `${Math.min(100, progress)}%` }}
@@ -381,16 +392,17 @@ function OpportunitiesSection({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
-          <Flame className="mr-1.5 inline h-4 w-4 text-orange-500" />
+          <Flame className="mr-1.5 inline h-4 w-4 text-violet" />
           Opportunités du moment
         </CardTitle>
         <CardDescription>
-          Top 5 biens score ≥ 75 sur tes veilles actives, pas encore dans ton pipeline.
+          Top 5 biens score ≥ 75 sur tes veilles actives, pas encore dans ton
+          pipeline.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {opportunities.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+          <div className="rounded-r border border-dashed border-line-2 bg-bg-2/40 p-6 text-center text-sm text-muted-ink">
             {emptyHint === "first_watch"
               ? "Aucune veille active. Crée-en une pour voir tes opportunités."
               : "Pas encore de bien score ≥ 75 sur tes veilles. Le prochain scout pourrait en trouver."}
@@ -405,7 +417,7 @@ function OpportunitiesSection({
             )}
           </div>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-line">
             {opportunities.map((opp) => (
               <OpportunityRow key={opp.watch_listing_id} opp={opp} plan={plan} />
             ))}
@@ -426,41 +438,30 @@ function OpportunityRow({
   const masked =
     plan === "free" && (opp.current_score ?? 0) >= FREEMIUM_MASK_THRESHOLD;
   const score = opp.current_score ?? 0;
-  const scoreColor =
-    score >= 85
-      ? "bg-emerald-500/15 text-emerald-700"
-      : score >= 75
-        ? "bg-blue-500/15 text-blue-700"
-        : "bg-amber-500/15 text-amber-700";
   return (
     <li className="flex items-center gap-3 py-3">
-      <span
-        className={`shrink-0 rounded px-2 py-1 text-xs font-semibold tabular-nums ${scoreColor}`}
-      >
-        {score.toFixed(0)}
-      </span>
+      {/* ScoreBadge atom remplace le span hardcodé bg-emerald/blue/amber. */}
+      <ScoreBadge value={score} size="sm" className="shrink-0" />
       <div className="flex-1 min-w-0">
-        <div className="truncate text-sm font-medium">
+        <div className="truncate text-sm font-medium text-ink">
           {opp.title ?? "Sans titre"}
         </div>
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-muted-ink">
           {masked ? (
             <>
               <Lock className="mr-1 inline h-3 w-3" />
               Prix masqué — Pro
             </>
           ) : (
-            <>
+            <span className="font-mono tnum">
               {formatEur(opp.current_price)}
               {opp.current_surface
                 ? ` · ${Math.round(opp.current_price / opp.current_surface)} €/m²`
                 : ""}
               {opp.current_dpe ? ` · DPE ${opp.current_dpe}` : ""}
-            </>
+            </span>
           )}
-          <span className="ml-2 text-muted-foreground/70">
-            via {opp.watch_name}
-          </span>
+          <span className="ml-2 text-mute-2">via {opp.watch_name}</span>
         </div>
       </div>
       {!masked && (
@@ -468,7 +469,7 @@ function OpportunityRow({
           href={opp.source_url}
           target="_blank"
           rel="noopener noreferrer"
-          className="shrink-0 text-xs text-primary hover:underline"
+          className="shrink-0 text-xs text-violet hover:underline"
           title="Voir l'annonce"
         >
           <ExternalLink className="h-3.5 w-3.5" />
@@ -497,48 +498,48 @@ function WatchActivityCard({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
-          <Zap className="mr-1.5 inline h-4 w-4 text-blue-500" />
+          <Zap className="mr-1.5 inline h-4 w-4 text-violet" />
           Activité veilles (7 derniers jours)
         </CardTitle>
       </CardHeader>
       <CardContent>
         {total === 0 ? (
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-muted-ink">
             Pas d'activité cette semaine sur tes veilles.
           </div>
         ) : (
           <ul className="space-y-2 text-sm">
             <ActivityRow
-              icon="🆕"
+              icon={<Sparkles className="h-3.5 w-3.5 text-violet" />}
               label="Nouveaux biens retenus"
               count={activity.new_match ?? 0}
             />
             <ActivityRow
-              icon={<TrendingDown className="h-3.5 w-3.5 text-emerald-600" />}
+              icon={<TrendingDown className="h-3.5 w-3.5 text-sage" />}
               label="Baisses de prix"
               count={activity.price_drop ?? 0}
             />
             <ActivityRow
-              icon="🔍"
+              icon={<AlertCircle className="h-3.5 w-3.5 text-warning" />}
               label="Décotes à vérifier"
               count={activity.signal_to_verify ?? 0}
             />
             <ActivityRow
-              icon="↩️"
+              icon={<TrendingUp className="h-3.5 w-3.5 text-mute-2" />}
               label="Biens relistés"
               count={activity.relisted ?? 0}
             />
             <ActivityRow
-              icon="🗑️"
+              icon={<ExternalLink className="h-3.5 w-3.5 text-faint" />}
               label="Vendus / retirés"
               count={activity.removed ?? 0}
             />
           </ul>
         )}
-        <div className="mt-3 border-t border-border pt-3 text-right">
+        <div className="mt-3 border-t border-line pt-3 text-right">
           <Link
             to="/app/veilles"
-            className="text-xs text-primary hover:underline"
+            className="text-xs font-medium text-violet hover:underline"
           >
             Voir le détail par veille →
           </Link>
@@ -561,10 +562,10 @@ function ActivityRow({
     <li className="flex items-center justify-between">
       <span className="flex items-center gap-2">
         <span className="inline-flex w-5 justify-center">{icon}</span>
-        <span className="text-muted-foreground">{label}</span>
+        <span className="text-muted-ink">{label}</span>
       </span>
       <span
-        className={`tabular-nums font-medium ${count > 0 ? "" : "text-muted-foreground"}`}
+        className={`font-mono tnum font-medium ${count > 0 ? "text-ink" : "text-faint"}`}
       >
         {count}
       </span>
@@ -581,22 +582,29 @@ function PipelineCard({
 }: {
   counts: DashboardSummary["pipeline_counts"];
 }) {
-  const stages: PipelineStage[] = ["a_visiter", "visite", "offre", "compromis", "signe"];
+  const stages: PipelineStage[] = [
+    "a_visiter",
+    "visite",
+    "offre",
+    "compromis",
+    "signe",
+  ];
   const total = stages.reduce((sum, s) => sum + (counts[s] ?? 0), 0);
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
-          <KanbanSquare className="mr-1.5 inline h-4 w-4 text-purple-500" />
+          <KanbanSquare className="mr-1.5 inline h-4 w-4 text-violet" />
           Pipeline ({total})
         </CardTitle>
       </CardHeader>
       <CardContent>
         {total === 0 ? (
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-muted-ink">
             Pas encore de bien dans ton pipeline.
-            <div className="mt-2 text-xs">
-              Ajoute des biens depuis tes analyses ou tes veilles pour suivre leur progression.
+            <div className="mt-2 text-xs text-mute-2">
+              Ajoute des biens depuis tes analyses ou tes veilles pour suivre
+              leur progression.
             </div>
           </div>
         ) : (
@@ -608,17 +616,21 @@ function PipelineCard({
                   key={s}
                   className={`flex items-center justify-between ${n === 0 ? "opacity-50" : ""}`}
                 >
-                  <span className="text-muted-foreground">{STAGE_LABELS[s]}</span>
-                  <span className="tabular-nums font-medium">{n}</span>
+                  <span className="text-muted-ink">{STAGE_LABELS[s]}</span>
+                  <span
+                    className={`font-mono tnum font-medium ${n > 0 ? "text-ink" : "text-faint"}`}
+                  >
+                    {n}
+                  </span>
                 </li>
               );
             })}
           </ul>
         )}
-        <div className="mt-3 border-t border-border pt-3 text-right">
+        <div className="mt-3 border-t border-line pt-3 text-right">
           <Link
             to="/app/pipeline"
-            className="text-xs text-primary hover:underline"
+            className="text-xs font-medium text-violet hover:underline"
           >
             Ouvrir le pipeline →
           </Link>
@@ -641,7 +653,7 @@ function MarketStatsSection({
     <Card>
       <CardHeader>
         <CardTitle className="text-base">
-          <MapPin className="mr-1.5 inline h-4 w-4 text-rose-500" />
+          <MapPin className="mr-1.5 inline h-4 w-4 text-violet" />
           Signal marché — tes zones
         </CardTitle>
         <CardDescription>
@@ -653,18 +665,18 @@ function MarketStatsSection({
           {stats.map((s) => (
             <li
               key={s.city}
-              className="flex items-center justify-between gap-2 border-b border-border/50 pb-2 last:border-0"
+              className="flex items-center justify-between gap-2 border-b border-line/60 pb-2 last:border-0"
             >
-              <span className="font-medium">{s.city}</span>
-              <span className="tabular-nums text-muted-foreground">
+              <span className="font-medium text-ink">{s.city}</span>
+              <span className="font-mono tnum text-muted-ink">
                 {Math.round(s.median_eur_m2)} €/m²
                 {s.delta_pct !== null && (
                   <span
                     className={`ml-2 ${
                       s.delta_pct > 0
-                        ? "text-emerald-600"
+                        ? "text-success"
                         : s.delta_pct < 0
-                          ? "text-amber-600"
+                          ? "text-warning"
                           : ""
                     }`}
                   >
@@ -674,14 +686,14 @@ function MarketStatsSection({
                       <TrendingDown className="inline h-3 w-3" />
                     ) : null}{" "}
                     {s.delta_pct > 0 ? "+" : ""}
-                    {s.delta_pct.toFixed(1)}%
+                    {s.delta_pct.toFixed(1)} %
                   </span>
                 )}
               </span>
             </li>
           ))}
         </ul>
-        <div className="mt-3 text-[11px] text-muted-foreground">
+        <div className="mt-3 text-[11px] text-mute-2">
           <Bell className="mr-1 inline h-3 w-3" />
           Source : DVF Cerema · évolution N-1 disponible en V2
         </div>

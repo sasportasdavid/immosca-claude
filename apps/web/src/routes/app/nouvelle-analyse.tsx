@@ -18,7 +18,9 @@ import { z } from "zod";
 
 import { AppShell } from "@/components/app-shell";
 import { CommuneAutocomplete } from "@/components/commune-autocomplete";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Eyebrow } from "@/components/ui/eyebrow";
 import {
   Form,
   FormControl,
@@ -29,6 +31,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { useUserParams } from "@/hooks/use-user-params";
@@ -79,6 +82,16 @@ const SITE_LABELS: Record<string, string> = {
   pap: "PAP",
   bienici: "Bien'ici",
   "logic-immo": "Logic-immo",
+};
+
+// Couleurs des badges de source — alignées sur le handoff
+// (tag colorimétrique par origine d'annonce).
+const SITE_BADGE_CLASS: Record<string, string> = {
+  seloger: "bg-[#FFE2E5] text-[#991B1B]",
+  leboncoin: "bg-[#FEF3C7] text-[#92400E]",
+  pap: "bg-[#DBEAFE] text-[#1E40AF]",
+  bienici: "bg-violet-soft text-violet-deep",
+  "logic-immo": "bg-bg-2 text-ink-2",
 };
 
 const formSchema = z
@@ -390,7 +403,7 @@ function NouvelleAnalysePage() {
           })
           .eq("id", data.id);
         throw new Error(
-          `Impossible de démarrer l'analyse: ${invokeRes.error.message}`,
+          `Impossible de démarrer l'analyse : ${invokeRes.error.message}`,
         );
       }
       return data;
@@ -411,560 +424,945 @@ function NouvelleAnalysePage() {
       currentRoute="dashboard"
       onLogout={() => auth.signOut()}
     >
-      <div className="mx-auto max-w-[640px] px-6 py-12">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-          Nouvelle analyse
-        </span>
-        <h1 className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em]">
+      <div className="mx-auto max-w-[860px] px-6 py-10 pb-32">
+        {/* ── En-tête de page ── */}
+        <Eyebrow>Nouvelle analyse</Eyebrow>
+        <h1 className="mt-2 text-[28px] font-semibold leading-[1.15] tracking-[-0.02em] text-ink">
           Décris ta recherche.
         </h1>
-        <p className="mt-3 text-[14px] text-muted-foreground">
-          On collecte 100 à 500 annonces depuis SeLoger, Leboncoin, PAP et
-          Bien'ici en croisant avec DVF, DPE et Géorisques. Rapport noté en
-          ~8 minutes.
+        <p className="mt-3 max-w-[60ch] text-[14px] leading-relaxed text-muted-ink">
+          Donne l'URL de ta recherche SeLoger, Leboncoin ou PAP, ou cible une zone.
+          On récupère 100 à 500 annonces, on croise avec DVF, DPE et Géorisques,
+          et on te livre un rapport noté en 8 minutes.
         </p>
 
         <Form {...form}>
           <form
             onSubmit={form.handleSubmit((v) => createAnalysis.mutate(v))}
-            className="mt-8 space-y-5"
+            className="mt-8 space-y-4"
           >
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nom de la recherche (optionnel)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="text"
-                      placeholder="Ex. Gagny été 2026 — appart 2P"
-                      maxLength={80}
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Pour t'y retrouver entre plusieurs analyses.
-                  </FormDescription>
-                </FormItem>
-              )}
-            />
-
-            {/* Tab toggle : Rapide (filters) vs Avancé (multi-URLs) */}
+            {/* ── Mode switch (URLs vs Recherche guidée) ── */}
             <FormField
               control={form.control}
               name="mode"
               render={({ field }) => (
-                <FormItem>
-                  <div className="inline-flex rounded-md border border-border bg-secondary/30 p-0.5">
+                <FormItem className="space-y-0">
+                  <div className="grid grid-cols-1 gap-1 rounded-r-lg border border-line bg-bg-2 p-1 sm:grid-cols-2">
                     {[
-                      { id: "filters" as const, label: "Recherche guidée" },
-                      { id: "urls" as const, label: "Coller des URLs" },
-                    ].map((t) => {
-                      const active = field.value === t.id;
+                      {
+                        id: "urls" as const,
+                        title: "Coller des URLs",
+                        sub: "Le plus rapide — copie l'URL d'une page de résultats SeLoger, LBC, PAP ou Bien'ici.",
+                        reco: true,
+                      },
+                      {
+                        id: "filters" as const,
+                        title: "Recherche guidée",
+                        sub: "Définis ville, prix, surface, type — on cherche pour toi sur 5 sources en parallèle.",
+                        reco: false,
+                      },
+                    ].map((opt) => {
+                      const active = field.value === opt.id;
                       return (
                         <button
-                          key={t.id}
+                          key={opt.id}
                           type="button"
-                          onClick={() => field.onChange(t.id)}
-                          className={`rounded px-3 py-1.5 text-[13px] font-medium transition-colors ${
+                          onClick={() => field.onChange(opt.id)}
+                          className={`flex items-start gap-3 rounded-r p-3 text-left transition-all ${
                             active
-                              ? "bg-background text-foreground shadow-sm"
-                              : "text-muted-foreground hover:text-foreground"
+                              ? "bg-card shadow-lvl-1"
+                              : "bg-transparent hover:bg-card/60"
                           }`}
                         >
-                          {t.label}
+                          <span
+                            className={`mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-r-sm border text-[13px] ${
+                              active
+                                ? "border-violet/20 bg-violet-soft text-violet"
+                                : "border-line bg-card text-mute-2"
+                            }`}
+                            aria-hidden
+                          >
+                            {opt.id === "urls" ? (
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              >
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                              </svg>
+                            ) : (
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              >
+                                <circle cx="11" cy="11" r="8" />
+                                <path d="M21 21l-4.35-4.35" />
+                              </svg>
+                            )}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2">
+                              <span className="text-[13.5px] font-semibold tracking-[-0.005em] text-ink">
+                                {opt.title}
+                              </span>
+                              {opt.reco ? (
+                                <Badge variant="violet" className="h-[18px] px-1.5 text-[10px] uppercase tracking-[0.04em]">
+                                  Recommandé
+                                </Badge>
+                              ) : null}
+                            </span>
+                            <span className="mt-1 block text-[11.5px] leading-[1.4] text-mute-2">
+                              {opt.sub}
+                            </span>
+                          </span>
                         </button>
                       );
                     })}
                   </div>
-                  <FormDescription>
-                    {field.value === "filters"
-                      ? "On construit la requête à partir de la ville, du rayon, des types et du prix."
-                      : "Lance une recherche sur chaque site (SeLoger, LBC, PAP, Bien'ici), copie l'URL et colle-la ici — une par ligne."}
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            {mode === "urls" ? (
-              <FormField
-                control={form.control}
-                name="urlsList"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>URLs de recherche (une par ligne)</FormLabel>
-                    <FormControl>
-                      <textarea
-                        className="flex min-h-[160px] w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] font-mono leading-relaxed shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                        placeholder={`https://www.seloger.com/immobilier/achat/immo-gagny-93/...
-https://www.leboncoin.fr/recherche?category=9&locations=Gagny_93220...
-https://www.pap.fr/annonce/vente-...
-https://www.bienici.com/recherche/achat/gagny-93220`}
-                        value={field.value ?? ""}
-                        onChange={(e) => field.onChange(e.target.value)}
-                      />
-                    </FormControl>
-                    {parsedUrls.length > 0 ? (
-                      <div className="mt-2 rounded-md border border-border bg-secondary/30 p-2.5 text-[12px]">
-                        <div className="font-medium">
-                          {parsedUrls.length} URL{parsedUrls.length > 1 ? "s" : ""} détectée
-                          {parsedUrls.length > 1 ? "s" : ""}
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-muted-foreground">
-                          {Object.entries(urlsBySite).map(([site, count]) => (
-                            <span key={site}>
-                              {site === "inconnu" ? (
-                                <span className="text-destructive">
-                                  ⚠ {count} non reconnue{count > 1 ? "s" : ""}
-                                </span>
-                              ) : (
-                                <>
-                                  {SITE_LABELS[site] ?? site} ·{" "}
-                                  <span className="font-semibold">{count}</span>
-                                </>
-                              )}
-                            </span>
-                          ))}
-                        </div>
-                        {unknownUrlsCount > 0 ? (
-                          <p className="mt-1.5 text-[11px] text-muted-foreground">
-                            Sites supportés : SeLoger, Leboncoin, PAP, Bien'ici. Les URLs hors de cette liste sont ignorées.
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <FormDescription>
-                        Tu peux mélanger plusieurs sites et plusieurs recherches dans la même analyse.
-                      </FormDescription>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
-
-            {mode === "filters" ? (
-              <>
-            <FormField
-              control={form.control}
-              name="city"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Ville</FormLabel>
-                  <FormControl>
-                    <CommuneAutocomplete
-                      id="city-input"
-                      value={field.value ?? ""}
-                      onChange={(val) => {
-                        field.onChange(val);
-                        // Si l'user retape après pick, on invalide la
-                        // sélection (sinon CP/INSEE deviennent obsolètes)
-                        if (
-                          selectedCommune &&
-                          val.toLowerCase() !== selectedCommune.nom.toLowerCase()
-                        ) {
-                          setSelectedCommune(null);
-                          form.setValue("postalCode", "");
-                        }
-                      }}
-                      onSelect={(commune) => {
-                        setSelectedCommune(commune);
-                        field.onChange(commune.nom);
-                        // Auto-fill du CP (1er si plusieurs — l'user
-                        // verra "+N" dans la liste pour les communes
-                        // multi-CP comme Paris)
-                        form.setValue(
-                          "postalCode",
-                          commune.codesPostaux[0] ?? "",
-                        );
-                      }}
-                      placeholder="Tape les 2 premières lettres…"
-                      autoFocus
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    {selectedCommune ? (
-                      <span className="font-mono">
-                        {selectedCommune.nom} · {selectedCommune.codesPostaux.join(", ")}{" "}
-                        · INSEE {selectedCommune.code} · dép. {selectedCommune.codeDepartement}
-                      </span>
-                    ) : (
-                      "Suggestions officielles INSEE via geo.api.gouv.fr."
-                    )}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            {/* Code postal : caché pour l'user (rempli par l'autocomplete),
-                mais reste dans le form pour préserver la valeur si l'user
-                tape manuellement sans pick. */}
-            <FormField
-              control={form.control}
-              name="postalCode"
-              render={({ field }) => (
-                <input type="hidden" {...field} />
-              )}
-            />
-
-            {/* Slider rayon — visible seulement quand une commune est
-                sélectionnée (sinon on n'a pas de centre géo). */}
-            {selectedCommune?.centre ? (
-              <div>
-                <div className="mb-2 flex items-baseline justify-between">
-                  <label
-                    htmlFor="radius-slider"
-                    className="text-[14px] font-medium"
-                  >
-                    Rayon autour de {selectedCommune.nom}
-                  </label>
-                  <span className="font-mono text-[14px] tabular-nums">
-                    {radiusKm === 0 ? "Ville seule" : `${radiusKm} km`}
-                  </span>
-                </div>
-                <input
-                  id="radius-slider"
-                  type="range"
-                  min={0}
-                  max={30}
-                  step={1}
-                  value={radiusKm}
-                  onChange={(e) => setRadiusKm(Number(e.target.value))}
-                  className="w-full accent-primary"
-                />
-                <div className="mt-1 flex justify-between font-mono text-[10px] text-tertiary-foreground">
-                  <span>0 km</span>
-                  <span>5 km</span>
-                  <span>10 km</span>
-                  <span>20 km</span>
-                  <span>30 km</span>
-                </div>
-                {radiusKm > 0 ? (
-                  <details className="mt-3 rounded-md border border-border bg-secondary/30 p-3 text-[12px]">
-                    <summary className="cursor-pointer">
-                      {radiusLoading ? (
-                        <span className="text-muted-foreground">
-                          Calcul des communes incluses…
-                        </span>
-                      ) : (
-                        <span>
-                          <span className="font-semibold">
-                            {communesInRadius.length}
-                          </span>{" "}
-                          commune{communesInRadius.length > 1 ? "s" : ""} incluse
-                          {communesInRadius.length > 1 ? "s" : ""} dans le rayon
-                        </span>
-                      )}
-                    </summary>
-                    {communesInRadius.length > 0 ? (
-                      <ul className="mt-2 max-h-[180px] space-y-0.5 overflow-y-auto pr-2 text-[11.5px]">
-                        {communesInRadius.map((c) => (
-                          <li
-                            key={c.code}
-                            className="flex justify-between gap-2"
-                          >
-                            <span>{c.nom}</span>
-                            <span className="font-mono text-tertiary-foreground">
-                              {c.distanceKm.toFixed(1)} km · {c.codesPostaux[0]}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </details>
-                ) : null}
+            {/* ── Nom de l'analyse (optionnel, toujours visible) ── */}
+            <div className="rounded-r-lg border border-line bg-card p-5 shadow-lvl-1">
+              <div className="mb-4 flex items-baseline gap-3">
+                <Eyebrow>Nom de la recherche</Eyebrow>
+                <span className="text-[12px] text-mute-2">optionnel</span>
               </div>
-            ) : null}
-
-            <FormField
-              control={form.control}
-              name="propertyTypes"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Type de bien</FormLabel>
-                  <div className="flex flex-wrap gap-2">
-                    {TYPE_OPTIONS.map((t) => {
-                      const checked = field.value?.includes(t.id) ?? false;
-                      return (
-                        <label
-                          key={t.id}
-                          className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] transition-colors ${
-                            checked
-                              ? "border-primary bg-primary-soft text-primary"
-                              : "border-border bg-background hover:border-primary/40"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              const next = new Set(field.value ?? []);
-                              if (e.target.checked) next.add(t.id);
-                              else next.delete(t.id);
-                              field.onChange(Array.from(next));
-                            }}
-                            className="sr-only"
-                          />
-                          {t.label}
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="transaction"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Type de transaction</FormLabel>
-                  <div className="flex gap-2">
-                    {[
-                      { id: "buy", label: "Achat" },
-                      { id: "rent", label: "Location" },
-                    ].map((t) => {
-                      const checked = field.value === t.id;
-                      return (
-                        <label
-                          key={t.id}
-                          className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] transition-colors ${
-                            checked
-                              ? "border-primary bg-primary-soft text-primary"
-                              : "border-border bg-background hover:border-primary/40"
-                          }`}
-                        >
-                          <input
-                            type="radio"
-                            value={t.id}
-                            checked={checked}
-                            onChange={() => field.onChange(t.id)}
-                            className="sr-only"
-                          />
-                          {t.label}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </FormItem>
-              )}
-            />
-
-            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="priceMin"
+                name="name"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Prix min (€) — optionnel</FormLabel>
                     <FormControl>
                       <Input
-                        type="number"
-                        step={5000}
-                        min={0}
-                        placeholder="0"
-                        value={field.value ?? ""}
-                        onChange={(e) =>
-                          field.onChange(
-                            e.target.value === ""
-                              ? undefined
-                              : Number(e.target.value),
-                          )
-                        }
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="priceMax"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Prix max (€)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step={5000}
-                        min={10000}
+                        type="text"
+                        placeholder="Ex. Gagny été 2026 — appart 2 pièces"
+                        maxLength={80}
                         {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormDescription>
+                      Pour t'y retrouver entre plusieurs analyses.
+                    </FormDescription>
                   </FormItem>
                 )}
               />
             </div>
 
-            <details className="rounded-lg border border-border bg-card p-3">
-              <summary className="cursor-pointer text-[13px] text-muted-foreground">
-                Filtres avancés — surface, sources
-              </summary>
-              <div className="mt-3 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="surfaceMin"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Surface min (m²)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={5}
-                            placeholder="—"
-                            value={field.value ?? ""}
-                            onChange={(e) =>
-                              field.onChange(
-                                e.target.value === ""
-                                  ? undefined
-                                  : Number(e.target.value),
-                              )
-                            }
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="surfaceMax"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Surface max (m²)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={5}
-                            placeholder="—"
-                            value={field.value ?? ""}
-                            onChange={(e) =>
-                              field.onChange(
-                                e.target.value === ""
-                                  ? undefined
-                                  : Number(e.target.value),
-                              )
-                            }
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
+            {/* ── Mode URLs ── */}
+            {mode === "urls" ? (
+              <div className="rounded-r-lg border border-line bg-card p-5 shadow-lvl-1">
+                <div className="mb-4 flex items-baseline gap-3">
+                  <Eyebrow>1. Colle l'URL de ta recherche</Eyebrow>
+                  <span className="text-[12px] text-mute-2">
+                    une URL par ligne · maximum 5
+                  </span>
                 </div>
-
                 <FormField
                   control={form.control}
-                  name="sources"
+                  name="urlsList"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Sources à scraper</FormLabel>
-                      <div className="flex flex-wrap gap-2">
-                        {SOURCE_OPTIONS.map((s) => {
-                          const checked = field.value?.includes(s.id) ?? false;
-                          return (
-                            <label
-                              key={s.id}
-                              className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-[13px] transition-colors ${
-                                checked
-                                  ? "border-primary bg-primary-soft text-primary"
-                                  : "border-border bg-background hover:border-primary/40"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(e) => {
-                                  const next = new Set(field.value ?? []);
-                                  if (e.target.checked) next.add(s.id);
-                                  else next.delete(s.id);
-                                  field.onChange(Array.from(next));
-                                }}
-                                className="sr-only"
-                              />
-                              {s.label}
-                            </label>
-                          );
-                        })}
+                      <FormControl>
+                        <Textarea
+                          className="min-h-[160px] font-mono text-[12.5px] leading-relaxed tnum"
+                          placeholder={`https://www.seloger.com/list.htm?ci=750056&px=300000-600000
+https://www.leboncoin.fr/recherche?category=9&locations=Paris
+https://www.pap.fr/annonce/vente-appartement-paris-11`}
+                          value={field.value ?? ""}
+                          onChange={(e) => field.onChange(e.target.value)}
+                        />
+                      </FormControl>
+
+                      {parsedUrls.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-r border border-line bg-bg-2 px-3 py-2.5 text-[12.5px]">
+                          <Badge variant="sage" className="gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-sage" />
+                            {parsedUrls.length} URL
+                            {parsedUrls.length > 1 ? "s" : ""} détectée
+                            {parsedUrls.length > 1 ? "s" : ""}
+                          </Badge>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-mute-2">Sources :</span>
+                            {Object.entries(urlsBySite).map(([site, count]) => {
+                              if (site === "inconnu") {
+                                return (
+                                  <span
+                                    key={site}
+                                    className="font-mono text-[11px] text-destructive"
+                                  >
+                                    {count} non reconnue
+                                    {count > 1 ? "s" : ""}
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span
+                                  key={site}
+                                  className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-[0.04em] ${
+                                    SITE_BADGE_CLASS[site] ??
+                                    "bg-bg-2 text-ink-2"
+                                  }`}
+                                >
+                                  {SITE_LABELS[site] ?? site} · {count}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : (
+                        <FormDescription>
+                          Mélange plusieurs sites et plusieurs recherches dans la même analyse.
+                        </FormDescription>
+                      )}
+
+                      {unknownUrlsCount > 0 ? (
+                        <p className="mt-2 text-[11.5px] text-mute-2">
+                          Sites supportés : SeLoger, Leboncoin, PAP, Bien'ici, Logic-immo. Les URLs hors de cette liste sont ignorées.
+                        </p>
+                      ) : null}
+
+                      <div className="mt-3 rounded-r border border-violet-soft bg-violet-soft/40 p-3">
+                        <div className="mb-1.5">
+                          <Eyebrow variant="violet">
+                            URL de recherche, pas d'annonce
+                          </Eyebrow>
+                        </div>
+                        <p className="text-[11.5px] leading-relaxed text-muted-ink">
+                          Va sur SeLoger, LBC, PAP ou Bien'ici, fais ta recherche habituelle (ville, prix, surface), puis copie l'URL de la page de résultats — pas l'URL d'une annonce. Exemple valide :{" "}
+                          <code className="rounded border border-line bg-card px-1 py-0.5 font-mono text-[11px] text-ink-2">
+                            seloger.com/list.htm?ci=…
+                          </code>
+                          . Exemple à éviter :{" "}
+                          <code className="rounded border border-line bg-card px-1 py-0.5 font-mono text-[11px] text-ink-2">
+                            seloger.com/annonces/achat/appartement/124847291.htm
+                          </code>{" "}
+                          (une seule annonce).
+                        </p>
                       </div>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
-            </details>
+            ) : null}
+
+            {/* ── Mode Recherche guidée ── */}
+            {mode === "filters" ? (
+              <>
+                {/* Localisation */}
+                <div className="rounded-r-lg border border-line bg-card p-5 shadow-lvl-1">
+                  <div className="mb-4 flex items-baseline gap-3">
+                    <Eyebrow>1. Localisation</Eyebrow>
+                    <span className="text-[12px] text-mute-2">
+                      on cherche dans cette zone
+                    </span>
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="city"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          Ville
+                          <span className="ml-2 text-[11.5px] font-normal text-mute-2">
+                            autocomplétion INSEE
+                          </span>
+                        </FormLabel>
+                        <FormControl>
+                          <CommuneAutocomplete
+                            id="city-input"
+                            value={field.value ?? ""}
+                            onChange={(val) => {
+                              field.onChange(val);
+                              // Si l'user retape après pick, on invalide la
+                              // sélection (sinon CP/INSEE deviennent obsolètes)
+                              if (
+                                selectedCommune &&
+                                val.toLowerCase() !==
+                                  selectedCommune.nom.toLowerCase()
+                              ) {
+                                setSelectedCommune(null);
+                                form.setValue("postalCode", "");
+                              }
+                            }}
+                            onSelect={(commune) => {
+                              setSelectedCommune(commune);
+                              field.onChange(commune.nom);
+                              // Auto-fill du CP (1er si plusieurs — l'user
+                              // verra "+N" dans la liste pour les communes
+                              // multi-CP comme Paris)
+                              form.setValue(
+                                "postalCode",
+                                commune.codesPostaux[0] ?? "",
+                              );
+                            }}
+                            placeholder="Tape les 2 premières lettres…"
+                            autoFocus
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          {selectedCommune ? (
+                            <span className="font-mono text-[11.5px] text-ink-2">
+                              {selectedCommune.nom} ·{" "}
+                              {selectedCommune.codesPostaux.join(", ")} · INSEE{" "}
+                              {selectedCommune.code} · dép.{" "}
+                              {selectedCommune.codeDepartement}
+                            </span>
+                          ) : (
+                            "Suggestions officielles INSEE via geo.api.gouv.fr."
+                          )}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Code postal — hidden, rempli par l'autocomplete */}
+                  <FormField
+                    control={form.control}
+                    name="postalCode"
+                    render={({ field }) => (
+                      <input type="hidden" {...field} />
+                    )}
+                  />
+
+                  {/* Slider rayon — visible seulement si commune sélectionnée */}
+                  {selectedCommune?.centre ? (
+                    <div className="mt-5">
+                      <div className="mb-2 flex items-baseline justify-between">
+                        <label
+                          htmlFor="radius-slider"
+                          className="text-[11.5px] font-medium text-ink-2"
+                        >
+                          Rayon autour de {selectedCommune.nom}
+                        </label>
+                        <span className="font-mono text-[13px] tnum text-ink">
+                          {radiusKm === 0 ? (
+                            <span className="text-mute-2">Ville seule</span>
+                          ) : (
+                            <>
+                              <span className="font-semibold text-violet">
+                                {radiusKm}
+                              </span>{" "}
+                              km
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <input
+                        id="radius-slider"
+                        type="range"
+                        min={0}
+                        max={30}
+                        step={1}
+                        value={radiusKm}
+                        onChange={(e) => setRadiusKm(Number(e.target.value))}
+                        className="h-1.5 w-full appearance-none rounded-full bg-bg-2 accent-violet outline-none"
+                      />
+                      <div className="mt-1.5 flex justify-between font-mono text-[10px] text-faint">
+                        <span>0 km</span>
+                        <span>5 km</span>
+                        <span>10 km</span>
+                        <span>20 km</span>
+                        <span>30 km</span>
+                      </div>
+                      {radiusKm > 0 ? (
+                        <details className="mt-3 rounded-r border border-line bg-bg-2 p-3 text-[12px] leading-relaxed text-muted-ink">
+                          <summary className="cursor-pointer">
+                            {radiusLoading ? (
+                              <span className="text-mute-2">
+                                Calcul des communes incluses…
+                              </span>
+                            ) : (
+                              <span>
+                                <strong className="font-mono text-ink">
+                                  {communesInRadius.length}
+                                </strong>{" "}
+                                commune
+                                {communesInRadius.length > 1 ? "s" : ""} incluse
+                                {communesInRadius.length > 1 ? "s" : ""} dans le rayon
+                              </span>
+                            )}
+                          </summary>
+                          {communesInRadius.length > 0 ? (
+                            <ul className="mt-2 max-h-[180px] space-y-1 overflow-y-auto pr-2 text-[11.5px]">
+                              {communesInRadius.map((c) => (
+                                <li
+                                  key={c.code}
+                                  className="flex justify-between gap-2"
+                                >
+                                  <span className="text-ink-2">{c.nom}</span>
+                                  <span className="font-mono text-mute-2">
+                                    {c.distanceKm.toFixed(1)} km · {c.codesPostaux[0]}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </details>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Type de bien */}
+                <div className="rounded-r-lg border border-line bg-card p-5 shadow-lvl-1">
+                  <div className="mb-4 flex items-baseline gap-3">
+                    <Eyebrow>2. Type de bien</Eyebrow>
+                  </div>
+
+                  <FormField
+                    control={form.control}
+                    name="propertyTypes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Catégories</FormLabel>
+                        <div className="flex flex-wrap gap-1.5">
+                          {TYPE_OPTIONS.map((t) => {
+                            const checked =
+                              field.value?.includes(t.id) ?? false;
+                            return (
+                              <label
+                                key={t.id}
+                                className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-[12.5px] transition-all ${
+                                  checked
+                                    ? "border-violet/30 bg-violet-soft font-medium text-violet-deep"
+                                    : "border-line bg-card text-ink-2 hover:bg-bg-2"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    const next = new Set(field.value ?? []);
+                                    if (e.target.checked) next.add(t.id);
+                                    else next.delete(t.id);
+                                    field.onChange(Array.from(next));
+                                  }}
+                                  className="sr-only"
+                                />
+                                {checked ? (
+                                  <svg
+                                    width="11"
+                                    height="11"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    className="text-violet"
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                ) : null}
+                                {t.label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="transaction"
+                    render={({ field }) => (
+                      <FormItem className="mt-4">
+                        <FormLabel>Transaction</FormLabel>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { id: "buy", label: "Achat" },
+                            { id: "rent", label: "Location" },
+                          ].map((t) => {
+                            const checked = field.value === t.id;
+                            return (
+                              <label
+                                key={t.id}
+                                className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-[12.5px] transition-all ${
+                                  checked
+                                    ? "border-violet/30 bg-violet-soft font-medium text-violet-deep"
+                                    : "border-line bg-card text-ink-2 hover:bg-bg-2"
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  value={t.id}
+                                  checked={checked}
+                                  onChange={() => field.onChange(t.id)}
+                                  className="sr-only"
+                                />
+                                {checked ? (
+                                  <svg
+                                    width="11"
+                                    height="11"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2.5"
+                                    className="text-violet"
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                ) : null}
+                                {t.label}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <FormField
+                      control={form.control}
+                      name="priceMin"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>
+                            Prix min
+                            <span className="ml-2 text-[11.5px] font-normal text-mute-2">
+                              optionnel
+                            </span>
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step={5000}
+                              min={0}
+                              placeholder="0"
+                              className="font-mono tnum"
+                              value={field.value ?? ""}
+                              onChange={(e) =>
+                                field.onChange(
+                                  e.target.value === ""
+                                    ? undefined
+                                    : Number(e.target.value),
+                                )
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="priceMax"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Prix max (€)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              step={5000}
+                              min={10000}
+                              className="font-mono tnum"
+                              {...field}
+                              onChange={(e) =>
+                                field.onChange(Number(e.target.value))
+                              }
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Filtres avancés (collapsible) */}
+                <details className="group rounded-r-lg border border-line bg-card shadow-lvl-1 [&[open]_.chev]:rotate-180">
+                  <summary className="flex cursor-pointer list-none items-center gap-3 p-5 transition-colors hover:bg-bg-2">
+                    <span
+                      className="flex h-7 w-7 items-center justify-center rounded-r-sm bg-violet-soft text-violet"
+                      aria-hidden
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <line x1="4" y1="21" x2="4" y2="14" />
+                        <line x1="4" y1="10" x2="4" y2="3" />
+                        <line x1="12" y1="21" x2="12" y2="12" />
+                        <line x1="12" y1="8" x2="12" y2="3" />
+                        <line x1="20" y1="21" x2="20" y2="16" />
+                        <line x1="20" y1="12" x2="20" y2="3" />
+                        <line x1="1" y1="14" x2="7" y2="14" />
+                        <line x1="9" y1="8" x2="15" y2="8" />
+                        <line x1="17" y1="16" x2="23" y2="16" />
+                      </svg>
+                    </span>
+                    <div className="flex-1">
+                      <div className="text-[13.5px] font-semibold tracking-[-0.005em] text-ink">
+                        Filtres avancés
+                      </div>
+                      <div className="mt-0.5 text-[11.5px] text-mute-2">
+                        Surface min/max et sources à interroger.
+                      </div>
+                    </div>
+                    <svg
+                      className="chev text-mute-2 transition-transform"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </summary>
+                  <div className="border-t border-line p-5">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FormField
+                        control={form.control}
+                        name="surfaceMin"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Surface min (m²)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={5}
+                                placeholder="—"
+                                className="font-mono tnum"
+                                value={field.value ?? ""}
+                                onChange={(e) =>
+                                  field.onChange(
+                                    e.target.value === ""
+                                      ? undefined
+                                      : Number(e.target.value),
+                                  )
+                                }
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="surfaceMax"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Surface max (m²)
+                              <span className="ml-2 text-[11.5px] font-normal text-mute-2">
+                                optionnel
+                              </span>
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={5}
+                                placeholder="—"
+                                className="font-mono tnum"
+                                value={field.value ?? ""}
+                                onChange={(e) =>
+                                  field.onChange(
+                                    e.target.value === ""
+                                      ? undefined
+                                      : Number(e.target.value),
+                                  )
+                                }
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <FormField
+                      control={form.control}
+                      name="sources"
+                      render={({ field }) => (
+                        <FormItem className="mt-5">
+                          <FormLabel>Sources à interroger</FormLabel>
+                          <div className="flex flex-wrap gap-1.5">
+                            {SOURCE_OPTIONS.map((s) => {
+                              const checked =
+                                field.value?.includes(s.id) ?? false;
+                              return (
+                                <label
+                                  key={s.id}
+                                  className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-[12.5px] transition-all ${
+                                    checked
+                                      ? "border-violet/30 bg-violet-soft font-medium text-violet-deep"
+                                      : "border-line bg-card text-ink-2 hover:bg-bg-2"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      const next = new Set(field.value ?? []);
+                                      if (e.target.checked) next.add(s.id);
+                                      else next.delete(s.id);
+                                      field.onChange(Array.from(next));
+                                    }}
+                                    className="sr-only"
+                                  />
+                                  {checked ? (
+                                    <svg
+                                      width="11"
+                                      height="11"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2.5"
+                                      className="text-violet"
+                                    >
+                                      <polyline points="20 6 9 17 4 12" />
+                                    </svg>
+                                  ) : null}
+                                  {s.label}
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </details>
               </>
             ) : null}
 
-            {/* Paramètres personnalisés (apport, taux, TMI) */}
-            <div className="rounded-lg border border-border bg-card p-4">
+            {/* ── Paramètres financiers (collapsible) ── */}
+            <details className="group rounded-r-lg border border-line bg-card shadow-lvl-1 [&[open]_.chev]:rotate-180">
               <FormField
                 control={form.control}
                 name="overrideParams"
                 render={({ field }) => (
-                  <label className="flex cursor-pointer items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={field.value ?? false}
-                      onChange={(e) => {
-                        field.onChange(e.target.checked);
-                        if (e.target.checked && userParams.data) {
-                          form.setValue("apport", userParams.data.apport ?? 200_000);
-                          form.setValue(
-                            "taux_credit_pct",
-                            userParams.data.taux_credit_pct ?? 3,
-                          );
-                          form.setValue(
-                            "duree_credit_ans",
-                            userParams.data.duree_credit_ans ?? 25,
-                          );
-                          form.setValue("tmi_pct", userParams.data.tmi_pct ?? 30);
-                          form.setValue(
-                            "rendement_min_pct",
-                            userParams.data.rendement_min_pct ?? 6,
-                          );
-                        }
-                      }}
-                      className="mt-0.5 h-4 w-4 rounded border-border"
-                    />
-                    <div>
-                      <div className="text-[14px] font-medium">
-                        Personnaliser les paramètres financiers
+                  <summary className="flex cursor-pointer list-none items-center gap-3 p-5 transition-colors hover:bg-bg-2">
+                    <span
+                      className="flex h-7 w-7 items-center justify-center rounded-r-sm bg-violet-soft text-violet"
+                      aria-hidden
+                    >
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                      </svg>
+                    </span>
+                    <div className="flex-1">
+                      <div className="text-[13.5px] font-semibold tracking-[-0.005em] text-ink">
+                        Personnaliser tes paramètres financiers
                       </div>
-                      <p className="mt-0.5 text-[12px] text-muted-foreground">
-                        Sinon on utilise ceux de ton profil (apport{" "}
-                        {userParams.data?.apport?.toLocaleString("fr-FR") ?? "—"} €,
-                        TMI {userParams.data?.tmi_pct ?? "—"} %, rendement min{" "}
-                        {userParams.data?.rendement_min_pct ?? "—"} %).
-                      </p>
+                      <div className="mt-0.5 text-[11.5px] text-mute-2">
+                        Sinon on utilise ceux de ton profil : apport{" "}
+                        <span className="font-mono tnum">
+                          {userParams.data?.apport?.toLocaleString("fr-FR") ??
+                            "—"}
+                        </span>{" "}
+                        €, TMI{" "}
+                        <span className="font-mono tnum">
+                          {userParams.data?.tmi_pct ?? "—"}
+                        </span>{" "}
+                        %, rendement min{" "}
+                        <span className="font-mono tnum">
+                          {userParams.data?.rendement_min_pct ?? "—"}
+                        </span>{" "}
+                        %.
+                      </div>
                     </div>
-                  </label>
+                    <label
+                      className="flex cursor-pointer items-center gap-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={field.value ?? false}
+                        onChange={(e) => {
+                          field.onChange(e.target.checked);
+                          if (e.target.checked && userParams.data) {
+                            form.setValue(
+                              "apport",
+                              userParams.data.apport ?? 200_000,
+                            );
+                            form.setValue(
+                              "taux_credit_pct",
+                              userParams.data.taux_credit_pct ?? 3,
+                            );
+                            form.setValue(
+                              "duree_credit_ans",
+                              userParams.data.duree_credit_ans ?? 25,
+                            );
+                            form.setValue(
+                              "tmi_pct",
+                              userParams.data.tmi_pct ?? 30,
+                            );
+                            form.setValue(
+                              "rendement_min_pct",
+                              userParams.data.rendement_min_pct ?? 6,
+                            );
+                          }
+                        }}
+                        className="h-4 w-4 cursor-pointer rounded border-line accent-violet"
+                      />
+                      <span
+                        className={`rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.04em] ${
+                          field.value
+                            ? "bg-violet-soft text-violet-deep"
+                            : "bg-bg-2 text-mute-2"
+                        }`}
+                      >
+                        {field.value ? "Personnalisé" : "Par défaut"}
+                      </span>
+                    </label>
+                    <svg
+                      className="chev text-mute-2 transition-transform"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </summary>
                 )}
               />
               {overrideParams ? (
-                <div className="mt-4 grid grid-cols-1 gap-4 border-t border-border pt-4 md:grid-cols-2">
-                  <NumberField form={form} name="apport" label="Apport (€)" step={5000} min={0} />
-                  <NumberField form={form} name="taux_credit_pct" label="Taux crédit (%)" step={0.05} min={0} max={15} />
-                  <NumberField form={form} name="duree_credit_ans" label="Durée crédit (années)" step={1} min={5} max={30} />
-                  <NumberField form={form} name="tmi_pct" label="TMI (%)" step={1} min={0} max={50} />
-                  <NumberField form={form} name="rendement_min_pct" label="Rendement min (%)" step={0.1} min={0} max={30} />
+                <div className="grid grid-cols-1 gap-4 border-t border-line p-5 md:grid-cols-2 lg:grid-cols-3">
+                  <NumberField
+                    form={form}
+                    name="apport"
+                    label="Apport (€)"
+                    step={5000}
+                    min={0}
+                  />
+                  <NumberField
+                    form={form}
+                    name="taux_credit_pct"
+                    label="Taux crédit (%)"
+                    step={0.05}
+                    min={0}
+                    max={15}
+                  />
+                  <NumberField
+                    form={form}
+                    name="duree_credit_ans"
+                    label="Durée crédit (années)"
+                    step={1}
+                    min={5}
+                    max={30}
+                  />
+                  <NumberField
+                    form={form}
+                    name="tmi_pct"
+                    label="TMI (%)"
+                    step={1}
+                    min={0}
+                    max={50}
+                  />
+                  <NumberField
+                    form={form}
+                    name="rendement_min_pct"
+                    label="Rendement min (%)"
+                    step={0.1}
+                    min={0}
+                    max={30}
+                  />
                 </div>
               ) : null}
-            </div>
+            </details>
 
-            <Button
-              type="submit"
-              size="lg"
-              disabled={createAnalysis.isPending}
-              className="w-full"
-            >
-              {createAnalysis.isPending ? "Création…" : "Lancer l'analyse"}
-            </Button>
+            {/* ── Sticky launch bar ── */}
+            <div className="sticky bottom-0 -mx-6 mt-6 flex flex-wrap items-center gap-4 border-t border-line bg-card/95 px-6 py-3.5 shadow-lvl-2 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+              <div className="min-w-0 flex-1 text-[12.5px] leading-snug text-muted-ink">
+                {mode === "urls" ? (
+                  parsedUrls.length > 0 ? (
+                    <>
+                      Prête à lancer :{" "}
+                      <strong className="font-mono text-ink">
+                        {parsedUrls.length} URL
+                        {parsedUrls.length > 1 ? "s" : ""}
+                      </strong>{" "}
+                      ·{" "}
+                      <span className="font-mono text-violet-deep">
+                        {Object.keys(urlsBySite)
+                          .filter((s) => s !== "inconnu")
+                          .map((s) => SITE_LABELS[s] ?? s)
+                          .join(" · ") || "—"}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-mute-2">
+                      Colle au moins une URL de recherche pour démarrer.
+                    </span>
+                  )
+                ) : selectedCommune ? (
+                  <>
+                    Prête à lancer :{" "}
+                    <strong className="font-mono text-ink">
+                      {selectedCommune.nom}
+                    </strong>
+                    {radiusKm > 0 ? (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <span className="font-mono text-violet-deep">
+                          rayon {radiusKm} km
+                        </span>
+                      </>
+                    ) : null}
+                  </>
+                ) : (
+                  <span className="text-mute-2">
+                    Choisis une ville pour démarrer.
+                  </span>
+                )}
+              </div>
+              <Button
+                type="submit"
+                size="lg"
+                disabled={createAnalysis.isPending}
+                className="min-w-[180px]"
+              >
+                {createAnalysis.isPending ? (
+                  "Création…"
+                ) : (
+                  <>
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    Lancer l'analyse
+                  </>
+                )}
+              </Button>
+            </div>
           </form>
         </Form>
       </div>
@@ -1000,6 +1398,7 @@ function NumberField({
               step={step}
               min={min}
               max={max}
+              className="font-mono tnum"
               value={
                 field.value === undefined || field.value === null
                   ? ""

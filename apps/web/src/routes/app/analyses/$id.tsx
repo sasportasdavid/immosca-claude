@@ -33,10 +33,13 @@ import {
 } from "@/components/listing-drawer";
 import { MarketSummary } from "@/components/market-summary";
 import { RecomputeSheet } from "@/components/recompute-sheet";
-import { ScoreBadge } from "@/components/score-badge";
 import { SearchCriteriaChips } from "@/components/search-criteria-chips";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DpePill } from "@/components/ui/dpe-pill";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { ScoreBadge } from "@/components/ui/score-badge";
+import { VerdictPill } from "@/components/ui/verdict-pill";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/use-profile";
 import { requireAuth, requireOnboarded } from "@/lib/auth-guards";
@@ -152,12 +155,10 @@ function AnalysisPage() {
       currentRoute="dashboard"
       onLogout={() => auth.signOut()}
     >
-      <div className="mx-auto max-w-[960px] px-6 py-12">
+      <div className="mx-auto max-w-[1200px] px-6 py-10">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-              Analyse #{id.slice(0, 8)}
-            </span>
+            <Eyebrow>Analyse #{id.slice(0, 8)}</Eyebrow>
             <div className="mt-2 flex flex-wrap items-baseline gap-3">
               <RenameableTitle
                 analysisId={id}
@@ -252,7 +253,7 @@ function AnalysisPage() {
         </div>
 
         {analysis.isLoading ? (
-          <p className="mt-6 text-[14px] text-muted-foreground">
+          <p className="mt-6 text-[14px] text-muted-ink">
             Chargement…
           </p>
         ) : null}
@@ -264,33 +265,38 @@ function AnalysisPage() {
                 Sinon : KPIs résumés. L'état failed affiche l'error_message
                 en dessous, peu importe le status visuel. */}
             {analysis.data.status === "done" ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div className="rounded-lg border border-border bg-card p-5">
-                  <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Annonces analysées
-                  </div>
-                  <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
-                    {analysis.data.total_listings_raw ?? "—"}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-border bg-card p-5">
-                  <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Retenues pour la notation
-                  </div>
-                  <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
-                    {analysis.data.total_listings_filtered ?? "—"}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-border bg-card p-5">
-                  <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Médian €/m²
-                  </div>
-                  <div className="mt-2 font-mono text-[28px] font-semibold tabular-nums tracking-[-0.02em]">
-                    {analysis.data.median_price_per_sqm
-                      ? `${Math.round(Number(analysis.data.median_price_per_sqm))}`
-                      : "—"}
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+                <KpiCard
+                  label="Annonces analysées"
+                  value={analysis.data.total_listings_raw ?? "—"}
+                />
+                <KpiCard
+                  label="Retenues pour notation"
+                  value={analysis.data.total_listings_filtered ?? "—"}
+                  hint={
+                    analysis.data.total_listings_raw &&
+                    analysis.data.total_listings_filtered != null
+                      ? `${
+                          analysis.data.total_listings_raw -
+                          analysis.data.total_listings_filtered
+                        } exclus`
+                      : undefined
+                  }
+                />
+                <KpiCard
+                  label="Médian €/m²"
+                  value={
+                    analysis.data.median_price_per_sqm
+                      ? `${Math.round(Number(analysis.data.median_price_per_sqm)).toLocaleString("fr-FR")}`
+                      : "—"
+                  }
+                  unit="€"
+                />
+                <KpiCard
+                  label="Statut"
+                  value="Terminé"
+                  featured
+                />
               </div>
             ) : (
               <AnalysisProgress
@@ -318,9 +324,9 @@ function AnalysisPage() {
                   currentPlan={(profile.data?.subscription_plan ?? "free") as never}
                 />
               ) : (
-                <div className="rounded-lg border border-destructive bg-destructive-soft p-5 text-[13px] text-destructive-soft-foreground">
-                  <div className="font-medium">Erreur :</div>
-                  <div className="mt-1 font-mono">{analysis.data.error_message}</div>
+                <div className="rounded-r-lg border border-bad/30 bg-destructive-soft p-5 text-[13px] text-destructive-soft-foreground shadow-lvl-1">
+                  <div className="font-semibold">Erreur :</div>
+                  <div className="mt-1 font-mono text-[12.5px]">{analysis.data.error_message}</div>
                 </div>
               )
             ) : null}
@@ -347,7 +353,7 @@ function AnalysisPage() {
             ) : null}
 
             <div>
-              <Button asChild variant="outline" size="sm">
+              <Button asChild variant="ghost" size="sm">
                 <a href="/app/analyses">← Toutes mes analyses</a>
               </Button>
             </div>
@@ -355,6 +361,50 @@ function AnalysisPage() {
         ) : null}
       </div>
     </AppShell>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// KpiCard — composant local pour la grille KPI 4-cols (status=done).
+// Aligné `.kpi` du handoff : eyebrow + valeur mono XXL + sous-titre.
+// ──────────────────────────────────────────────────────────────────
+
+function KpiCard({
+  label,
+  value,
+  unit,
+  hint,
+  featured,
+}: {
+  label: string;
+  value: React.ReactNode;
+  unit?: string;
+  hint?: string;
+  featured?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-r-lg border bg-card p-5 shadow-lvl-1 ${
+        featured ? "border-violet/20 bg-violet-soft/40" : "border-line"
+      }`}
+    >
+      <Eyebrow>{label}</Eyebrow>
+      <div
+        className={`mt-2 font-mono tnum text-[28px] font-semibold tracking-[-0.025em] ${
+          featured ? "text-violet-deep" : "text-ink"
+        }`}
+      >
+        {value}
+        {unit ? (
+          <span className="ml-1 text-[14px] font-normal text-mute-2">
+            {unit}
+          </span>
+        ) : null}
+      </div>
+      {hint ? (
+        <div className="mt-1.5 text-[12px] text-mute-2">{hint}</div>
+      ) : null}
+    </div>
   );
 }
 
@@ -422,10 +472,19 @@ const LISTING_FREEMIUM_COLS = [
   "address_confidence",
 ].join(", ");
 
-const VERDICT_LABEL: Record<string, { label: string; variant: "success" | "warning" | "danger" }> = {
-  a_visiter: { label: "À visiter", variant: "success" },
-  sous_reserve: { label: "Sous réserve", variant: "warning" },
-  no_go: { label: "No-go", variant: "danger" },
+const VERDICT_LABEL: Record<
+  string,
+  {
+    label: string;
+    /** Variante du shadcn Badge (legacy, Top thèses summary). */
+    variant: "success" | "warning" | "danger";
+    /** Tone du VerdictPill atomique (handoff DA). */
+    tone: "good" | "mid" | "bad";
+  }
+> = {
+  a_visiter: { label: "À visiter", variant: "success", tone: "good" },
+  sous_reserve: { label: "Sous réserve", variant: "warning", tone: "mid" },
+  no_go: { label: "No-go", variant: "danger", tone: "bad" },
 };
 
 // Configuration des colonnes triables. Mémoise le getter pour pouvoir
@@ -561,7 +620,7 @@ function ListingsSection({
 
   if (listings.isLoading) {
     return (
-      <p className="text-[13px] text-muted-foreground">Chargement des biens…</p>
+      <p className="text-[13px] text-mute-2">Chargement des biens…</p>
     );
   }
   if (!listings.data || listings.data.length === 0) {
@@ -576,14 +635,16 @@ function ListingsSection({
       {/* Synthèse marché : compact, calculée côté client */}
       <MarketSummary listings={listings.data} />
 
-      {/* Carte : localisation des biens (centroïde commune + jitter) */}
+      {/* Carte : localisation des biens (centroïde commune + jitter).
+          NB: MapLibre déjà câblé dans `analysis-map.tsx` — repaint
+          déléguée à ce composant, on garde juste le header DA ici. */}
       <section>
         <div className="mb-4">
-          <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
+          <h2 className="text-[18px] font-semibold tracking-[-0.015em] text-ink">
             Carte
           </h2>
-          <p className="mt-1 text-[12px] text-muted-foreground">
-            Cliquez sur un point pour ouvrir la fiche du bien. Précision
+          <p className="mt-1 text-[12.5px] text-mute-2">
+            Clique sur un point pour ouvrir la fiche du bien. Précision
             adresse quand l'annonce la donne, sinon centroïde commune.
           </p>
         </div>
@@ -595,24 +656,22 @@ function ListingsSection({
 
       <section>
       <div className="mb-4 flex items-baseline justify-between">
-        <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
+        <h2 className="text-[18px] font-semibold tracking-[-0.015em] text-ink">
           {sorted.length}{" "}
           {sorted.length > 1 ? "biens" : "bien"}
           {filtersActive ? (
-            <span className="ml-2 font-mono text-[12px] font-normal text-muted-foreground">
+            <span className="ml-2 font-mono tnum text-[12px] font-normal text-mute-2">
               · filtrés sur {listings.data.length}
             </span>
           ) : (
-            <span className="ml-1 text-[14px] font-normal">analysés</span>
+            <span className="ml-1 text-[14px] font-normal text-mute-2">analysés</span>
           )}
         </h2>
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-          Clique sur une ligne pour la fiche complète
-        </span>
+        <Eyebrow>Clique sur une ligne pour la fiche complète</Eyebrow>
       </div>
 
       {/* Filter bar : type / verdict / DPE / score min. Côté client. */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-3 text-[12px]">
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-r-md border border-line bg-card p-3 text-[12px] shadow-lvl-1">
         <FilterSelect
           label="Type"
           value={filterType}
@@ -636,8 +695,8 @@ function ListingsSection({
           ]}
           onChange={(v) => setFilterVerdict(v as typeof filterVerdict)}
         />
-        <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">DPE</span>
+        <div className="flex items-center gap-1.5 border-l border-line pl-3 ml-1">
+          <span className="text-mute-2">DPE</span>
           {(["A", "B", "C", "D", "E", "F", "G"] as const).map((letter) => {
             const active = filterDpe.has(letter);
             return (
@@ -652,19 +711,18 @@ function ListingsSection({
                     return next;
                   });
                 }}
-                className={`flex h-6 w-6 items-center justify-center rounded text-[11px] font-bold transition-opacity ${
+                className={`transition-opacity ${
                   active ? "" : "opacity-40 hover:opacity-70"
-                } bg-dpe-${letter.toLowerCase()} ${
-                  ["A", "B", "F", "G"].includes(letter) ? "text-white" : "text-foreground"
                 }`}
+                aria-pressed={active}
               >
-                {letter}
+                <DpePill letter={letter} />
               </button>
             );
           })}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">Score ≥</span>
+        <div className="flex items-center gap-2 border-l border-line pl-3 ml-1">
+          <span className="text-mute-2">Score ≥</span>
           <input
             type="number"
             min={0}
@@ -676,24 +734,24 @@ function ListingsSection({
                 Math.max(0, Math.min(100, Number(e.target.value) || 0)),
               )
             }
-            className="h-7 w-16 rounded-md border border-border bg-background px-2 font-mono tabular-nums text-[12px] focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-7 w-16 rounded-r-sm border border-line bg-card px-2 font-mono tnum text-[12px] text-ink focus:outline-none focus-visible:shadow-ring-violet"
           />
         </div>
         {filtersActive ? (
           <button
             type="button"
             onClick={clearFilters}
-            className="ml-auto text-[12px] text-primary hover:underline"
+            className="ml-auto text-[12px] text-violet hover:text-violet-deep hover:underline"
           >
             Réinitialiser
           </button>
         ) : null}
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="overflow-hidden rounded-r-lg border border-line bg-card shadow-lvl-1">
         <div className="overflow-x-auto">
           <table className="w-full text-[13px]">
-            <thead className="border-b border-border bg-secondary/50">
+            <thead className="border-b border-line bg-bg-2">
               <tr>
                 <th className="w-16 px-3 py-2.5" />
                 <SortableTh
@@ -702,10 +760,10 @@ function ListingsSection({
                   dir={sortDir}
                   onClick={() => toggleSort("score_total")}
                 />
-                <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-mute-2 font-medium">
                   Bien
                 </th>
-                <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-mute-2 font-medium">
                   Type
                 </th>
                 <SortableTh
@@ -742,7 +800,7 @@ function ListingsSection({
                   dir={sortDir}
                   onClick={() => toggleSort("dpe")}
                 />
-                <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                <th className="text-left px-3 py-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-mute-2 font-medium">
                   Verdict
                 </th>
               </tr>
@@ -763,7 +821,7 @@ function ListingsSection({
                         setSelectedId(l.id);
                       }
                     }}
-                    className="cursor-pointer border-b border-border last:border-0 hover:bg-secondary/30 transition-colors focus:bg-secondary/40 focus:outline-none"
+                    className="cursor-pointer border-b border-line-soft last:border-0 transition-colors hover:bg-bg-2 focus:bg-bg-2 focus:outline-none"
                   >
                     <td className="px-3 py-2">
                       {l.photos_urls && l.photos_urls[0] && !l.is_masked ? (
@@ -771,12 +829,12 @@ function ListingsSection({
                           src={l.photos_urls[0]}
                           alt=""
                           loading="lazy"
-                          className="h-12 w-16 rounded-md object-cover"
+                          className="h-12 w-16 rounded-r-sm object-cover"
                         />
                       ) : (
-                        <div className="flex h-12 w-16 items-center justify-center rounded-md border border-dashed border-border bg-secondary/30 text-tertiary-foreground">
+                        <div className="flex h-12 w-16 items-center justify-center rounded-r-sm border border-dashed border-line bg-photo-bg text-mute-2">
                           {l.is_masked ? (
-                            <Lock className="h-3.5 w-3.5 text-primary" />
+                            <Lock className="h-3.5 w-3.5 text-violet" />
                           ) : (
                             <span className="text-[9px]">—</span>
                           )}
@@ -785,9 +843,9 @@ function ListingsSection({
                     </td>
                     <td className="px-3 py-3">
                       {l.score_total !== null ? (
-                        <ScoreBadge score={l.score_total} size="md" />
+                        <ScoreBadge value={l.score_total} size="md" />
                       ) : (
-                        <span className="text-tertiary-foreground">—</span>
+                        <span className="text-faint">—</span>
                       )}
                     </td>
                     <td className="px-3 py-3">
@@ -798,73 +856,63 @@ function ListingsSection({
                             : ""
                         }
                       >
-                        <div className="font-medium line-clamp-1">
+                        <div className="font-medium text-ink line-clamp-1">
                           {l.title ?? "Sans titre"}
                         </div>
-                        <div className="text-[11px] text-muted-foreground line-clamp-1">
+                        <div className="text-[11px] text-mute-2 line-clamp-1">
                           {l.pieces ? `${l.pieces}P · ` : ""}
                           {l.ville ?? "—"}
                           {l.code_postal ? ` ${l.code_postal}` : ""}
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-muted-foreground capitalize">
+                    <td className="px-3 py-3 text-mute-2 capitalize">
                       {l.type ?? "—"}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                    <td className="px-3 py-3 text-right font-mono tnum text-mute-2">
                       {l.surface ? `${l.surface} m²` : "—"}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums font-medium">
+                    <td className="px-3 py-3 text-right font-mono tnum font-medium text-ink">
                       {l.prix !== null && !l.is_masked
                         ? `${Math.round(l.prix).toLocaleString("fr-FR")} €`
                         : null}
                       {l.is_masked ? (
-                        <span className="inline-flex items-center gap-1 text-muted-foreground">
-                          <Lock className="h-3 w-3 text-primary" />
+                        <span className="inline-flex items-center gap-1 text-mute-2">
+                          <Lock className="h-3 w-3 text-violet" />
                           Pro
                         </span>
                       ) : null}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums text-muted-foreground">
+                    <td className="px-3 py-3 text-right font-mono tnum text-mute-2">
                       {p2 !== null && !l.is_masked
                         ? `${Math.round(p2).toLocaleString("fr-FR")}`
                         : "—"}
                     </td>
-                    <td className="px-3 py-3 text-right font-mono tabular-nums">
+                    <td className="px-3 py-3 text-right font-mono tnum">
                       {l.rendement_brut_pct !== null && l.rendement_brut_pct !== undefined ? (
                         <span
                           className={
                             l.rendement_brut_pct >= 6
-                              ? "text-success-foreground font-medium"
-                              : "text-muted-foreground"
+                              ? "font-medium text-sage-2"
+                              : "text-mute-2"
                           }
                         >
                           {l.rendement_brut_pct.toFixed(2)} %
                         </span>
                       ) : (
-                        <span className="text-tertiary-foreground">—</span>
+                        <span className="text-faint">—</span>
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      {l.dpe ? (
-                        <span
-                          className={`inline-flex h-5 w-5 items-center justify-center rounded text-[11px] font-bold bg-dpe-${l.dpe.toLowerCase()} ${
-                            ["A", "B", "F", "G"].includes(l.dpe)
-                              ? "text-white"
-                              : "text-foreground"
-                          }`}
-                        >
-                          {l.dpe}
-                        </span>
-                      ) : (
-                        <span className="text-tertiary-foreground">—</span>
-                      )}
+                      <DpePill letter={l.dpe} />
                     </td>
                     <td className="px-3 py-3">
                       {verdict ? (
-                        <Badge variant={verdict.variant}>{verdict.label}</Badge>
+                        <VerdictPill verdict={verdict.tone}>
+                          {verdict.label}
+                        </VerdictPill>
                       ) : (
-                        <span className="text-tertiary-foreground">—</span>
+                        <span className="text-faint">—</span>
                       )}
                     </td>
                   </tr>
@@ -875,7 +923,8 @@ function ListingsSection({
         </div>
       </div>
       {maskedCount > 0 ? (
-        <p className="mt-3 text-[12px] text-muted-foreground">
+        <p className="mt-3 text-[12px] text-mute-2">
+          <Lock className="mr-1 inline h-3 w-3 text-violet" />
           {maskedCount} bien{maskedCount > 1 ? "s" : ""} à fort score
           masqué{maskedCount > 1 ? "s" : ""} — passe Pro pour les débloquer.
         </p>
@@ -912,13 +961,13 @@ function SortableTh({
       <button
         type="button"
         onClick={onClick}
-        className={`inline-flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.12em] transition-colors hover:text-foreground ${
-          active ? "text-foreground" : "text-muted-foreground"
+        className={`inline-flex items-center gap-1 font-mono text-[11px] font-medium uppercase tracking-[0.16em] transition-colors hover:text-ink ${
+          active ? "text-ink" : "text-mute-2"
         }`}
       >
         {label}
         {active ? (
-          <span className="text-[10px] leading-none">
+          <span className="text-[10px] leading-none text-violet">
             {dir === "asc" ? "↑" : "↓"}
           </span>
         ) : null}
@@ -953,70 +1002,130 @@ function TopThesesSection({ analysisId }: { analysisId: string }) {
   return (
     <section>
       <div className="mb-4 flex items-baseline gap-3">
-        <h2 className="text-[18px] font-semibold tracking-[-0.015em]">
+        <h2 className="text-[18px] font-semibold tracking-[-0.015em] text-ink">
           Top {tops.data.length} avec thèse Claude
         </h2>
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-          Analyse argumentée par Claude Sonnet
-        </span>
+        <Eyebrow>Analyse argumentée par Claude Sonnet</Eyebrow>
       </div>
-      <div className="space-y-4">
+      <div className="space-y-3">
         {tops.data.map((l, idx) => {
           const verdict = l.verdict ? VERDICT_LABEL[l.verdict] : null;
+          const isFirst = idx === 0;
           return (
             <details
               key={l.id}
-              className="group rounded-lg border border-border bg-card open:shadow-lvl-1"
-              open={idx === 0}
+              className={`group rounded-r-lg border bg-card shadow-lvl-1 transition-colors ${
+                isFirst
+                  ? "border-violet/30 open:shadow-[0_0_0_3px_rgba(91,71,224,0.06)]"
+                  : "border-line"
+              }`}
+              open={isFirst}
             >
-              <summary className="flex cursor-pointer items-center gap-3 px-5 py-4 list-none">
-                <span className="font-mono text-[12px] uppercase tracking-[0.16em] text-muted-foreground">
+              <summary className="flex cursor-pointer items-center gap-3 px-5 py-4 list-none hover:bg-bg-2/60 transition-colors">
+                <span
+                  className={`font-mono text-[13px] font-semibold tracking-[0.02em] ${
+                    isFirst ? "text-violet" : "text-mute-2"
+                  }`}
+                >
                   #{idx + 1}
                 </span>
                 {l.score_total !== null ? (
-                  <ScoreBadge score={l.score_total} size="md" />
+                  <ScoreBadge value={l.score_total} size="lg" />
                 ) : null}
                 <div className="min-w-0 flex-1">
                   <div className={l.is_masked ? "blur-sm select-none" : ""}>
-                    <div className="text-[15px] font-semibold line-clamp-1">
+                    <div className="text-[13.5px] font-medium tracking-[-0.01em] text-ink line-clamp-1">
                       {l.title ?? "Sans titre"}
                     </div>
-                    <div className="text-[12px] text-muted-foreground line-clamp-1">
-                      {l.ville ?? "—"}
-                      {l.code_postal ? ` · ${l.code_postal}` : ""}
-                      {l.surface ? ` · ${l.surface} m²` : ""}
-                      {l.pieces ? ` · ${l.pieces}P` : ""}
-                      {l.dpe ? ` · DPE ${l.dpe}` : ""}
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-mute-2">
+                      <span>{l.ville ?? "—"}</span>
+                      {l.code_postal ? (
+                        <>
+                          <span className="text-faint">·</span>
+                          <span>{l.code_postal}</span>
+                        </>
+                      ) : null}
+                      {l.surface ? (
+                        <>
+                          <span className="text-faint">·</span>
+                          <span>{l.surface} m²</span>
+                        </>
+                      ) : null}
+                      {l.pieces ? (
+                        <>
+                          <span className="text-faint">·</span>
+                          <span>{l.pieces}P</span>
+                        </>
+                      ) : null}
+                      {l.dpe ? (
+                        <>
+                          <span className="text-faint">·</span>
+                          <DpePill letter={l.dpe} className="h-4 w-4 text-[9px]" />
+                        </>
+                      ) : null}
                     </div>
                   </div>
                 </div>
                 {verdict ? (
-                  <Badge variant={verdict.variant}>{verdict.label}</Badge>
+                  <VerdictPill verdict={verdict.tone}>
+                    {verdict.label}
+                  </VerdictPill>
                 ) : null}
-                <span className="font-mono tabular-nums text-[14px] font-medium">
+                {l.rendement_brut_pct != null ? (
+                  <span
+                    className={`font-mono tnum text-[13px] font-semibold ${
+                      l.rendement_brut_pct >= 6
+                        ? "text-sage-2"
+                        : l.rendement_brut_pct >= 4
+                          ? "text-warning-soft-foreground"
+                          : "text-mute-2"
+                    }`}
+                  >
+                    {l.rendement_brut_pct.toFixed(1)}%
+                  </span>
+                ) : null}
+                <span className="font-mono tnum text-[14px] font-semibold text-ink">
                   {l.prix !== null && !l.is_masked
                     ? `${Math.round(l.prix).toLocaleString("fr-FR")} €`
-                    : "🔒"}
+                    : (
+                      <span className="inline-flex items-center gap-1 text-mute-2">
+                        <Lock className="h-3.5 w-3.5 text-violet" />
+                        Pro
+                      </span>
+                    )}
                 </span>
               </summary>
-              <div className="border-t border-border px-5 py-5">
+              <div className="border-t border-line px-6 py-6">
                 {l.is_masked ? (
-                  <div className="text-center py-8">
-                    <Lock className="mx-auto h-6 w-6 text-primary" />
-                    <p className="mt-3 text-[14px] font-medium">
+                  <div className="py-8 text-center">
+                    <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-violet-soft">
+                      <Lock className="h-5 w-5 text-violet" />
+                    </div>
+                    <h3 className="mt-3 text-[16px] font-semibold tracking-[-0.012em] text-ink">
                       Cette opportunité est masquée.
-                    </p>
-                    <p className="mt-1 text-[13px] text-muted-foreground">
-                      Passe Pro pour lire la thèse Claude complète + plan
-                      de financement + stratégie de négociation chiffrée.
+                    </h3>
+                    <p className="mx-auto mt-2 max-w-[48ch] text-[13px] leading-[1.55] text-muted-ink">
+                      Passe Pro pour lire la thèse Claude complète, le plan
+                      de financement et la stratégie de négociation chiffrée.
                     </p>
                     <Button className="mt-4" size="sm">
                       Passer Pro — 7 jours offerts
                     </Button>
                   </div>
                 ) : (
-                  <div className="prose prose-sm max-w-none text-[13.5px] leading-[1.65] text-secondary-foreground whitespace-pre-wrap">
-                    {l.these_claude}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-violet">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-violet" />
+                      Thèse de Claude
+                      <span className="font-normal text-mute-2 normal-case tracking-normal">
+                        · Sonnet 4.6
+                      </span>
+                    </div>
+                    {/* Moment "dramatique" du handoff : la thèse en serif
+                        italic. C'est le payoff de l'analyse. */}
+                    <div className="font-serif italic text-[16px] leading-[1.55] text-ink whitespace-pre-wrap [text-wrap:pretty]">
+                      {l.these_claude}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1092,7 +1201,7 @@ function RenameableTitle({
           }
         }}
         maxLength={80}
-        className="rounded-md border border-border bg-background px-2 py-1 text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] outline-none focus:ring-2 focus:ring-ring"
+        className="rounded-r-sm border border-line bg-card px-2 py-1 text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink outline-none focus-visible:shadow-ring-violet"
       />
     );
   }
@@ -1101,11 +1210,11 @@ function RenameableTitle({
     <button
       type="button"
       onClick={() => setEditing(true)}
-      className="group inline-flex items-baseline gap-2 rounded-md px-1 py-0.5 text-left text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] hover:bg-secondary/50"
+      className="group inline-flex items-baseline gap-2 rounded-r-sm px-1 py-0.5 text-left text-[28px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink hover:bg-bg-2/70"
       aria-label="Renommer la recherche"
     >
       {display}
-      <Pencil className="h-3.5 w-3.5 self-center text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+      <Pencil className="h-3.5 w-3.5 self-center text-mute-2 opacity-0 transition-opacity group-hover:opacity-100" />
     </button>
   );
 }
@@ -1123,11 +1232,11 @@ function FilterSelect({
 }) {
   return (
     <label className="flex items-center gap-1.5">
-      <span className="text-muted-foreground">{label}</span>
+      <span className="text-mute-2">{label}</span>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="h-7 rounded-md border border-border bg-background px-2 text-[12px] focus:outline-none focus:ring-2 focus:ring-ring"
+        className="h-7 rounded-r-sm border border-line bg-card px-2 text-[12px] text-ink focus:outline-none focus-visible:shadow-ring-violet"
       >
         {options.map((o) => (
           <option key={o.value} value={o.value}>
