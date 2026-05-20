@@ -36,6 +36,7 @@ import {
 import { Link } from "@tanstack/react-router";
 import * as React from "react";
 
+import { requireAuth } from "@/lib/auth-guards";
 import { AdjustmentItem } from "@web/components/ui/adjustment-item";
 import { Button } from "@web/components/ui/button";
 import { Card } from "@web/components/ui/card";
@@ -554,12 +555,12 @@ function ResultatHeader({ onNewEstimation }: { onNewEstimation: () => void }) {
       <div className="mx-auto flex h-14 max-w-[1180px] items-center justify-between gap-4 px-6 sm:px-8">
         <Wordmark />
         <nav className="hidden gap-5 text-[13px] text-muted-ink md:flex">
-          <Link to="/" className="no-underline hover:text-ink">
-            Tableau de bord
-          </Link>
-          <a href="#" className="no-underline hover:text-ink">
+          <Link to="/biens" className="no-underline hover:text-ink">
             Mes biens
-          </a>
+          </Link>
+          <Link to="/" className="no-underline hover:text-ink">
+            Accueil
+          </Link>
         </nav>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onNewEstimation}>
@@ -784,4 +785,15 @@ function validateSearch(search: Record<string, unknown>): SearchParams {
 export const Route = createFileRoute("/estimer/resultat")({
   component: StepResultatPage,
   validateSearch,
+  // Auth obligatoire : on cache le résultat tant que l'user n'a pas créé
+  // ou rejoint son compte. Si pas de session, on renvoie vers
+  // /estimer/compte (toujours dans le tunnel) plutôt que vers
+  // /auth/login — qui demanderait à l'user de reprendre tout le parcours.
+  beforeLoad: ({ search }) => {
+    const bienQs = search.id ? `&bienId=${encodeURIComponent(search.id)}` : "";
+    return requireAuth({
+      from: "/estimer/resultat",
+      loginPath: `/estimer/compte?afterAuth=resultat${bienQs}`,
+    });
+  },
 });

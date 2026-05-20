@@ -22,20 +22,70 @@ import * as React from "react";
 import { Button } from "@web/components/ui/button";
 import { Card } from "@web/components/ui/card";
 import { Eyebrow } from "@web/components/ui/eyebrow";
+import { AddressAutocompleteInput } from "@/components/value/AddressAutocompleteInput";
 import { Wordmark } from "@/components/value/EstimationStepperLayout";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  resolveBanAddress,
+  useBanAutocomplete,
+  type BanSuggestion,
+} from "@/hooks/use-ban-autocomplete";
 import { useEstimerState } from "@/hooks/use-estimer-state";
 import { cn } from "@/lib/utils";
 
 function LandingPage() {
   const navigate = useNavigate();
-  const { state, patch } = useEstimerState();
+  const { state, patchAddress } = useEstimerState();
   const [address, setAddress] = React.useState(state.address);
+  const { suggestions, isLoading, error } = useBanAutocomplete(address);
 
-  function handleSubmit(e: React.FormEvent) {
+  function commitAndNavigate(suggestion: BanSuggestion) {
+    patchAddress({
+      address: suggestion.label,
+      lat: suggestion.lat,
+      lng: suggestion.lng,
+      code_postal: suggestion.postcode || null,
+      ville: suggestion.city || null,
+      code_insee: suggestion.codeInsee,
+    });
+    setAddress(suggestion.label);
+    // Skip de l'écran Adresse séparé : l'utilisateur a déjà fourni
+    // l'adresse depuis la landing, on va directement à description.
+    void navigate({ to: "/estimer/description" });
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = address.trim();
     if (trimmed.length === 0) return;
-    patch("address", trimmed);
+
+    // Si une suggestion correspond exactement au texte tapé, on l'utilise.
+    const exactMatch = suggestions.find(
+      (s) => s.label.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (exactMatch) {
+      commitAndNavigate(exactMatch);
+      return;
+    }
+
+    // Sinon : last call BAN avec limit=1 pour résoudre l'adresse libre.
+    const resolved = await resolveBanAddress(trimmed);
+    if (resolved) {
+      commitAndNavigate(resolved);
+      return;
+    }
+
+    // BAN down ou rien trouvé : on stocke l'adresse texte libre sans coords
+    // et on navigate quand même vers l'écran adresse pour que l'utilisateur
+    // puisse confirmer/préciser.
+    patchAddress({
+      address: trimmed,
+      lat: null,
+      lng: null,
+      code_postal: null,
+      ville: null,
+      code_insee: null,
+    });
     void navigate({ to: "/estimer" });
   }
 
@@ -88,26 +138,17 @@ function LandingPage() {
                 Où se trouve ton bien ?
               </label>
               <div className="grid grid-cols-[1fr_auto] gap-2.5">
-                <div className="relative">
-                  <MapPin
-                    aria-hidden
-                    className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-mute-2"
-                    strokeWidth={2}
-                  />
-                  <input
-                    id="iv-address"
-                    type="text"
-                    autoComplete="street-address"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    placeholder="Adresse, ville, code postal"
-                    className={cn(
-                      "h-[60px] w-full rounded-r-lg border border-line-2 bg-card pl-11 pr-4 text-[15.5px] text-ink",
-                      "placeholder:text-mute-2 shadow-lvl-2",
-                      "focus-visible:border-terra focus-visible:outline-none focus-visible:shadow-ring-terra",
-                    )}
-                  />
-                </div>
+                <AddressAutocompleteInput
+                  id="iv-address"
+                  value={address}
+                  onChange={setAddress}
+                  onSelectSuggestion={commitAndNavigate}
+                  suggestions={suggestions}
+                  isLoading={isLoading}
+                  error={error}
+                  placeholder="Adresse, ville, code postal"
+                  inputClassName="shadow-lvl-2"
+                />
                 <Button type="submit" variant="terra" size="lg" className="h-[60px] px-6 text-[14.5px]">
                   Estimer mon bien
                   <ArrowRight className="h-3.5 w-3.5" strokeWidth={2.5} />
@@ -171,6 +212,7 @@ function LandingPage() {
 // ──────────────────────────────────────────────────────────────────
 
 function LandingHeader() {
+  const { isAuthenticated } = useAuth();
   return (
     <header className="border-b border-line/60 bg-bg/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-[1200px] items-center justify-between px-6 sm:px-8">
@@ -187,12 +229,21 @@ function LandingHeader() {
           </a>
         </nav>
         <div className="flex items-center gap-3">
-          <Link
-            to="/estimer/compte"
-            className="text-[13px] text-ink-2 no-underline hover:text-ink"
-          >
-            Se connecter
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              to="/biens"
+              className="text-[13px] text-ink-2 no-underline hover:text-ink"
+            >
+              Mes biens
+            </Link>
+          ) : (
+            <Link
+              to="/auth/login"
+              className="text-[13px] text-ink-2 no-underline hover:text-ink"
+            >
+              Se connecter
+            </Link>
+          )}
           <Button asChild variant="terra" size="sm" className="hidden md:inline-flex">
             <Link to="/estimer">Estimer mon bien</Link>
           </Button>
