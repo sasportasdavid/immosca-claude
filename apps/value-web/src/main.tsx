@@ -7,6 +7,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import "./index.css";
+// PR-DA-U1 — Layer d'unification DA (Immoscan/Immovalue) : doit charger APRÈS
+// index.css car elle consomme les tokens (--violet, --terra, --ring-violet…)
+// définis dans :root. Paramétrée par data-product sur le <body>/#root.
+import "./styles/immoscan-unified.css";
 import { initPostHog } from "./lib/posthog";
 import { createQueryClient } from "./lib/query-client";
 import { initSentry } from "./lib/sentry";
