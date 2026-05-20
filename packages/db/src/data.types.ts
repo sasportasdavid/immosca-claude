@@ -7,6 +7,8 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -551,7 +553,113 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      refresh_dvf_medians: { Args: never; Returns: undefined }
+      rpc_dpe_sector_average: {
+        Args: { p_code_insee: string; p_type_bien: string }
+        Returns: {
+          classe_mediane: string
+          code_iris: string
+          count_a: number
+          count_b: number
+          count_c: number
+          count_d: number
+          count_e: number
+          count_f: number
+          count_g: number
+          echantillon_size: number
+          typologie: string
+        }[]
+      }
+      rpc_dvf_comparables: {
+        Args: {
+          p_depuis_annee?: number
+          p_lat: number
+          p_lng: number
+          p_rayon_m?: number
+          p_surface_m2: number
+          p_type_bien: string
+        }
+        Returns: {
+          code_iris: string
+          date_mutation: string
+          distance_m: number
+          prix: number
+          prix_m2: number
+          ref: string
+          surface: number
+          typologie: string
+        }[]
+      }
+      rpc_georisques: {
+        Args: { p_code_insee: string }
+        Returns: {
+          argile_aleas: string
+          basol_proche_m: number
+          ppri_inondation: boolean
+          ppri_mouvement_terrain: boolean
+          radon_potentiel: string
+          remarques: string[]
+          sismicite_zone: number
+        }[]
+      }
+      rpc_iris_context: {
+        Args: { p_lat: number; p_lng: number }
+        Returns: {
+          age_median: number
+          code_iris: string
+          nom_iris: string
+          pct_logements_collectifs: number
+          pct_proprietaires: number
+          pct_residences_principales: number
+          population: number
+          revenu_median: number
+          taux_pauvrete: number
+        }[]
+      }
+      rpc_noise: {
+        Args: { p_lat: number; p_lng: number }
+        Returns: {
+          categorie: string
+          lden_db: number
+          source_bruit_principale: string
+        }[]
+      }
+      rpc_oll_market: {
+        Args: { p_code_insee: string; p_type_bien: string }
+        Returns: {
+          annee_reference: number
+          code_insee: string
+          loyer_median_m2: number
+          loyer_p25_m2: number
+          loyer_p75_m2: number
+          source: string
+          typologie: string
+        }[]
+      }
+      rpc_prix_trend: {
+        Args: { p_code_insee: string; p_type_bien: string }
+        Returns: {
+          annee: number
+          nb_mutations: number
+          prix_m2_median: number
+        }[]
+      }
+      rpc_transports: {
+        Args: { p_lat: number; p_lng: number; p_rayon_m?: number }
+        Returns: {
+          bus_distance_m: number
+          bus_ligne: string
+          commerces_500m: number
+          gare_distance_m: number
+          gare_nom: string
+          isochrone_15min_paris: boolean
+          metro_distance_m: number
+          metro_ligne: string
+          rer_distance_m: number
+          rer_ligne: string
+          services_500m: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
