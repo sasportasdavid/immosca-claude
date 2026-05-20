@@ -45,6 +45,12 @@ import { findAdemeDpe } from "@/services/ademe";
 import { banGeocode, banReverse } from "@/services/ban";
 import { callClaudeStructured } from "@/services/claude";
 import {
+  checkQuota,
+  decrementConcurrentAnalysis,
+  encodeQuotaError,
+  incrementAnalysisCounter,
+} from "@/services/quota";
+import {
   THESIS_SYSTEM_PROMPT,
   buildThesisUserPrompt,
 } from "@/services/prompts/thesis";
@@ -221,6 +227,73 @@ export const analyzeTask = task({
       throw new Error(`Analyse ${analysisId} introuvable: ${readErr?.message}`);
     }
 
+    // 1.5. PR-C : check quota + lecture du plan AVANT de partir scraper.
+    // Sur paramsOverride/apifyRunIdOverride (re-simulation), on skip le check
+    // car c'est un re-run sans nouveau coût de scrape (analyse déjà comptée).
+    const isReSimulation = !!paramsOverride || !!apifyRunIdOverride;
+
+    const { data: profileRow } = await supabaseApp
+      .from("profiles")
+      .select("subscription_plan")
+      .eq("id", analysis.profile_id)
+      .single();
+    const userPlan = (profileRow?.subscription_plan ?? "free") as PlanId;
+    const planDef = PLANS[userPlan];
+
+    if (!isReSimulation) {
+      // Check concurrent slot (cap=1 Free/Pro, 2 Pro+, 3 Business)
+      const concurrentCheck = await checkQuota(
+        analysis.profile_id,
+        "concurrent_analysis",
+      );
+      if (!concurrentCheck.allowed) {
+        const msg = encodeQuotaError(concurrentCheck);
+        await setAnalysisStatus(analysisId, "failed", 0, { error_message: msg });
+        Sentry.captureMessage("Analysis blocked: concurrent quota", {
+          tags: { analysis_id: analysisId, profile_id: analysis.profile_id },
+        });
+        throw new Error(msg);
+      }
+
+      // Incrémente analyses_used + analyses_concurrent. Si plan saturé,
+      // consomme un PPU si disponible — sinon raise quota_exceeded_no_ppu.
+      try {
+        const billing = await incrementAnalysisCounter(
+          analysis.profile_id,
+          analysisId,
+        );
+        logger.info("Analysis quota OK", {
+          analysisId,
+          plan: userPlan,
+          billed_via: billing.billed_via,
+          analyses_used: billing.analyses_used,
+          analyses_limit: billing.analyses_limit,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isQuotaErr = msg.includes("quota_exceeded_no_ppu") || msg.includes("P0001");
+        if (isQuotaErr) {
+          const enc = encodeQuotaError({
+            allowed: false,
+            reason: "analysis_quota_exceeded",
+            limit: planDef.analysesPerMonth,
+            ppu_balance: 0,
+            upgrade_to:
+              userPlan === "free"
+                ? "pro"
+                : userPlan === "pro"
+                  ? "pro_plus"
+                  : userPlan === "pro_plus"
+                    ? "business"
+                    : null,
+          });
+          await setAnalysisStatus(analysisId, "failed", 0, { error_message: enc });
+          throw new Error(enc);
+        }
+        throw err;
+      }
+    }
+
     await setAnalysisStatus(analysisId, "scraping", 5, {
       started_at: new Date().toISOString(),
     });
@@ -285,7 +358,11 @@ export const analyzeTask = task({
               // buildInput peut être async (ex. LBC : lookup CP → ville
               // via geo.api.gouv.fr). On await pour le résoudre avant
               // de lancer l'actor.
-              const runInput = await plan.buildInput(url);
+              // maxItems = cap_plan + 1 pour détecter la troncature.
+              const runInput = await plan.buildInput(
+                url,
+                planDef.itemsMaxPerAnalysis + 1,
+              );
               const result = await runApifyActor<RawApifyListing>({
                 actorId: plan.actorId,
                 runInput,
@@ -351,13 +428,21 @@ export const analyzeTask = task({
             ville: analysis.ville,
             codePostal: analysis.code_postal,
           });
+        // Plan-aware : applique le cap d'items, +1 pour détecter truncate.
+        // Note : pour dltik, `maxResultsPerSource` est par source — donc
+        // 5 sources × cap peut quand même excéder. On accepte le surplus
+        // côté dédup (les items en trop seront jetés après mapping).
+        const filtersWithCap: PigeImmoFilters = {
+          ...filters,
+          maxResultsPerSource: planDef.itemsMaxPerAnalysis + 1,
+        };
         logger.info("Multi-source run (dltik)", {
           actorId: multiActorId,
-          filters,
+          filters: filtersWithCap,
         });
         apifyResult = await runApifyActor<RawApifyListing>({
           actorId: multiActorId,
-          runInput: buildPigeImmoRunInput(filters),
+          runInput: buildPigeImmoRunInput(filtersWithCap),
           // L'actor multi-source est plus lent (5 sources × pagination)
           timeoutSecs: 1500,
           memoryMbytes: 2048,
@@ -389,7 +474,11 @@ export const analyzeTask = task({
         }
         apifyResult = await runApifyActor<RawApifyListing>({
           actorId: resolvedActorId,
-          runInput: buildApifyRunInput(resolvedActorId, analysis.source_url),
+          runInput: buildApifyRunInput(
+            resolvedActorId,
+            analysis.source_url,
+            planDef.itemsMaxPerAnalysis + 1,
+          ),
           onStart: (runId) => trackApifyRunStart(analysisId, runId),
           shouldAbort: () => isAnalysisCanceled(analysisId),
         });
@@ -768,35 +857,43 @@ export const analyzeTask = task({
       // 8. GENERATING — thèse Claude pour le top N selon plan
       await setAnalysisStatus(analysisId, "generating", 90);
 
-      // Récupère le plan du user via profile
-      const { data: profile } = await supabaseApp
-        .from("profiles")
-        .select("subscription_plan")
-        .eq("id", analysis.profile_id)
-        .single();
-      const plan = (profile?.subscription_plan ?? "free") as PlanId;
-      const topN = PLANS[plan].topN ?? 5;
+      // Plan déjà résolu en step 1.5 — pas de re-fetch
+      const topN = planDef.topN;
 
       const generatedCount = skipClaude
         ? 0
         : await generateThesesForTop(
             analysisId,
             topN,
-            plan,
+            userPlan,
             paramsSnapshot,
           );
       logger.info("Theses generated", {
         generatedCount,
-        plan,
+        plan: userPlan,
         topN,
         skipped: !!skipClaude,
       });
 
-      // 9. Done
+      // 9. Done — flag truncate si l'actor a renvoyé exactement cap+1.
+      const itemsCap = planDef.itemsMaxPerAnalysis;
+      const wasTruncated = apifyResult.items.length >= itemsCap + 1;
+
       await setAnalysisStatus(analysisId, "done", 100, {
         median_price_per_sqm: median,
         completed_at: new Date().toISOString(),
       });
+
+      // Update truncate flag + cap snapshot (colonnes hors enum status)
+      await supabaseApp
+        .from("analyses")
+        .update({ was_truncated: wasTruncated, items_cap_applied: itemsCap } as never)
+        .eq("id", analysisId);
+
+      // Libère le slot concurrent
+      if (!isReSimulation) {
+        await decrementConcurrentAnalysis(analysis.profile_id);
+      }
 
       return {
         analysisId,
@@ -806,6 +903,7 @@ export const analyzeTask = task({
         scored: scoredCount,
         thesesGenerated: generatedCount,
         medianPriceM2: median,
+        wasTruncated,
       };
     } catch (err) {
       // Stringify lisible : un PostgrestError (et autres objets erreur
@@ -838,6 +936,9 @@ export const analyzeTask = task({
       // et on ne signale pas à Sentry — c'est une action volontaire user.
       if (err instanceof ApifyRunCanceledError) {
         logger.info("Analyze canceled by user", { analysisId, runId: err.runId });
+        if (!isReSimulation) {
+          await decrementConcurrentAnalysis(analysis.profile_id);
+        }
         return { status: "canceled" as const };
       }
       // Pareil si la cancel a eu lieu entre deux étapes (pas dans le poll
@@ -845,6 +946,9 @@ export const analyzeTask = task({
       try {
         if (await isAnalysisCanceled(analysisId)) {
           logger.info("Analyze canceled (mid-step)", { analysisId });
+          if (!isReSimulation) {
+            await decrementConcurrentAnalysis(analysis.profile_id);
+          }
           return { status: "canceled" as const };
         }
       } catch {
@@ -854,6 +958,11 @@ export const analyzeTask = task({
       await setAnalysisStatus(analysisId, "failed", 0, {
         error_message: message,
       });
+      // Libère le slot concurrent même en cas d'erreur (sinon le user
+      // se retrouve avec un slot bloqué pour toute la journée).
+      if (!isReSimulation) {
+        await decrementConcurrentAnalysis(analysis.profile_id);
+      }
       Sentry.captureException(err, { tags: { analysis_id: analysisId } });
       throw err;
     }
@@ -1084,7 +1193,9 @@ async function generateThesesForTop(
   }
 
   let generated = 0;
+  let rank = 0;
   for (const row of tops ?? []) {
+    rank++;
     const l = (row as unknown as { listing: Record<string, unknown> }).listing;
     if (!l || (l.analysis_id as string) !== analysisId) continue;
 
@@ -1101,6 +1212,7 @@ async function generateThesesForTop(
     try {
       const result = await callClaudeStructured({
         plan,
+        rank,
         schema: claudeThesisOutputSchema,
         toolName: "rediger_these_investissement",
         toolDescription:

@@ -13,10 +13,16 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Lock, Pencil } from "lucide-react";
+import { Lock, Pencil, Radar } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AnalysisActions } from "@/components/analysis-actions";
+import {
+  QuotaUpsellBanner,
+  TruncateBanner,
+  parseQuotaError,
+} from "@/components/analysis-banners";
+import { trackEvent } from "@/lib/posthog";
 import { AnalysisMap } from "@/components/analysis-map";
 import { AnalysisProgress } from "@/components/analysis-progress";
 import { AppShell } from "@/components/app-shell";
@@ -105,6 +111,40 @@ function AnalysisPage() {
     },
   });
 
+  // PostHog : track analysis_completed UNE FOIS quand status passe à done.
+  // Le ref évite la double émission si la query refetch en background.
+  const completedTrackedRef = useRef(false);
+  useEffect(() => {
+    if (analysis.data?.status === "done" && !completedTrackedRef.current) {
+      completedTrackedRef.current = true;
+      trackEvent({
+        name: "analysis_completed",
+        props: {
+          analysis_id: id,
+          total_listings_raw: analysis.data.total_listings_raw ?? 0,
+          total_listings_filtered: analysis.data.total_listings_filtered ?? 0,
+          was_truncated: !!analysis.data.was_truncated,
+        },
+      });
+    }
+    // Aussi track quota_exceeded si status=failed avec error message parsable
+    if (analysis.data?.status === "failed" && analysis.data.error_message) {
+      const parsed = parseQuotaError(analysis.data.error_message);
+      if (parsed && !completedTrackedRef.current) {
+        completedTrackedRef.current = true;
+        trackEvent({
+          name: "quota_exceeded",
+          props: {
+            reason: parsed.reason,
+            upgrade_to: parsed.upgradeTo,
+            used: parsed.used,
+            limit: parsed.limit,
+          },
+        });
+      }
+    }
+  }, [analysis.data?.status, analysis.data?.error_message, analysis.data?.total_listings_raw, analysis.data?.total_listings_filtered, analysis.data?.was_truncated, id]);
+
   return (
     <AppShell
       userEmail={auth.user?.email ?? "—"}
@@ -182,6 +222,24 @@ function AnalysisPage() {
                 }
               />
             ) : null}
+            {analysis.data?.status === "done" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  queryClient
+                    .getQueryCache()
+                    .findAll({ queryKey: ["watches"] })
+                    .forEach((q) => q.invalidate()) ?? undefined
+                }
+                asChild
+              >
+                <a href={`/app/veilles/nouvelle?fromAnalysis=${id}`}>
+                  <Radar className="mr-1.5 h-3.5 w-3.5" />
+                  Mettre en veille
+                </a>
+              </Button>
+            ) : null}
             {analysis.data ? (
               <AnalysisActions
                 analysisId={id}
@@ -244,11 +302,27 @@ function AnalysisPage() {
               />
             )}
 
+            {/* Bannière truncate : si l'actor a dépassé le cap du plan */}
+            {analysis.data.status === "done" && analysis.data.was_truncated ? (
+              <TruncateBanner
+                totalListings={analysis.data.total_listings_raw}
+                itemsCapApplied={analysis.data.items_cap_applied}
+                currentPlan={(profile.data?.subscription_plan ?? "free") as never}
+              />
+            ) : null}
+
             {analysis.data.status === "failed" && analysis.data.error_message ? (
-              <div className="rounded-lg border border-destructive bg-destructive-soft p-5 text-[13px] text-destructive-soft-foreground">
-                <div className="font-medium">Erreur :</div>
-                <div className="mt-1 font-mono">{analysis.data.error_message}</div>
-              </div>
+              parseQuotaError(analysis.data.error_message) ? (
+                <QuotaUpsellBanner
+                  errorMessage={analysis.data.error_message}
+                  currentPlan={(profile.data?.subscription_plan ?? "free") as never}
+                />
+              ) : (
+                <div className="rounded-lg border border-destructive bg-destructive-soft p-5 text-[13px] text-destructive-soft-foreground">
+                  <div className="font-medium">Erreur :</div>
+                  <div className="mt-1 font-mono">{analysis.data.error_message}</div>
+                </div>
+              )
             ) : null}
 
             {/* Top N avec thèse Claude (PR4) — visible quand done */}

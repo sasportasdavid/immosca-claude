@@ -28,9 +28,18 @@ const anthropic = ANTHROPIC_API_KEY
   : null;
 
 export type CallClaudeOpts<T extends z.ZodType> = {
-  /** Plan du user — détermine le modèle (Sonnet par défaut, Opus Business). */
+  /** Plan du user — détermine le modèle (Sonnet/Opus selon palier + rank). */
   plan?: PlanId;
-  /** Override explicite du modèle. */
+  /**
+   * Rang (1-based) du listing dans le Top N. Combiné au plan, détermine
+   * le modèle :
+   *   - Pro+ : rank ≤ 5 → Opus, rank > 5 → Sonnet
+   *   - Business : Opus partout
+   *   - Free / Pro : Sonnet partout
+   * Si omis, on retourne le modèle "top5" du plan.
+   */
+  rank?: number;
+  /** Override explicite du modèle (bypasse plan+rank). */
   model?: ClaudeModel;
   /** Prompt système (rôle, contraintes, ton). */
   system: string;
@@ -60,7 +69,10 @@ export async function callClaudeStructured<T extends z.ZodType>(
   }
 
   const model =
-    opts.model ?? (opts.plan ? claudeModelForPlan(opts.plan) : CLAUDE_MODEL_DEFAULT);
+    opts.model ??
+    (opts.plan
+      ? claudeModelForPlan(opts.plan, opts.rank)
+      : CLAUDE_MODEL_DEFAULT);
 
   const inputSchema = zodToJsonSchema(opts.schema);
 

@@ -263,18 +263,25 @@ export async function fetchApifyRunResult<T>(
 export function buildApifyRunInput(
   actorId: string,
   sourceUrl: string,
+  /**
+   * Cap d'items à demander à l'actor. On passe `cap + 1` pour pouvoir
+   * détecter une troncature côté worker (cf BM §5.1). Si undefined,
+   * fallback hard-cap 1000.
+   */
+  maxItems?: number,
 ): Record<string, unknown> {
   const id = actorId.toLowerCase();
+  const cap = maxItems ?? 1000;
 
   // azzouzana/* : `startUrl` (string singulier) + `maxItems`
   if (id.includes("azzouzana")) {
-    return { startUrl: sourceUrl, maxItems: 1000 };
+    return { startUrl: sourceUrl, maxItems: cap };
   }
 
   // Format standard Apify (la plupart des scrapers communautaires)
   return {
     startUrls: [{ url: sourceUrl }],
-    maxItems: 1000,
+    maxItems: cap,
   };
 }
 
@@ -439,11 +446,15 @@ export type SitePlan = {
   actorId: string;
   /**
    * Construit l'input JSON spécifique à cet actor à partir de l'URL.
+   * Le `maxItems` doit être passé par l'appelant (cap+1 du palier user).
    * Async pour permettre des lookups externes (ex. LBC : résoudre CP →
    * nom de commune via geo.api.gouv.fr car leadsbrary refuse les CP
    * non-arrondissement).
    */
-  buildInput: (url: string) => Promise<Record<string, unknown>> | Record<string, unknown>;
+  buildInput: (
+    url: string,
+    maxItems: number,
+  ) => Promise<Record<string, unknown>> | Record<string, unknown>;
   /** Clé du mapper dans MULTI_URL_MAPPERS. */
   mapperKey: string;
 };
@@ -452,11 +463,19 @@ export type SitePlan = {
  * Mapping site → actor par défaut + builder d'input + mapper.
  * Pour changer d'actor sur un site, modifier ici (et ajouter le mapper
  * correspondant dans apify-mappers.MULTI_URL_MAPPERS).
+ *
+ * Le `maxItems` injecté par l'appelant est PLANS[plan].itemsMaxPerAnalysis + 1.
+ * Si l'actor renvoie exactement cette valeur, l'analyse est marquée
+ * `was_truncated = true` (cf BM §5.1).
+ *
+ * **Note PAP** : l'actor azzouzana/pap accepte `maxItemsToScrape` natif,
+ * mais le fallback Cloudflare (`apify/web-scraper`) ne le supporte pas.
+ * Sur PAP en mode fallback, le cap est approximatif (best-effort).
  */
 export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
   seloger: {
     actorId: "azzouzana~seloger-mass-products-scraper-by-search-url",
-    buildInput: (url) => ({ startUrl: url, maxItems: 1000 }),
+    buildInput: (url, maxItems) => ({ startUrl: url, maxItems }),
     mapperKey: "seloger:azzouzana",
   },
   leboncoin: {
@@ -469,9 +488,9 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
     //  - Sortie : GPS natif (`latitude`/`longitude`), `attributes[]`
     //    pivotable pour DPE/surface/pièces, `images[]` complet
     actorId: "silentflow~leboncoin-scraper-ppr",
-    buildInput: (url) => ({
+    buildInput: (url, maxItems) => ({
       searchUrl: url,
-      maxItems: 500,
+      maxItems,
       browseMode: true, // requis pour DPE, GPS, surface (mode "search" simple
       //                   ne renvoie que titre/prix/ville)
     }),
@@ -479,15 +498,15 @@ export const ACTOR_BY_SITE: Record<string, SitePlan | undefined> = {
   },
   pap: {
     actorId: "azzouzana~pap-fr-mass-products-scraper-by-search-url",
-    buildInput: (url) => ({ startUrl: url, maxItemsToScrape: 1000 }),
+    buildInput: (url, maxItems) => ({ startUrl: url, maxItemsToScrape: maxItems }),
     mapperKey: "pap:azzouzana",
   },
   bienici: {
     actorId: "stealth_mode~bienici-property-search-scraper",
-    buildInput: (url) => ({
+    buildInput: (url, maxItems) => ({
       urls: [url],
       ignore_url_failures: true,
-      max_items_per_url: 500,
+      max_items_per_url: maxItems,
     }),
     mapperKey: "bienici:stealth_mode",
   },
