@@ -29,6 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ProductSwitcher } from "@/components/product-switcher";
 import { cn } from "@/lib/utils";
 
 // AppShell — chrome canonique de l'app authentifiée (handoff Phase 2).
@@ -246,6 +247,11 @@ function Sidebar({
         "bg-bg border-r border-line",
       )}
     >
+      {/* Product switcher — bascule ImmoScan ↔ ImmoValue */}
+      <div className="mb-3 px-1">
+        <ProductSwitcher current="immoscan" variant="default" />
+      </div>
+
       {/* Logo */}
       <BrandLogo />
 
