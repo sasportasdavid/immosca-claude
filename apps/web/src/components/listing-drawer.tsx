@@ -84,6 +84,10 @@ export type ListingDrawerData = {
   // localisation
   lat: number | null;
   lng: number | null;
+  /** Source de résolution d'adresse : 'ademe' | 'ban_forward' | 'ban_reverse' | 'scraped' | 'none' */
+  resolution_source: string | null;
+  /** Confiance 0-1 du résultat adresse (1 = exact, 0.1 = approx ville/CP). */
+  address_confidence: number | null;
 
   // freemium
   is_masked: boolean;
@@ -309,23 +313,29 @@ export function ListingDrawer({
                   pas masqué (freemium : la position précise est PII). */}
               {!listing.is_masked && listing.lat !== null && listing.lng !== null ? (
                 <section>
-                  <h3 className="mb-3 flex items-baseline justify-between font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                  <h3 className="mb-3 flex items-baseline justify-between gap-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
                     <span>Localisation</span>
                     {listing.adresse_raw ? (
-                      <span className="font-mono text-[11px] normal-case text-foreground/80">
+                      <span className="truncate font-mono text-[11px] normal-case text-foreground/80">
                         {listing.adresse_raw}
                       </span>
                     ) : null}
                   </h3>
-                  <ListingMap
-                    lat={listing.lat}
-                    lng={listing.lng}
-                    address={
-                      listing.adresse_raw ??
-                      (`${listing.ville ?? ""} ${listing.code_postal ?? ""}`.trim() || null)
-                    }
-                    verdict={listing.verdict}
+                  <AddressConfidenceBadge
+                    source={listing.resolution_source}
+                    confidence={listing.address_confidence}
                   />
+                  <div className="mt-2.5">
+                    <ListingMap
+                      lat={listing.lat}
+                      lng={listing.lng}
+                      address={
+                        listing.adresse_raw ??
+                        (`${listing.ville ?? ""} ${listing.code_postal ?? ""}`.trim() || null)
+                      }
+                      verdict={listing.verdict}
+                    />
+                  </div>
                 </section>
               ) : null}
 
@@ -471,6 +481,90 @@ export function ListingDrawer({
         ) : null}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Badge "Adresse exacte / Approximative / Inconnue" selon comment le
+ * pipeline a résolu l'adresse du bien :
+ *   - ademe   → ADEME DPE match → adresse exacte (numéro + rue)
+ *   - scraped → adresse extraite directement par l'actor (fiable)
+ *   - ban_forward → adresse scrapée puis géocodée (fiable)
+ *   - ban_reverse → GPS du listing → rue la plus proche (parfois floutée)
+ *   - none    → seulement ville/CP (échec d'enrichissement)
+ *
+ * Donne à l'user un signal visuel sur la précision avant qu'il aille
+ * sur la carte ou contacte le vendeur.
+ */
+function AddressConfidenceBadge({
+  source,
+  confidence,
+}: {
+  source: string | null;
+  confidence: number | null;
+}) {
+  if (!source) return null;
+  type Tone = "success" | "warning" | "danger" | "default";
+  const config: Record<string, { label: string; tone: Tone; help: string }> = {
+    ademe: {
+      label: "Adresse exacte",
+      tone: "success",
+      help: "Vérifiée via le DPE déclaré à l'ADEME (numéro + rue).",
+    },
+    scraped: {
+      label: "Adresse exacte",
+      tone: "success",
+      help: "Extraite directement de l'annonce.",
+    },
+    ban_forward: {
+      label: "Adresse précise",
+      tone: "success",
+      help: "Adresse scrapée puis géocodée via la Base Adresse Nationale.",
+    },
+    ban_reverse: {
+      label: "Rue à proximité",
+      tone: "warning",
+      help: "Reconstituée depuis les coordonnées GPS (qui peuvent être floutées par le vendeur).",
+    },
+    none: {
+      label: "Localisation approximative",
+      tone: "danger",
+      help: "Aucun enrichissement n'a réussi — seuls la ville et le code postal sont fiables.",
+    },
+  };
+  const cfg = config[source];
+  if (!cfg) return null;
+
+  const pct = confidence !== null ? Math.round(confidence * 100) : null;
+
+  return (
+    <div className="flex items-center gap-2">
+      <Badge
+        variant={
+          cfg.tone === "success"
+            ? "success"
+            : cfg.tone === "warning"
+              ? "warning"
+              : cfg.tone === "danger"
+                ? "danger"
+                : "default"
+        }
+      >
+        {cfg.label}
+      </Badge>
+      {pct !== null ? (
+        <span
+          className="font-mono text-[11px] text-muted-foreground"
+          title={cfg.help}
+        >
+          {pct}% confiance
+        </span>
+      ) : (
+        <span className="font-mono text-[11px] text-muted-foreground">
+          {cfg.help}
+        </span>
+      )}
+    </div>
   );
 }
 

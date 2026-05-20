@@ -343,6 +343,9 @@ const LISTING_FREEMIUM_COLS = [
   "negociation_claude",
   "prix_negociation_cible",
   "is_masked",
+  // Confiance d'adresse (drawer affiche un badge selon source)
+  "resolution_source",
+  "address_confidence",
 ].join(", ");
 
 const VERDICT_LABEL: Record<string, { label: string; variant: "success" | "warning" | "danger" }> = {

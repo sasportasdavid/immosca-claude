@@ -7,7 +7,6 @@ import {
   Folder,
   Home,
   KanbanSquare,
-  Link2,
   LogOut,
   Plus,
   Radar,
@@ -86,7 +85,11 @@ type NavItem = {
 const NAV_ITEMS: readonly NavItem[] = [
   { id: "dashboard", label: "Dashboard", href: "/dashboard", icon: Home, enabled: true },
   { id: "analyses", label: "Mes analyses", href: "/app/analyses", icon: Folder, enabled: true },
-  { id: "adresse", label: "Adresse d'un lien", href: "/app/adresse", icon: Link2, enabled: true },
+  // "Adresse d'un lien" (/app/adresse) volontairement absent du menu :
+  // la route reste accessible via URL directe pour les power users, mais
+  // on évite de promouvoir un point d'entrée qui marche mal sur PAP.
+  // L'enrichissement adresse est maintenant systématique côté analyse
+  // (cf. listings.resolution_source + address_confidence).
   { id: "veilles", label: "Veilles", href: "/app/veilles", icon: Radar, enabled: false },
   { id: "pipeline", label: "Pipeline", href: "/app/pipeline", icon: KanbanSquare, enabled: true },
 ];

@@ -540,6 +540,11 @@ export const analyzeTask = task({
               adresse_raw: match.adresse_ban,
               adresse_geocoded: match.adresse_ban,
               code_insee: match.code_insee_ban ?? listing.code_insee,
+              resolution_source: "ademe",
+              // ADEME : score BAN de l'adresse normalisée (0.4-1.0).
+              // Boost de +0.1 car le match (CP+DPE+surface) est lui-même
+              // un signal fort de précision.
+              address_confidence: Math.min(1, (match.score_ban ?? 0.85) + 0.1),
               ...(preciseLat !== null && preciseLng !== null
                 ? { lat: preciseLat, lng: preciseLng }
                 : {}),
@@ -588,6 +593,11 @@ export const analyzeTask = task({
               lng: geo.longitude,
               adresse_geocoded: geo.label,
               code_insee: geo.citycode ?? listing.code_insee,
+              // Si on a déjà une adresse extraite par l'actor (scraped),
+              // on garde cette source-là mais on peut quand même mettre
+              // à jour la confiance avec le score BAN (souvent meilleur).
+              resolution_source: "scraped",
+              address_confidence: geo.score ?? 0.8,
             })
             .eq("analysis_id", analysisId)
             .eq("external_id", listing.external_id);
@@ -621,12 +631,29 @@ export const analyzeTask = task({
         try {
           const geo = await banReverse(listing.lat, listing.lng);
           if (!geo) continue;
+          // Reverse-BAN : précision dépend du `typeResult` :
+          //   - housenumber : 0.85 (rue + numéro, rare)
+          //   - street      : 0.55 (rue uniquement, fréquent)
+          //   - locality    : 0.30 (juste quartier, GPS très flouté)
+          // Multiplié par `geo.score` (qualité BAN du match).
+          const typeWeight =
+            geo.typeResult === "housenumber"
+              ? 0.85
+              : geo.typeResult === "street"
+                ? 0.55
+                : 0.3;
+          const confidence = Math.max(
+            0.1,
+            Math.min(1, typeWeight * (geo.score ?? 0.8)),
+          );
           await supabaseApp
             .from("listings")
             .update({
               adresse_raw: geo.label,
               adresse_geocoded: geo.label,
               code_insee: geo.citycode ?? listing.code_insee,
+              resolution_source: "ban_reverse",
+              address_confidence: confidence,
             })
             .eq("analysis_id", analysisId)
             .eq("external_id", listing.external_id);
@@ -641,6 +668,35 @@ export const analyzeTask = task({
           });
         }
       }
+
+      // 5c. Pass final : flagger les `resolution_source` restantes.
+      //  - listings avec adresse_raw mais resolution_source NULL :
+      //    l'actor a scrapé l'adresse directement (cas SeLoger). On note
+      //    "scraped" avec confiance haute.
+      //  - listings sans adresse_raw : aucun enrichissement n'a fonctionné.
+      //    On note "none" pour que l'UI affiche un état explicite plutôt
+      //    qu'un blank.
+      // Idempotent : on n'overwrite jamais les sources déjà setées par
+      // les étapes 5pre/5a/5b.
+      await supabaseApp
+        .from("listings")
+        .update({
+          resolution_source: "scraped",
+          address_confidence: 0.95,
+        })
+        .eq("analysis_id", analysisId)
+        .is("resolution_source", null)
+        .not("adresse_raw", "is", null);
+
+      await supabaseApp
+        .from("listings")
+        .update({
+          resolution_source: "none",
+          address_confidence: 0.1,
+        })
+        .eq("analysis_id", analysisId)
+        .is("resolution_source", null)
+        .is("adresse_raw", null);
 
       // 6. Calcul stats simples (median €/m² sur les listings avec surface)
       const prixM2List = mapped

@@ -387,8 +387,10 @@ export type Database = {
       }
       listings: {
         Row: {
+          address_confidence: number | null
           adresse_geocoded: string | null
           adresse_raw: string | null
+          resolution_source: string | null
           analysis_id: string
           annee_construction: number | null
           ascenseur: boolean | null
@@ -424,8 +426,10 @@ export type Database = {
           ville: string | null
         }
         Insert: {
+          address_confidence?: number | null
           adresse_geocoded?: string | null
           adresse_raw?: string | null
+          resolution_source?: string | null
           analysis_id: string
           annee_construction?: number | null
           ascenseur?: boolean | null
@@ -461,8 +465,10 @@ export type Database = {
           ville?: string | null
         }
         Update: {
+          address_confidence?: number | null
           adresse_geocoded?: string | null
           adresse_raw?: string | null
+          resolution_source?: string | null
           analysis_id?: string
           annee_construction?: number | null
           ascenseur?: boolean | null
@@ -825,8 +831,10 @@ export type Database = {
     Views: {
       listings_freemium_view: {
         Row: {
+          address_confidence: number | null
           adresse_geocoded: string | null
           adresse_raw: string | null
+          resolution_source: string | null
           analysis_id: string | null
           annee_construction: number | null
           ascenseur: boolean | null
