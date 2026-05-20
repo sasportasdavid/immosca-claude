@@ -200,7 +200,7 @@ export function SignupForm() {
                 <span>
                   J'accepte les{" "}
                   <a
-                    href="/cgu"
+                    href="/legal/cgu"
                     target="_blank"
                     rel="noreferrer"
                     className="text-primary hover:underline"
@@ -209,7 +209,7 @@ export function SignupForm() {
                   </a>{" "}
                   et la{" "}
                   <a
-                    href="/confidentialite"
+                    href="/legal/confidentialite"
                     target="_blank"
                     rel="noreferrer"
                     className="text-primary hover:underline"
