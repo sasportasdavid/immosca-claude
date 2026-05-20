@@ -4,7 +4,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 // Label shadcn-style, wrap Radix Label pour la sémantique a11y (htmlFor).
-// Typo : 13px medium stone-700 — conforme handoff écran 1 inputs.
+// Typo : 13px medium ink-2 — handoff label inputs.
 
 const Label = React.forwardRef<
   React.ElementRef<typeof LabelPrimitive.Root>,
@@ -13,7 +13,7 @@ const Label = React.forwardRef<
   <LabelPrimitive.Root
     ref={ref}
     className={cn(
-      "text-[13px] font-medium leading-none text-secondary-foreground",
+      "text-[13px] font-medium leading-none text-ink-2",
       "peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
       className,
     )}

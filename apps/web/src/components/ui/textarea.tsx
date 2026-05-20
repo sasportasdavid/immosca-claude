@@ -2,9 +2,8 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-// Textarea shadcn-style aligné sur l'Input ImmoScan (mêmes tokens border,
-// même focus ring, même comportement disabled/aria-invalid).
-// Hauteur min 80px (h-20), resize vertical only.
+// Textarea — même cadre visuel que <Input /> (border --line, focus
+// ring-violet, radius --r). Min height 80px, resize vertical.
 
 export type TextareaProps = React.TextareaHTMLAttributes<HTMLTextAreaElement>;
 
@@ -14,11 +13,11 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       <textarea
         ref={ref}
         className={cn(
-          "flex min-h-20 w-full resize-y rounded-md border border-input bg-card px-3 py-2 text-[13px] leading-[1.5] ring-offset-background",
-          "placeholder:text-tertiary-foreground",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          "disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground",
-          "aria-invalid:border-destructive aria-invalid:focus-visible:ring-destructive",
+          "flex min-h-20 w-full resize-y rounded-r border border-line bg-card px-3 py-2 text-[14px] leading-[1.5] text-ink",
+          "placeholder:text-faint",
+          "focus-visible:outline-none focus-visible:border-violet focus-visible:shadow-ring-violet",
+          "disabled:cursor-not-allowed disabled:bg-bg-2 disabled:text-mute-2",
+          "aria-invalid:border-destructive aria-invalid:focus-visible:shadow-none",
           className,
         )}
         {...props}

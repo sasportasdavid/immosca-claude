@@ -3,9 +3,8 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-// Tooltip shadcn-style wrap Radix. Aligné sur les tokens ImmoScan.
-// `<TooltipProvider>` à monter UNE FOIS au niveau racine (routes/__root.tsx).
-// `<Tooltip><TooltipTrigger asChild><button/></TooltipTrigger><TooltipContent>texte</TooltipContent></Tooltip>`
+// Tooltip — surface ink (dark) avec texte bg, radius --r-sm,
+// shadow --lvl-2. Alternative au tooltip blanc plat.
 
 const TooltipProvider = TooltipPrimitive.Provider;
 const Tooltip = TooltipPrimitive.Root;
@@ -20,7 +19,7 @@ const TooltipContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 overflow-hidden rounded-md border border-border bg-popover px-2.5 py-1.5 text-[12px] text-popover-foreground shadow-lvl-2",
+        "z-50 overflow-hidden rounded-r-sm bg-ink px-2.5 py-1.5 text-[12px] text-bg shadow-lvl-2",
         "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",
         "data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1",
         className,
