@@ -2,22 +2,19 @@
 //
 // 3 points d'entrée (BM §8.3) :
 //   A — Depuis une analyse existante : query param `fromAnalysis=ID`
-//       → pré-remplit name + source_url + source_site + search_filters
-//   B — Depuis zéro : URL libre
-//   C — Conversion auto : redirect avec context
+//       → l'URL ou les filtres de l'analyse sont AUTO-RÉUTILISÉS
+//       → form épuré : juste nom + score + sensibilité + canal
+//   B — Depuis zéro : URL libre (form complet)
+//   C — Conversion auto : redirect avec context (= mode A)
 //
-// Côté UI on garde le form minimal (BM §8.3 form spec) :
-//   - Name (auto-suggéré si fromAnalysis)
-//   - source_url / source_site
-//   - score_threshold (50-100, défaut 70)
-//   - sensitivity (strict / moderate / permissive)
-//   - canal (email only au launch)
-//
-// Le worker calcule `expires_at` automatiquement pour Free (J+60) et PPU (J+30).
-// Pour V1 on set côté frontend selon plan : si Free/PPU → expires_at = now + 60j.
+// PR-J : quand on vient d'une analyse, on ne redemande PAS l'URL — elle
+// est déjà parfaitement définie par l'analyse source. Si l'analyse a été
+// créée en mode "filters" (search_filters JSONB), on transfère ces
+// filtres dans watches.search_filters. Si elle a un source_url legacy,
+// on le copie tel quel.
 
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowLeft, Loader2, Radar } from "lucide-react";
+import { ArrowLeft, Loader2, Radar, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -60,6 +57,22 @@ const SOURCE_OPTIONS = [
   { value: "bienici", label: "Bien'ici" },
 ] as const;
 
+type SourceSite = (typeof SOURCE_OPTIONS)[number]["value"];
+
+interface AnalysisPrefill {
+  /** Mode de l'analyse source. */
+  mode: "url" | "filters";
+  /** Nom suggéré pour la veille (depuis analyse.name). */
+  name: string;
+  /** Court résumé humain des filtres / ville. */
+  summary: string;
+  /** Pour mode url : URL et site source. */
+  source_url?: string;
+  source_site?: SourceSite;
+  /** Pour mode filters : objet search_filters de l'analyse. */
+  search_filters?: Record<string, unknown>;
+}
+
 function NewWatchPage() {
   const auth = useAuth();
   const navigate = useNavigate();
@@ -70,13 +83,18 @@ function NewWatchPage() {
   const plan: PlanId = (profile.data?.subscription_plan ?? "free") as PlanId;
   const planDef = PLANS[plan];
 
+  // État form complet (mode B "depuis zéro")
   const [name, setName] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
-  const [sourceSite, setSourceSite] = useState<typeof SOURCE_OPTIONS[number]["value"]>("seloger");
+  const [sourceSite, setSourceSite] = useState<SourceSite>("seloger");
   const [scoreThreshold, setScoreThreshold] = useState(70);
   const [sensitivity, setSensitivity] = useState<"strict" | "moderate" | "permissive">(
     "moderate",
   );
+
+  // État spécifique au préfill depuis analyse (mode A)
+  const [prefill, setPrefill] = useState<AnalysisPrefill | null>(null);
+  const [prefillLoading, setPrefillLoading] = useState(false);
 
   useEffect(() => {
     if (!auth.isLoading && !auth.user) {
@@ -88,26 +106,51 @@ function NewWatchPage() {
   useEffect(() => {
     if (!search.fromAnalysis || !auth.user) return;
     let cancelled = false;
+    setPrefillLoading(true);
     (async () => {
       const { data } = await supabase
         .from("analyses")
-        .select("name, source_url, source_site, ville, code_postal")
+        .select("name, source_url, source_site, search_filters, ville, code_postal")
         .eq("id", search.fromAnalysis!)
         .single();
-      if (cancelled || !data) return;
-      const suggested = data.name
+      if (cancelled || !data) {
+        setPrefillLoading(false);
+        return;
+      }
+
+      const suggestedName = data.name
         ? `Veille — ${data.name}`
         : data.ville
           ? `Veille ${data.ville}`
           : "Nouvelle veille";
-      setName(suggested);
-      if (data.source_url) setSourceUrl(data.source_url);
-      if (data.source_site) {
-        // Garde-fou : ne set que si dans nos options
-        if (SOURCE_OPTIONS.some((o) => o.value === data.source_site)) {
-          setSourceSite(data.source_site as typeof SOURCE_OPTIONS[number]["value"]);
-        }
+
+      // Mode "filters" si search_filters set (form moderne)
+      // Sinon mode "url" (legacy URL par site)
+      if (data.search_filters && typeof data.search_filters === "object") {
+        const sf = data.search_filters as Record<string, unknown>;
+        const summary = buildFiltersSummary(sf, data.ville, data.code_postal);
+        setPrefill({
+          mode: "filters",
+          name: suggestedName,
+          summary,
+          search_filters: sf,
+        });
+      } else if (data.source_url) {
+        const site: SourceSite = SOURCE_OPTIONS.some((o) => o.value === data.source_site)
+          ? (data.source_site as SourceSite)
+          : "seloger";
+        const summary = `${data.ville ?? "Recherche"}${data.code_postal ? ` (${data.code_postal})` : ""} · ${SOURCE_OPTIONS.find((o) => o.value === site)?.label ?? site}`;
+        setPrefill({
+          mode: "url",
+          name: suggestedName,
+          summary,
+          source_url: data.source_url,
+          source_site: site,
+        });
       }
+
+      setName(suggestedName);
+      setPrefillLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -116,18 +159,52 @@ function NewWatchPage() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !sourceUrl.trim()) {
-      toast.error("Nom et URL source obligatoires");
+    if (!name.trim()) {
+      toast.error("Le nom de la veille est obligatoire");
       return;
     }
-    // Calcul expires_at pour Free uniquement (les payants n'expirent pas).
+
     const expiresAt =
       plan === "free"
         ? new Date(Date.now() + WATCH_EXPIRATION.free.durationDays * 24 * 3600 * 1000).toISOString()
         : null;
+    const frequency = planDef.watchFrequency === "daily" ? "daily" : "three_days";
 
-    createWatch.mutate(
-      {
+    // Payload : mode prefill (filters ou url) ou mode form complet
+    let payload: Parameters<typeof createWatch.mutate>[0];
+    if (prefill?.mode === "filters" && prefill.search_filters) {
+      payload = {
+        name: name.trim(),
+        // source_site requis par enum NOT NULL côté DB — valeur arbitraire,
+        // le worker dispatch sur dltik multi-source car search_filters set.
+        source_site: "seloger",
+        search_filters: prefill.search_filters as never,
+        score_threshold: scoreThreshold,
+        sensitivity,
+        notify_email: true,
+        expires_at: expiresAt,
+        frequency,
+        _fromAnalysis: true,
+      };
+    } else if (prefill?.mode === "url" && prefill.source_url && prefill.source_site) {
+      payload = {
+        name: name.trim(),
+        source_url: prefill.source_url,
+        source_site: prefill.source_site,
+        score_threshold: scoreThreshold,
+        sensitivity,
+        notify_email: true,
+        expires_at: expiresAt,
+        frequency,
+        _fromAnalysis: true,
+      };
+    } else {
+      // Mode B : form complet, URL saisie manuellement
+      if (!sourceUrl.trim()) {
+        toast.error("URL source obligatoire");
+        return;
+      }
+      payload = {
         name: name.trim(),
         source_url: sourceUrl.trim(),
         source_site: sourceSite,
@@ -135,20 +212,23 @@ function NewWatchPage() {
         sensitivity,
         notify_email: true,
         expires_at: expiresAt,
-        frequency:
-          planDef.watchFrequency === "daily" ? "daily" : "three_days",
+        frequency,
+        _fromAnalysis: false,
+      };
+    }
+
+    createWatch.mutate(payload, {
+      onSuccess: (data) => {
+        toast.success("Veille créée — 1er scout au prochain cron.");
+        navigate({ to: "/app/veilles/$id", params: { id: data.id } });
       },
-      {
-        onSuccess: (data) => {
-          toast.success("Veille créée — 1er scout au prochain cron.");
-          navigate({ to: "/app/veilles/$id", params: { id: data.id } });
-        },
-        onError: (err) => {
-          toast.error(`Erreur création : ${(err as Error).message}`);
-        },
+      onError: (err) => {
+        toast.error(`Erreur création : ${(err as Error).message}`);
       },
-    );
+    });
   }
+
+  const fromAnalysis = !!search.fromAnalysis;
 
   return (
     <AppShell
@@ -184,12 +264,53 @@ function NewWatchPage() {
               Paramètres
             </CardTitle>
             <CardDescription>
-              On scoute ta recherche et on t'envoie un digest email uniquement si on
-              trouve quelque chose qui mérite ton œil.
+              On scoute ta recherche et on t'envoie un digest email uniquement
+              si on trouve quelque chose qui mérite ton œil.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Mode A : préfill depuis analyse → bloc récapitulatif */}
+              {fromAnalysis && prefillLoading && (
+                <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Chargement de l'analyse source…
+                </div>
+              )}
+
+              {fromAnalysis && !prefillLoading && prefill && (
+                <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
+                  <div className="flex items-start gap-2">
+                    <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <div className="flex-1 space-y-1">
+                      <div className="text-sm font-medium text-foreground">
+                        Veille basée sur ton analyse
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {prefill.summary}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {prefill.mode === "filters"
+                          ? "Mode multi-source (LBC + SeLoger + PAP + Bien'ici)"
+                          : `Source unique : ${SOURCE_OPTIONS.find((o) => o.value === prefill.source_site)?.label ?? prefill.source_site}`}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-3 border-t border-primary/20 pt-2 text-[11px] text-muted-foreground">
+                    Pour changer les critères, recrée une veille depuis{" "}
+                    <button
+                      type="button"
+                      onClick={() => navigate({ to: "/app/veilles/nouvelle" })}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      ce lien
+                    </button>
+                    .
+                  </p>
+                </div>
+              )}
+
+              {/* Nom : toujours visible */}
               <div className="space-y-2">
                 <Label htmlFor="name">Nom de la veille</Label>
                 <Input
@@ -201,41 +322,48 @@ function NewWatchPage() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="source_url">URL de recherche</Label>
-                <Input
-                  id="source_url"
-                  type="url"
-                  value={sourceUrl}
-                  onChange={(e) => setSourceUrl(e.target.value)}
-                  placeholder="https://www.seloger.com/list.htm?…"
-                  required
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Colle ici l'URL de ta recherche enregistrée sur SeLoger / LBC / PAP.
-                </p>
-              </div>
+              {/* URL + source : visibles uniquement en mode B (pas de préfill) */}
+              {!fromAnalysis && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="source_url">URL de recherche</Label>
+                    <Input
+                      id="source_url"
+                      type="url"
+                      value={sourceUrl}
+                      onChange={(e) => setSourceUrl(e.target.value)}
+                      placeholder="https://www.seloger.com/list.htm?…"
+                      required
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Colle ici l'URL de ta recherche enregistrée sur SeLoger /
+                      LBC / PAP.
+                    </p>
+                  </div>
 
-              <div className="space-y-2">
-                <Label>Source</Label>
-                <RadioGroup
-                  value={sourceSite}
-                  onValueChange={(v) => setSourceSite(v as typeof sourceSite)}
-                  className="flex flex-wrap gap-3"
-                >
-                  {SOURCE_OPTIONS.map((opt) => (
-                    <Label
-                      key={opt.value}
-                      htmlFor={`src-${opt.value}`}
-                      className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40"
+                  <div className="space-y-2">
+                    <Label>Source</Label>
+                    <RadioGroup
+                      value={sourceSite}
+                      onValueChange={(v) => setSourceSite(v as SourceSite)}
+                      className="flex flex-wrap gap-3"
                     >
-                      <RadioGroupItem id={`src-${opt.value}`} value={opt.value} />
-                      {opt.label}
-                    </Label>
-                  ))}
-                </RadioGroup>
-              </div>
+                      {SOURCE_OPTIONS.map((opt) => (
+                        <Label
+                          key={opt.value}
+                          htmlFor={`src-${opt.value}`}
+                          className="flex cursor-pointer items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/40"
+                        >
+                          <RadioGroupItem id={`src-${opt.value}`} value={opt.value} />
+                          {opt.label}
+                        </Label>
+                      ))}
+                    </RadioGroup>
+                  </div>
+                </>
+              )}
 
+              {/* Score : toujours visible */}
               <div className="space-y-2">
                 <Label htmlFor="score">
                   Seuil de score d'opportunité : <strong>{scoreThreshold}</strong> / 100
@@ -256,6 +384,7 @@ function NewWatchPage() {
                 </p>
               </div>
 
+              {/* Sensibilité : toujours visible */}
               <div className="space-y-2">
                 <Label>Sensibilité décotes (vs médian DVF)</Label>
                 <RadioGroup
@@ -300,7 +429,10 @@ function NewWatchPage() {
               </div>
 
               <div className="flex justify-end pt-2">
-                <Button type="submit" disabled={createWatch.isPending}>
+                <Button
+                  type="submit"
+                  disabled={createWatch.isPending || (fromAnalysis && prefillLoading)}
+                >
                   {createWatch.isPending ? (
                     <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                   ) : (
@@ -315,4 +447,32 @@ function NewWatchPage() {
       </div>
     </AppShell>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────
+
+function buildFiltersSummary(
+  sf: Record<string, unknown>,
+  ville: string | null,
+  code_postal: string | null,
+): string {
+  const parts: string[] = [];
+  const cities = (sf.cities as string[] | undefined)?.filter(Boolean) ?? [];
+  if (cities.length > 0) {
+    parts.push(cities.slice(0, 3).join(", ") + (cities.length > 3 ? "…" : ""));
+  } else if (ville) {
+    parts.push(ville + (code_postal ? ` (${code_postal})` : ""));
+  }
+  const types = (sf.propertyTypes as string[] | undefined) ?? [];
+  if (types.length > 0) parts.push(types.join(" · "));
+  const priceMax = sf.priceMax as number | undefined;
+  if (priceMax) parts.push(`< ${Math.round(priceMax / 1000)}k€`);
+  const surfMin = sf.surfaceMin as number | undefined;
+  const surfMax = sf.surfaceMax as number | undefined;
+  if (surfMin || surfMax) {
+    parts.push(`${surfMin ?? "—"}-${surfMax ?? "—"} m²`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : "Recherche personnalisée";
 }

@@ -168,15 +168,28 @@ export function useWatchEvents(
 // Mutations
 // ──────────────────────────────────────────────────────────────────
 
+/**
+ * Crée une veille. Accepte un payload standard plus un flag PostHog
+ * optionnel `_fromAnalysis` (préfixé `_` car non persisté en DB, juste
+ * pour l'event analytics).
+ */
+export type CreateWatchPayload = Omit<WatchInsert, "profile_id"> & {
+  /** Flag analytics : true si créée via le bouton "Mettre en veille"
+   *  depuis /app/analyses/$id (query param fromAnalysis). */
+  _fromAnalysis?: boolean;
+};
+
 export function useCreateWatch() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: Omit<WatchInsert, "profile_id">) => {
+    mutationFn: async (input: CreateWatchPayload) => {
       if (!user) throw new Error("not_authenticated");
+      // Sépare le flag analytics du payload DB
+      const { _fromAnalysis: _ignored, ...dbInput } = input;
       const { data, error } = await supabase
         .from("watches")
-        .insert({ ...input, profile_id: user.id })
+        .insert({ ...dbInput, profile_id: user.id })
         .select("id")
         .single();
       if (error) throw error;
@@ -190,9 +203,7 @@ export function useCreateWatch() {
           source_site: input.source_site,
           sensitivity: (input.sensitivity ?? "moderate") as string,
           score_threshold: input.score_threshold ?? 70,
-          // L'URL de la veille peut contenir un fromAnalysis param, mais
-          // c'est géré côté UI (le hook reçoit le source_url déjà résolu).
-          from_analysis: false,
+          from_analysis: input._fromAnalysis ?? false,
         },
       });
     },

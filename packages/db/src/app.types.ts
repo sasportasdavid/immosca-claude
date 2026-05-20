@@ -1174,9 +1174,10 @@ export type Database = {
           notify_telegram: boolean
           profile_id: string
           score_threshold: number
+          search_filters: Json | null
           sensitivity: Database["public"]["Enums"]["watch_sensitivity"]
           source_site: Database["public"]["Enums"]["listing_source"]
-          source_url: string
+          source_url: string | null
           stats_7d: Json
           suspended_at: string | null
           updated_at: string
@@ -1201,9 +1202,10 @@ export type Database = {
           notify_telegram?: boolean
           profile_id: string
           score_threshold?: number
+          search_filters?: Json | null
           sensitivity?: Database["public"]["Enums"]["watch_sensitivity"]
           source_site: Database["public"]["Enums"]["listing_source"]
-          source_url: string
+          source_url?: string | null
           stats_7d?: Json
           suspended_at?: string | null
           updated_at?: string
@@ -1228,9 +1230,10 @@ export type Database = {
           notify_telegram?: boolean
           profile_id?: string
           score_threshold?: number
+          search_filters?: Json | null
           sensitivity?: Database["public"]["Enums"]["watch_sensitivity"]
           source_site?: Database["public"]["Enums"]["listing_source"]
-          source_url?: string
+          source_url?: string | null
           stats_7d?: Json
           suspended_at?: string | null
           updated_at?: string
@@ -1344,6 +1347,10 @@ export type Database = {
       current_user_plan: {
         Args: never
         Returns: Database["public"]["Enums"]["subscription_plan"]
+      }
+      dashboard_summary: {
+        Args: { p_profile_id: string }
+        Returns: Json
       }
       decrement_concurrent_analysis: {
         Args: { p_profile_id: string }
