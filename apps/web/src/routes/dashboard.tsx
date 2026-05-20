@@ -1,22 +1,56 @@
-// /dashboard — coquille PR1 finalisée.
+// /dashboard — vue d'ensemble pour un investisseur ImmoScan.
 //
-// Guards beforeLoad (serveur-side, lèvent redirect avant rendu) :
-// 1. requireAuth → /auth/login si pas de session
-// 2. requireOnboarded → /onboarding/step-1 si user_params manquant
+// 3 questions auxquelles le dashboard répond en 1 coup d'œil :
+//   1. Qu'est-ce qui a bougé depuis ma dernière connexion ?
+//   2. Quels biens méritent mon œil maintenant ?
+//   3. Où en suis-je dans mon pipeline ?
 //
-// Contenu PR1 : état vide stylisé "Aucune analyse pour l'instant" avec
-// un CTA "Nouvelle analyse" disabled (PR3 le câblera). On y arrive
-// seulement quand auth + onboarding sont OK — c'est l'écran que voit
-// un user juste après son signup + 2 steps.
+// Données : 1 seule RPC SQL `dashboard_summary` (cf use-dashboard.ts).
+// Refetch 60s en background pour rester à jour sans bloquer.
+//
+// Empty state : si pas d'analyse done, on remplace le dashboard par un
+// onboarding 4 étapes au lieu de montrer des widgets vides.
 
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Sparkles } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import {
+  AlertCircle,
+  Bell,
+  ExternalLink,
+  Flame,
+  KanbanSquare,
+  Lock,
+  MapPin,
+  Plus,
+  Radar,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+  Zap,
+} from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  useDashboardSummary,
+  type DashboardOpportunity,
+  type DashboardSummary,
+  type PipelineStage,
+} from "@/hooks/use-dashboard";
 import { useProfile } from "@/hooks/use-profile";
 import { requireAuth, requireOnboarded } from "@/lib/auth-guards";
+import {
+  FREEMIUM_MASK_THRESHOLD,
+  PLANS,
+  type PlanId,
+} from "@immoscan/shared";
 
 export const Route = createFileRoute("/dashboard")({
   beforeLoad: async ({ location }) => {
@@ -26,95 +60,640 @@ export const Route = createFileRoute("/dashboard")({
   component: DashboardPage,
 });
 
+const STAGE_LABELS: Record<PipelineStage, string> = {
+  a_visiter: "À visiter",
+  visite: "Visité",
+  offre: "Offre",
+  compromis: "Compromis",
+  signe: "Signé",
+};
+
 function DashboardPage() {
   const auth = useAuth();
-  const profile = useProfile();
   const navigate = useNavigate();
-  const email = auth.user?.email ?? "—";
-  const plan = profile.data?.subscription_plan ?? "free";
+  const profile = useProfile();
+  const summary = useDashboardSummary();
+
+  const plan: PlanId = (profile.data?.subscription_plan ?? "free") as PlanId;
+  const firstName = profile.data?.full_name?.split(" ")[0] ?? null;
 
   return (
     <AppShell
-      userEmail={email}
+      userEmail={auth.user?.email ?? "—"}
       userPlan={plan}
       currentRoute="dashboard"
       onLogout={() => auth.signOut()}
       onNewAnalysis={() => navigate({ to: "/app/nouvelle-analyse" })}
     >
-      <div className="mx-auto max-w-[960px] px-6 py-12">
-        {/* Greeting */}
-        <header className="mb-10">
-          <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            Dashboard
-          </span>
-          <h1 className="mt-2 text-[32px] font-semibold leading-[1.1] tracking-[-0.02em]">
-            Bonjour.
-          </h1>
-          <p className="mt-2 max-w-[60ch] text-[14px] text-muted-foreground">
-            Tu n'as pas encore lancé d'analyse. Colle une URL SeLoger ou
-            Leboncoin pour démarrer.
-          </p>
-        </header>
-
-        {/* Empty state */}
-        <div className="rounded-lg border border-border bg-card p-12 text-center">
-          <div
-            aria-hidden="true"
-            className="mx-auto mb-6 inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft text-primary"
-          >
-            <Sparkles className="h-6 w-6" />
+      <div className="mx-auto max-w-6xl space-y-6 p-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+              Dashboard
+            </span>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+              Bonjour{firstName ? `, ${firstName}` : ""}.
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {summary.data?.empty_state_hint
+                ? "Bienvenue sur ImmoScan."
+                : "Voici ce qui mérite ton œil aujourd'hui."}
+            </p>
           </div>
-          <h2 className="text-[20px] font-semibold tracking-[-0.015em]">
-            Aucune analyse pour l'instant.
-          </h2>
-          <p className="mx-auto mt-2 max-w-[48ch] text-[14px] text-muted-foreground">
-            ImmoScan croise 100 à 500 annonces avec DVF, DPE, INSEE et
-            Géorisques en 8 minutes. Tu obtiens un Top 5 avec thèse Claude.
-          </p>
-          <div className="mt-6">
+          <div className="flex gap-2">
+            <Button onClick={() => navigate({ to: "/app/nouvelle-analyse" })}>
+              <Plus className="mr-1 h-4 w-4" /> Nouvelle analyse
+            </Button>
             <Button
-              size="lg"
-              onClick={() => navigate({ to: "/app/nouvelle-analyse" })}
+              variant="outline"
+              onClick={() => navigate({ to: "/app/veilles/nouvelle" })}
             >
-              Lancer une analyse
+              <Radar className="mr-1 h-4 w-4" /> Nouvelle veille
             </Button>
           </div>
         </div>
 
-        {/* Help / next steps */}
-        <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-lg border border-border bg-card p-5">
-            <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-              Tes paramètres
-            </div>
-            <div className="mt-2 text-[14px] leading-[1.5] text-secondary-foreground">
-              {profile.data?.full_name ? `${profile.data.full_name} · ` : ""}
-              Plan {plan === "free" ? "Free" : plan === "pro" ? "Pro" : "Pro+"}.
-            </div>
-            <a
-              href="/onboarding/step-2"
-              className="mt-3 inline-block text-[12px] text-primary hover:underline"
-            >
-              Modifier mes paramètres →
-            </a>
+        {/* Loading */}
+        {summary.isLoading && (
+          <div className="rounded-lg border border-border bg-card p-12 text-center text-sm text-muted-foreground">
+            Chargement…
           </div>
-          <div className="rounded-lg border border-border bg-card p-5">
-            <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-              Documentation
+        )}
+
+        {/* Empty state intelligent */}
+        {summary.data?.empty_state_hint === "first_analysis" && (
+          <OnboardingState plan={plan} />
+        )}
+
+        {/* Contenu principal — uniquement si au moins 1 analyse done */}
+        {summary.data && summary.data.empty_state_hint !== "first_analysis" && (
+          <div className="space-y-6">
+            {/* Alertes : en haut pour visibilité */}
+            {summary.data.alerts.length > 0 && (
+              <AlertsSection alerts={summary.data.alerts} />
+            )}
+
+            {/* Stats compteurs */}
+            <StatsRow data={summary.data} plan={plan} />
+
+            {/* Top opportunités — le killer feature */}
+            <OpportunitiesSection
+              opportunities={summary.data.top_opportunities}
+              plan={plan}
+              emptyHint={summary.data.empty_state_hint}
+            />
+
+            {/* Activité veilles 7j + Pipeline */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <WatchActivityCard
+                activity={summary.data.watch_activity_7d}
+              />
+              <PipelineCard counts={summary.data.pipeline_counts} />
             </div>
-            <p className="mt-2 text-[14px] leading-[1.5] text-muted-foreground">
-              Méthodologie de scoring, sources de données, calculs de
-              rendement.
-            </p>
-            <a
-              href="/methodologie"
-              className="mt-3 inline-block text-[12px] text-primary hover:underline"
-            >
-              Voir la doc →
-            </a>
+
+            {/* Signal marché */}
+            {summary.data.market_stats.length > 0 && (
+              <MarketStatsSection stats={summary.data.market_stats} />
+            )}
           </div>
-        </div>
+        )}
       </div>
     </AppShell>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Onboarding state (pas encore d'analyse done)
+// ──────────────────────────────────────────────────────────────────
+
+function OnboardingState({ plan }: { plan: PlanId }) {
+  const planDef = PLANS[plan];
+  return (
+    <Card className="border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+      <CardHeader>
+        <CardTitle className="text-xl">
+          <Sparkles className="mr-1 inline h-5 w-5 text-primary" />
+          4 étapes pour commencer à investir mieux
+        </CardTitle>
+        <CardDescription>
+          {plan === "free"
+            ? `Plan Free · ${planDef.analysesPerMonth} analyse${planDef.analysesPerMonth > 1 ? "s" : ""} gratuite${planDef.analysesPerMonth > 1 ? "s" : ""} par mois`
+            : `Plan ${planDef.name} · ${planDef.analysesPerMonth} analyses/mois`}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ol className="space-y-3">
+          {[
+            {
+              n: "①",
+              title: "Lance ta 1ère analyse",
+              hint: "Colle une URL SeLoger ou utilise le form structuré, on scoute 50 à 500 biens en 8 min",
+              cta: { label: "Démarrer", to: "/app/nouvelle-analyse" as const },
+              active: true,
+            },
+            {
+              n: "②",
+              title: "Crée une veille sur ta zone",
+              hint: "On scoute 3×/sem et tu reçois un digest email uniquement si quelque chose mérite ton œil",
+              cta: { label: "Créer une veille", to: "/app/veilles/nouvelle" as const },
+              active: false,
+            },
+            {
+              n: "③",
+              title: "Ajoute un bien à ton pipeline",
+              hint: "Kanban À visiter → Visité → Offre → Compromis → Signé",
+              cta: null,
+              active: false,
+            },
+            {
+              n: "④",
+              title: "Conclus ton 1er deal ⭐",
+              hint: "On reste actif sur ta zone pour le suivant",
+              cta: null,
+              active: false,
+            },
+          ].map((step) => (
+            <li
+              key={step.n}
+              className={`flex items-start gap-3 rounded-lg border p-4 ${
+                step.active ? "border-primary/40 bg-card" : "border-border bg-muted/30"
+              }`}
+            >
+              <div
+                className={`text-xl font-semibold ${step.active ? "text-primary" : "text-muted-foreground"}`}
+              >
+                {step.n}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium">{step.title}</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {step.hint}
+                </div>
+              </div>
+              {step.cta && step.active && (
+                <Button size="sm" asChild>
+                  <Link to={step.cta.to}>{step.cta.label}</Link>
+                </Button>
+              )}
+            </li>
+          ))}
+        </ol>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Alertes
+// ──────────────────────────────────────────────────────────────────
+
+function AlertsSection({
+  alerts,
+}: {
+  alerts: DashboardSummary["alerts"];
+}) {
+  return (
+    <div className="rounded-lg border border-amber-400/40 bg-amber-50/50 p-4 dark:bg-amber-950/20">
+      <div className="mb-2 flex items-center gap-2">
+        <AlertCircle className="h-4 w-4 text-amber-600" />
+        <span className="text-sm font-medium text-amber-900">
+          Alertes & signaux ({alerts.length})
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {alerts.slice(0, 4).map((alert, i) => (
+          <li key={i} className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-amber-800">• {alert.label}</span>
+            <Link
+              to={alert.cta_link as never}
+              className="shrink-0 text-xs font-medium text-amber-700 hover:underline"
+            >
+              {alert.kind === "watch_expiring" || alert.kind === "trial_ending" || alert.kind === "quota_analyses"
+                ? "Passer Pro"
+                : "Affiner →"}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Stats compteurs
+// ──────────────────────────────────────────────────────────────────
+
+function StatsRow({
+  data,
+  plan,
+}: {
+  data: DashboardSummary;
+  plan: PlanId;
+}) {
+  const planDef = PLANS[plan];
+  const analysesPct = data.stats.analyses_limit > 0
+    ? (data.stats.analyses_used / data.stats.analyses_limit) * 100
+    : 0;
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <StatCard
+        label="Analyses ce cycle"
+        value={`${data.stats.analyses_used} / ${data.stats.analyses_limit}`}
+        progress={analysesPct}
+        accent="primary"
+      />
+      <StatCard
+        label="Veilles actives"
+        value={`${data.stats.watches_active} / ${data.stats.watches_effective_limit}`}
+        progress={
+          data.stats.watches_effective_limit > 0
+            ? (data.stats.watches_active / data.stats.watches_effective_limit) * 100
+            : 0
+        }
+        accent="success"
+      />
+      <StatCard
+        label="Crédits PPU"
+        value={String(data.stats.ppu_balance)}
+        progress={null}
+        accent="amber"
+      />
+      <StatCard
+        label="Plan"
+        value={planDef.name}
+        progress={null}
+        accent="muted"
+      />
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  progress,
+  accent,
+}: {
+  label: string;
+  value: string;
+  progress: number | null;
+  accent: "primary" | "success" | "amber" | "muted";
+}) {
+  const colorMap: Record<typeof accent, string> = {
+    primary: "bg-primary",
+    success: "bg-emerald-500",
+    amber: "bg-amber-500",
+    muted: "bg-muted-foreground",
+  };
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 text-xl font-semibold tabular-nums">{value}</div>
+      {progress !== null && (
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className={`h-full ${colorMap[accent]} transition-all`}
+            style={{ width: `${Math.min(100, progress)}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Top opportunités (le killer feature)
+// ──────────────────────────────────────────────────────────────────
+
+function OpportunitiesSection({
+  opportunities,
+  plan,
+  emptyHint,
+}: {
+  opportunities: DashboardOpportunity[];
+  plan: PlanId;
+  emptyHint: DashboardSummary["empty_state_hint"];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          <Flame className="mr-1.5 inline h-4 w-4 text-orange-500" />
+          Opportunités du moment
+        </CardTitle>
+        <CardDescription>
+          Top 5 biens score ≥ 75 sur tes veilles actives, pas encore dans ton pipeline.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {opportunities.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+            {emptyHint === "first_watch"
+              ? "Aucune veille active. Crée-en une pour voir tes opportunités."
+              : "Pas encore de bien score ≥ 75 sur tes veilles. Le prochain scout pourrait en trouver."}
+            {emptyHint === "first_watch" && (
+              <div className="mt-3">
+                <Button size="sm" asChild>
+                  <Link to="/app/veilles/nouvelle">
+                    <Radar className="mr-1 h-3.5 w-3.5" /> Créer ma veille
+                  </Link>
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {opportunities.map((opp) => (
+              <OpportunityRow key={opp.watch_listing_id} opp={opp} plan={plan} />
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function OpportunityRow({
+  opp,
+  plan,
+}: {
+  opp: DashboardOpportunity;
+  plan: PlanId;
+}) {
+  const masked =
+    plan === "free" && (opp.current_score ?? 0) >= FREEMIUM_MASK_THRESHOLD;
+  const score = opp.current_score ?? 0;
+  const scoreColor =
+    score >= 85
+      ? "bg-emerald-500/15 text-emerald-700"
+      : score >= 75
+        ? "bg-blue-500/15 text-blue-700"
+        : "bg-amber-500/15 text-amber-700";
+  return (
+    <li className="flex items-center gap-3 py-3">
+      <span
+        className={`shrink-0 rounded px-2 py-1 text-xs font-semibold tabular-nums ${scoreColor}`}
+      >
+        {score.toFixed(0)}
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="truncate text-sm font-medium">
+          {opp.title ?? "Sans titre"}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {masked ? (
+            <>
+              <Lock className="mr-1 inline h-3 w-3" />
+              Prix masqué — Pro
+            </>
+          ) : (
+            <>
+              {formatEur(opp.current_price)}
+              {opp.current_surface
+                ? ` · ${Math.round(opp.current_price / opp.current_surface)} €/m²`
+                : ""}
+              {opp.current_dpe ? ` · DPE ${opp.current_dpe}` : ""}
+            </>
+          )}
+          <span className="ml-2 text-muted-foreground/70">
+            via {opp.watch_name}
+          </span>
+        </div>
+      </div>
+      {!masked && (
+        <a
+          href={opp.source_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-xs text-primary hover:underline"
+          title="Voir l'annonce"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      )}
+    </li>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Activité veilles 7j
+// ──────────────────────────────────────────────────────────────────
+
+function WatchActivityCard({
+  activity,
+}: {
+  activity: DashboardSummary["watch_activity_7d"];
+}) {
+  const total =
+    (activity.new_match ?? 0) +
+    (activity.price_drop ?? 0) +
+    (activity.signal_to_verify ?? 0) +
+    (activity.relisted ?? 0) +
+    (activity.removed ?? 0);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          <Zap className="mr-1.5 inline h-4 w-4 text-blue-500" />
+          Activité veilles (7 derniers jours)
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {total === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            Pas d'activité cette semaine sur tes veilles.
+          </div>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            <ActivityRow
+              icon="🆕"
+              label="Nouveaux biens retenus"
+              count={activity.new_match ?? 0}
+            />
+            <ActivityRow
+              icon={<TrendingDown className="h-3.5 w-3.5 text-emerald-600" />}
+              label="Baisses de prix"
+              count={activity.price_drop ?? 0}
+            />
+            <ActivityRow
+              icon="🔍"
+              label="Décotes à vérifier"
+              count={activity.signal_to_verify ?? 0}
+            />
+            <ActivityRow
+              icon="↩️"
+              label="Biens relistés"
+              count={activity.relisted ?? 0}
+            />
+            <ActivityRow
+              icon="🗑️"
+              label="Vendus / retirés"
+              count={activity.removed ?? 0}
+            />
+          </ul>
+        )}
+        <div className="mt-3 border-t border-border pt-3 text-right">
+          <Link
+            to="/app/veilles"
+            className="text-xs text-primary hover:underline"
+          >
+            Voir le détail par veille →
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ActivityRow({
+  icon,
+  label,
+  count,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+}) {
+  return (
+    <li className="flex items-center justify-between">
+      <span className="flex items-center gap-2">
+        <span className="inline-flex w-5 justify-center">{icon}</span>
+        <span className="text-muted-foreground">{label}</span>
+      </span>
+      <span
+        className={`tabular-nums font-medium ${count > 0 ? "" : "text-muted-foreground"}`}
+      >
+        {count}
+      </span>
+    </li>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Pipeline
+// ──────────────────────────────────────────────────────────────────
+
+function PipelineCard({
+  counts,
+}: {
+  counts: DashboardSummary["pipeline_counts"];
+}) {
+  const stages: PipelineStage[] = ["a_visiter", "visite", "offre", "compromis", "signe"];
+  const total = stages.reduce((sum, s) => sum + (counts[s] ?? 0), 0);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          <KanbanSquare className="mr-1.5 inline h-4 w-4 text-purple-500" />
+          Pipeline ({total})
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {total === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            Pas encore de bien dans ton pipeline.
+            <div className="mt-2 text-xs">
+              Ajoute des biens depuis tes analyses ou tes veilles pour suivre leur progression.
+            </div>
+          </div>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {stages.map((s) => {
+              const n = counts[s] ?? 0;
+              return (
+                <li
+                  key={s}
+                  className={`flex items-center justify-between ${n === 0 ? "opacity-50" : ""}`}
+                >
+                  <span className="text-muted-foreground">{STAGE_LABELS[s]}</span>
+                  <span className="tabular-nums font-medium">{n}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <div className="mt-3 border-t border-border pt-3 text-right">
+          <Link
+            to="/app/pipeline"
+            className="text-xs text-primary hover:underline"
+          >
+            Ouvrir le pipeline →
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Stats marché
+// ──────────────────────────────────────────────────────────────────
+
+function MarketStatsSection({
+  stats,
+}: {
+  stats: DashboardSummary["market_stats"];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          <MapPin className="mr-1.5 inline h-4 w-4 text-rose-500" />
+          Signal marché — tes zones
+        </CardTitle>
+        <CardDescription>
+          Médian €/m² (appartement) sur les communes que tu surveilles.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2 text-sm">
+          {stats.map((s) => (
+            <li
+              key={s.city}
+              className="flex items-center justify-between gap-2 border-b border-border/50 pb-2 last:border-0"
+            >
+              <span className="font-medium">{s.city}</span>
+              <span className="tabular-nums text-muted-foreground">
+                {Math.round(s.median_eur_m2)} €/m²
+                {s.delta_pct !== null && (
+                  <span
+                    className={`ml-2 ${
+                      s.delta_pct > 0
+                        ? "text-emerald-600"
+                        : s.delta_pct < 0
+                          ? "text-amber-600"
+                          : ""
+                    }`}
+                  >
+                    {s.delta_pct > 0 ? (
+                      <TrendingUp className="inline h-3 w-3" />
+                    ) : s.delta_pct < 0 ? (
+                      <TrendingDown className="inline h-3 w-3" />
+                    ) : null}{" "}
+                    {s.delta_pct > 0 ? "+" : ""}
+                    {s.delta_pct.toFixed(1)}%
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-3 text-[11px] text-muted-foreground">
+          <Bell className="mr-1 inline h-3 w-3" />
+          Source : DVF Cerema · évolution N-1 disponible en V2
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Helpers
+// ──────────────────────────────────────────────────────────────────
+
+function formatEur(n: number): string {
+  return new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(n) + " €";
 }
