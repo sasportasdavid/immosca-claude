@@ -1,0 +1,157 @@
+/* ═════════════════════════════════════════════════════════════════════
+   immoscan-unified.css
+   ─────────────────────────────────────────────────────────────────────
+   Couche d'unification : promeut les composants éditoriaux d'Immovalue
+   (value-tokens.css) en base partagée, paramétrée par --accent.
+
+   Stratégie d'implémentation pour Claude Code :
+   1. Garder tokens.css comme base (couleurs/typo/radii — inchangé)
+   2. Charger CE fichier APRÈS tokens.css à la racine de l'app
+   3. À la racine du <body> (ou layout produit) :
+        - <body data-product="immoscan">  → --accent = violet
+        - <body data-product="immovalue"> → --accent = terra
+   4. Tous les composants éditoriaux (conf-badge, status-badge, adj-item,
+      these, stepper, iv-nav, eyebrow-accent) deviennent product-agnostic
+      et utilisent var(--accent) au lieu d'une couleur en dur.
+   5. Supprimer la duplication dans value-tokens.css (les classes .iv-*
+      seront couvertes ici ; ne conserver dans value-tokens.css que le
+      wordmark .iv-logo si vraiment spécifique Immovalue).
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* ─── Accent par produit ─────────────────────────────────────────── */
+:root,
+[data-product="immoscan"] {
+  --accent:        var(--violet);
+  --accent-2:      var(--violet-2);
+  --accent-deep:   var(--violet-deep);
+  --accent-soft:   var(--violet-soft);
+  --accent-grad:   var(--violet-grad);
+  --accent-grad-2: var(--violet-grad-2);
+  --accent-ring:   var(--ring-violet);
+  /* Tonalité de surface chaude propre à l'écosystème éditorial */
+  --accent-tint:   rgba(91,71,224,0.04);
+}
+
+[data-product="immovalue"] {
+  --accent:        var(--terra);
+  --accent-2:      var(--terra-2);
+  --accent-deep:   var(--terra-deep);
+  --accent-soft:   var(--terra-soft);
+  --accent-grad:   var(--terra-grad);
+  --accent-grad-2: var(--terra-grad-2);
+  --accent-ring:   var(--ring-terra);
+  --accent-tint:   rgba(217,119,87,0.04);
+}
+
+/* ─── 1. Eyebrow accent (préfixe de section) ─────────────────────── */
+/* Remplace : <h2>Top 5 du marché</h2>
+   Par     : <div class="eyebrow eyebrow-accent">Top du marché</div>
+             <h2 class="display-serif">Cinq biens valent un appel</h2>
+*/
+.eyebrow-accent {
+  color: var(--accent);
+}
+.eyebrow-glyph {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--accent-deep);
+}
+.eyebrow-glyph .glyph {
+  width: 22px; height: 22px; border-radius: 6px;
+  background: var(--accent-grad); color: white;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: var(--lvl-1), inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+/* ─── 2. Display serif italic (moments éditoriaux) ───────────────── */
+/* Remplace : <h1>87 biens analysés</h1>  (Inter 32-56px bold)
+   Par     : <h1 class="display-serif">87 biens. <em>Cinq valent un appel.</em></h1>
+   N'utiliser que pour titres de page, hero verdicts, thèses, jamais en body.
+*/
+.display-serif {
+  font-family: var(--sans);
+  font-size: 42px; font-weight: 600;
+  letter-spacing: -0.028em; line-height: 1.06;
+  text-wrap: balance;
+  margin: 12px 0 0;
+}
+.display-serif em,
+.display-serif .it {
+  font-family: var(--serif); font-style: italic; font-weight: 400;
+  color: var(--accent);
+  letter-spacing: -0.012em;
+}
+
+/* ─── 3. Conf-badge agnostique (déjà dans value-tokens, regénéralisé) */
+/* Utilisable pour TOUT score de confiance (estimation, fiabilité source,
+   match scoring d'un bien). Remplace les badges numériques crus. */
+.conf-badge.accent .meter .fill { background: var(--accent); }
+
+/* ─── 4. Adj-item universel (ligne de critère scoré) ─────────────── */
+/* Pour Immoscan : remplace la "scoring grid" 6 critères du Listing Drawer.
+   Pour Immovalue : déjà utilisé sur les ajustements de prix.
+   Variant accent (= match positif côté Immoscan) :
+*/
+.adj-item.accent .impact .pct { color: var(--accent-deep); }
+.adj-item.accent .icn        { background: var(--accent-soft); color: var(--accent-deep); }
+
+/* ─── 5. Thèse block agnostique ──────────────────────────────────── */
+/* Remplace : "Résumé" plat sous un score
+   Par     : Bloc thèse argumenté avec eyebrow accent + serif italic h3 + prose */
+.these {
+  background: linear-gradient(180deg, var(--accent-tint), transparent);
+  border-color: color-mix(in oklab, var(--accent) 16%, transparent);
+}
+.these .lead { color: var(--accent-deep); }
+.these .lead .glyph { background: var(--accent-grad); }
+
+/* ─── 6. Stepper agnostique ──────────────────────────────────────── */
+.stepper .step.active { background: var(--accent-soft); color: var(--accent-deep); }
+.stepper .step.active .num { background: var(--accent); color: white; }
+
+/* ─── 7. Nav unifiée (.iv-nav → .app-nav) ────────────────────────── */
+/* Renomme .iv-nav en .app-nav et utilise sur tout produit.
+   Garde le backdrop-filter blur + breadcrumb + accent au focus. */
+.app-nav {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(14px);
+  background: rgba(250,250,249,0.78);
+  border-bottom: 1px solid var(--line-soft);
+}
+.app-nav-inner {
+  max-width: 1280px; margin: 0 auto;
+  height: 60px; padding: 0 32px;
+  display: flex; align-items: center; gap: 28px;
+}
+.app-nav .crumb { font-size: 12px; color: var(--mute-2); }
+.app-nav .crumb a { color: var(--muted); text-decoration: none; }
+.app-nav .crumb .sep { margin: 0 8px; color: var(--faint); }
+.app-nav .crumb .here { color: var(--ink); font-weight: 500; }
+.app-nav .right { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 13px; }
+
+/* ─── 8. Status badges étendus (vocabulaire produit-agnostique) ──── */
+/* Vocabulaire unifié pour les états d'opportunités côté Immoscan :
+   - "nouveau"   → équiv. discret en Immovalue (accent soft)
+   - "suivi"     → identique Immovalue (gris)
+   - "scoré"     → équiv. public (sage)
+   - "exclu"     → équiv. vendu (ink) */
+.status-badge.nouveau { background: var(--accent-soft); color: var(--accent-deep); border-color: color-mix(in oklab, var(--accent) 18%, transparent); }
+.status-badge.score   { background: var(--sage-soft); color: #2F5340; border-color: rgba(124,152,133,0.30); }
+.status-badge.exclu   { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* ─── 9. Boutons primaires unifiés ───────────────────────────────── */
+/* Remplace .btn-primary (violet en dur) et .btn-terra par .btn-accent.
+   Conserve .btn-primary et .btn-terra pour rétrocompat, mais elles
+   pointent désormais sur l'accent du produit courant. */
+.btn-accent {
+  background: var(--accent-grad); color: white;
+  border: 1px solid transparent;
+  box-shadow: var(--lvl-1), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+.btn-accent:hover {
+  box-shadow: var(--lvl-2), inset 0 1px 0 rgba(255,255,255,0.18);
+}
+
+/* ─── 10. Focus ring suit l'accent ───────────────────────────────── */
+:focus-visible { box-shadow: var(--accent-ring); }
