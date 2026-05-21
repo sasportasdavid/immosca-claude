@@ -49,10 +49,18 @@ function mapAnnuaire(
   lat: number | null;
   lng: number | null;
 } | null {
-  const uai = (row.identifiant_de_l_etablissement ?? row.uai ?? row.numero_uai ?? "")
-    .trim();
-  const nom = (row.nom_etablissement ?? row.appellation_officielle ?? "").trim();
-  const typeRaw = (row.type_etablissement ?? "").toLowerCase().trim();
+  // Vrais noms de colonnes Annuaire data.gouv (vérifiés via curl) :
+  //   Identifiant_de_l_etablissement;Nom_etablissement;Type_etablissement;
+  //   Statut_public_prive;Adresse_1;Adresse_2;Adresse_3;Code_postal;
+  //   Code_commune;Nom_commune;Code_departement;Code_academie;Code_region;
+  //   ...;latitude;longitude (en colonnes vers la fin)
+  // Le fichier commence par un BOM UTF-8 sur la 1ère colonne — `bom: true`
+  // dans csv-parse le strip, mais on tolère aussi un fallback via lowercase.
+  const uai = (row.Identifiant_de_l_etablissement ??
+    row.identifiant_de_l_etablissement ?? "").trim();
+  const nom = (row.Nom_etablissement ?? row.nom_etablissement ?? "").trim();
+  const typeRaw = (row.Type_etablissement ?? row.type_etablissement ?? "")
+    .toLowerCase().trim();
   if (!uai || !nom || !typeRaw) return null;
 
   // Normalisation type : "École", "Collège", "Lycée"... → "ecole" / "college" / "lycee"
@@ -61,9 +69,8 @@ function mapAnnuaire(
   else if (typeRaw.includes("collège") || typeRaw.includes("college")) type = "college";
   else if (typeRaw.includes("lycée") || typeRaw.includes("lycee")) type = "lycee";
 
-  const statutRaw = (row.statut_public_prive ?? row.secteur_public_prive ?? "")
-    .toLowerCase()
-    .trim();
+  const statutRaw = (row.Statut_public_prive ?? row.statut_public_prive ?? "")
+    .toLowerCase().trim();
   const secteur = statutRaw.includes("priv") ? "prive" : statutRaw.includes("public") ? "public" : null;
 
   const lat = row.latitude ? Number(row.latitude) : null;
@@ -74,9 +81,9 @@ function mapAnnuaire(
     nom_etablissement: nom,
     type_etablissement: type,
     secteur,
-    code_postal: row.code_postal || null,
-    code_commune: row.code_commune || null,
-    adresse: row.adresse_1 || row.adresse || null,
+    code_postal: row.Code_postal || row.code_postal || null,
+    code_commune: row.Code_commune || row.code_commune || null,
+    adresse: row.Adresse_1 || row.adresse_1 || null,
     lat: lat && Number.isFinite(lat) ? lat : null,
     lng: lng && Number.isFinite(lng) ? lng : null,
   };
