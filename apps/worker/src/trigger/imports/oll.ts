@@ -123,8 +123,22 @@ async function flushBatch(
   batch: ReturnType<typeof mapRow>[],
   log: (msg: string, extra?: Record<string, unknown>) => void,
 ): Promise<number> {
-  const rows = batch.filter((r): r is NonNullable<typeof r> => r !== null);
-  if (rows.length === 0) return 0;
+  const valid = batch.filter((r): r is NonNullable<typeof r> => r !== null);
+  if (valid.length === 0) return 0;
+  // Postgres ON CONFLICT DO UPDATE refuse 2 lignes avec la même clé
+  // unique dans le même batch. Le CSV OLL agrège plusieurs millésimes/
+  // observatoires/épochs identiques → on déduplique en gardant la
+  // dernière occurrence (la plus récente sera typiquement la version
+  // corrigée par l'observatoire).
+  const dedup = new Map<string, NonNullable<typeof batch[number]>>();
+  for (const row of valid) {
+    const key = [
+      row.annee, row.code_zonage_oll, row.type_logement,
+      row.nombre_pieces, row.epoque_construction ?? "",
+    ].join("|");
+    dedup.set(key, row);
+  }
+  const rows = Array.from(dedup.values());
   const { error, count } = await supabaseData
     .from("oll_loyers_medians")
     .upsert(rows, {
