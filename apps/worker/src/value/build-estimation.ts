@@ -837,13 +837,25 @@ export const valueBuildEstimation = task({
       : rawTyp === "loft" ? "appartement"
       : rawTyp === "autre" ? "autre"
       : rawTyp.startsWith("t") || rawTyp.startsWith("studio") ? "appartement"
-      : "appartement"; // défaut : appartement (le cas T1-T6+ etc.)
+      : "appartement";
+
+    // Le frontend stocke `particularites` (commentaires libres user
+    // type "piscine, hammam, rénovée"). BienInputSchema attend
+    // `particularites_uniques` → on rename pour que ces particularités
+    // arrivent bien dans `yaml(dossier.bien)` du prompt Claude.
+    const particularitesUniques =
+      typeof rawBien.particularites === "string" && rawBien.particularites.trim()
+        ? String(rawBien.particularites).trim()
+        : typeof rawBien.particularites_uniques === "string"
+          ? String(rawBien.particularites_uniques).trim()
+          : null;
 
     const bien = BienInputSchema.parse({
       id: bienRow.id,
       address: bienRow.address,
       ...rawBien,
-      typologie, // override avec la valeur normalisée
+      typologie,
+      particularites_uniques: particularitesUniques,
       photos_originales_urls: bienRow.photos_originales_urls ?? [],
     });
 
