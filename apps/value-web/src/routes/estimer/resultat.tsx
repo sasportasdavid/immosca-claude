@@ -270,11 +270,14 @@ function StepResultatPage() {
   const { state, reset } = useEstimerState();
   const search = Route.useSearch();
   const bienId = search.id;
-  const { data: bien, isLoading: bienLoading } = useBien(bienId);
+  const { data: bien, isLoading: bienLoading, error: bienError } = useBien(bienId);
 
   // Cast vers le shape connu (ValorisationOutput). null tant que worker
   // pas fini — on poll toutes les 3s via useBien.
   const valo = (bien?.valo_courante as ValorisationOutput | null) ?? null;
+  // Mode mock UNIQUEMENT si l'utilisateur navigue ici sans bien_id du
+  // tout (vue démo / preview). Avec un bien_id réel, on doit AFFICHER
+  // soit le loader, soit la vraie valo, soit une erreur — jamais le mock.
   const isMockMode = !bienId || bienId === "mock-bien-id";
 
   const address =
@@ -301,9 +304,24 @@ function StepResultatPage() {
     void navigate({ to: "/estimer" });
   }
 
-  // État "Claude écrit ta thèse" pendant que le worker tourne.
+  // En mode réel (bien_id valide), on NE TOMBE JAMAIS sur le mock :
+  // soit on a un loader, soit la vraie valo, soit une erreur explicite.
   if (!isMockMode && bienLoading) {
     return <CalculLoadingState message="Chargement du dossier…" />;
+  }
+  if (!isMockMode && bienError) {
+    return (
+      <CalculLoadingState
+        message={`Erreur de lecture du bien : ${bienError instanceof Error ? bienError.message : "inconnue"}`}
+      />
+    );
+  }
+  if (!isMockMode && !bien) {
+    return (
+      <CalculLoadingState
+        message="Ce bien n'est pas dans ton compte. Reviens à l'accueil et relance une estimation."
+      />
+    );
   }
   if (!isMockMode && bien && !valo) {
     return <CalculLoadingState message="Claude écrit ta thèse — quelques secondes encore…" />;
