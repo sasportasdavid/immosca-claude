@@ -28,5 +28,15 @@ export function useBien(bienId: string | undefined) {
     },
     enabled: !!bienId,
     staleTime: 30 * 1000,
+    // Polling tant que la valorisation Claude n'est pas écrite par le
+    // worker `value-build-estimation`. Une fois `valo_courante`
+    // présent, on arrête le polling (refetchInterval renvoie false).
+    refetchInterval: (query) => {
+      const bien = query.state.data;
+      if (!bien) return 3000;
+      if (!bien.valo_courante) return 3000;
+      return false;
+    },
+    refetchIntervalInBackground: false,
   });
 }

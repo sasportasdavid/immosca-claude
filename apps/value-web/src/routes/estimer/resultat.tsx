@@ -9,9 +9,12 @@
 // 6. Que faire maintenant — 3 cards next-steps
 // 7. Téléchargement (placeholders)
 //
-// V1 : données hardcodées (Gagny T3 62m² 295-332k€ central 312k€ conf
-// 0.84). Le worker n'est pas branché — donc même si on a un `?id=` en
-// query, on affiche du mock cohérent avec le brief §10.
+// Branchement réel sur value.biens.valo_courante :
+// - useBien(bienId) lit la row + polling 3s tant que valo_courante null
+// - Si null → état "Claude écrit ta thèse" (worker pas fini)
+// - Si présent → on map JSON ValorisationOutput vers les composants
+// Les sections Comparables/Carte/Next-steps restent mock V1 (pas encore
+// dans le JSON sortie Claude, mais on garde l'UI cohérente).
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
@@ -25,6 +28,7 @@ import {
   Eye,
   FileText,
   Layers,
+  Loader2,
   Megaphone,
   Pencil,
   Share2,
@@ -55,8 +59,48 @@ import {
 } from "@/components/value/ComparablesMap";
 import { Wordmark } from "@/components/value/EstimationStepperLayout";
 import { ValorisationCard } from "@/components/value/ValorisationCard";
+import { useBien } from "@/hooks/use-bien";
 import { useEstimerState } from "@/hooks/use-estimer-state";
 import { cn } from "@/lib/utils";
+
+// Forme du JSON valo_courante écrit par le worker (cf packages/shared/
+// src/value/claude-valorisation.ts ValorisationOutputSchema).
+interface ValorisationOutput {
+  prix_m2_secteur_pondere: number;
+  valorisation: { bas: number; central: number; haut: number; confiance: number };
+  ajustements: Array<{
+    categorie: "bien" | "secteur" | "risques" | "marche";
+    critere: string;
+    impact_pct: number;
+    impact_eur: number;
+    raisonnement: string;
+    sources: string[];
+  }>;
+  these: string;
+  recommandation_prix_vente: number;
+  duree_vente_estimee_jours: number;
+  signaux_faibles?: string[];
+}
+
+function adjIcon(categorie: string) {
+  switch (categorie) {
+    case "bien":    return <Layers className="h-4 w-4" strokeWidth={2} />;
+    case "secteur": return <Compass className="h-4 w-4" strokeWidth={2} />;
+    case "risques": return <Volume2 className="h-4 w-4" strokeWidth={2} />;
+    case "marche":  return <Building2 className="h-4 w-4" strokeWidth={2} />;
+    default:        return <Zap className="h-4 w-4" strokeWidth={2} />;
+  }
+}
+
+function formatPct(n: number): string {
+  const sign = n >= 0 ? "+" : "−";
+  return `${sign}${Math.abs(n).toFixed(1).replace(".", ",")} %`;
+}
+
+function formatEur(n: number): string {
+  const sign = n >= 0 ? "+" : "−";
+  return `${sign}${new Intl.NumberFormat("fr-FR").format(Math.round(Math.abs(n)))} €`;
+}
 
 // ──────────────────────────────────────────────────────────────────
 // Données mock V1 (cf brief §10 — réference Gagny T3 62m²)
@@ -224,12 +268,45 @@ export interface SearchParams {
 function StepResultatPage() {
   const navigate = useNavigate();
   const { state, reset } = useEstimerState();
-  const address = state.address || "12 rue de la Gare, Le Chénay, Gagny (93)";
-  const surface = state.bien_data.surface_carrez || MOCK_VALO.surface;
+  const search = Route.useSearch();
+  const bienId = search.id;
+  const { data: bien, isLoading: bienLoading } = useBien(bienId);
+
+  // Cast vers le shape connu (ValorisationOutput). null tant que worker
+  // pas fini — on poll toutes les 3s via useBien.
+  const valo = (bien?.valo_courante as ValorisationOutput | null) ?? null;
+  const isMockMode = !bienId || bienId === "mock-bien-id";
+
+  const address =
+    bien?.address ||
+    state.address ||
+    "12 rue de la Gare, Le Chénay, Gagny (93)";
+  const surface =
+    (bien?.bien_data as { surface_carrez?: number })?.surface_carrez ||
+    state.bien_data.surface_carrez ||
+    MOCK_VALO.surface;
+
+  // Données valorisation : réel si dispo, sinon mock (avant worker
+  // terminé OU si on est arrivé sans bien_id valide).
+  const valoMin     = valo?.valorisation.bas      ?? MOCK_VALO.min;
+  const valoMax     = valo?.valorisation.haut     ?? MOCK_VALO.max;
+  const valoCentral = valo?.valorisation.central  ?? MOCK_VALO.central;
+  const valoConf    = valo?.valorisation.confiance ?? MOCK_VALO.confidence;
+  const prixM2Sect  = valo?.prix_m2_secteur_pondere ?? MOCK_VALO.medianSecteurM2;
+  const these       = valo?.these ?? null;
+  const ajustements = valo?.ajustements ?? [];
 
   function handleNewEstimation() {
     reset();
     void navigate({ to: "/estimer" });
+  }
+
+  // État "Claude écrit ta thèse" pendant que le worker tourne.
+  if (!isMockMode && bienLoading) {
+    return <CalculLoadingState message="Chargement du dossier…" />;
+  }
+  if (!isMockMode && bien && !valo) {
+    return <CalculLoadingState message="Claude écrit ta thèse — quelques secondes encore…" />;
   }
 
   return (
@@ -272,58 +349,84 @@ function StepResultatPage() {
           </div>
         </div>
 
-        {/* Section 1 — Valorisation */}
+        {/* Section 1 — Valorisation (réel si valo dispo, sinon mock) */}
         <ValorisationCard
-          min={MOCK_VALO.min}
-          max={MOCK_VALO.max}
-          central={MOCK_VALO.central}
+          min={valoMin}
+          max={valoMax}
+          central={valoCentral}
           surface={surface}
-          medianSecteurM2={MOCK_VALO.medianSecteurM2}
-          confidence={MOCK_VALO.confidence}
+          medianSecteurM2={prixM2Sect}
+          confidence={valoConf}
           computedAtLabel={`Estimation au ${formatDate(new Date())} — réévaluée chaque semaine`}
-          localisation="Le Chénay · IRIS 930320206"
-          typologie={`T3 · ${surface} m² Carrez · 3e étage`}
-          dpe="D"
-          ges="C"
+          localisation={
+            (bien?.bien_data as { code_iris?: string })?.code_iris
+              ? `IRIS ${(bien!.bien_data as { code_iris: string }).code_iris}`
+              : "Le Chénay · IRIS 930320206"
+          }
+          typologie={
+            (bien?.bien_data as { typologie?: string; pieces?: number })?.typologie
+              ? `${(bien!.bien_data as { typologie: string }).typologie} · ${surface} m² Carrez`
+              : `T3 · ${surface} m² Carrez · 3e étage`
+          }
+          dpe={
+            ((bien?.bien_data as { dpe?: string })?.dpe ?? "D") as
+              | "A" | "B" | "C" | "D" | "E" | "F" | "G"
+          }
+          ges={
+            ((bien?.bien_data as { ges?: string })?.ges ?? "C") as
+              | "A" | "B" | "C" | "D" | "E" | "F" | "G"
+          }
           confidenceReason={
-            <>
-              Estimation <b className="text-ink-2">solide</b> : 23 transactions
-              DVF récentes au Chénay, 2 recherches comparables fournies (47 et
-              32 biens), et 6 photos clairement analysables.
-            </>
+            valo ? (
+              <>
+                Estimation pondérée sur{" "}
+                <b className="text-ink-2">
+                  {ajustements.length} ajustements
+                </b>{" "}
+                · prix sectoriel {Math.round(prixM2Sect)} €/m² ·{" "}
+                vente recommandée à{" "}
+                <b className="text-ink-2">
+                  {new Intl.NumberFormat("fr-FR").format(
+                    valo.recommandation_prix_vente,
+                  )}{" "}
+                  €
+                </b>{" "}
+                ({valo.duree_vente_estimee_jours} j estimés).
+              </>
+            ) : (
+              <>
+                Estimation <b className="text-ink-2">solide</b> : 23 transactions
+                DVF récentes au Chénay, 2 recherches comparables fournies (47
+                et 32 biens), et 6 photos clairement analysables.
+              </>
+            )
           }
         />
 
-        {/* Section 2 — La thèse */}
+        {/* Section 2 — La thèse (vrai texte Claude si dispo) */}
         <section className="mt-14">
           <TheseBlock attribution="Claude" title="L'analyse" glyph={<Sparkles className="h-3 w-3" strokeWidth={2.5} />}>
-            <p>
-              Le Chénay est un secteur de Gagny qui présente une
-              caractéristique rare : son prix médian au m² est{" "}
-              <b>46 % inférieur</b> à celui du centre-ville (4 680 €/m² vs
-              8 640 €/m² pour Gagny Centre), pour des biens dont la
-              connectivité RER E reste très proche (8 min à pied de la gare).
-              Pour un investisseur locatif visant 6-7 % brut sur du T3, ton
-              secteur est un sweet spot évident — c&rsquo;est ce qui explique
-              que <b>23 transactions ont été enregistrées en 5 ans sur ton
-              IRIS</b> et que le marché actif est tendu (médian 4 760 €/m²,
-              soit +1,7 % vs DVF).
-            </p>
-            <p>
-              Sur les 47 biens proches que tu as remontés via ta recherche
-              SeLoger, 18 sont vraiment comparables (T3 60-65 m², secteur
-              Chénay/Maison Blanche, 2e-4e étage) : leur prix médian est de{" "}
-              <b>5 100 €/m²</b> avec une dispersion serrée. Ton bien, avec son
-              état refait à neuf et son exposition Sud-Ouest, se positionne{" "}
-              <b>dans la moitié haute</b> de cette fourchette — d&rsquo;où le
-              central à 312 000 €.
-            </p>
-            <p>
-              À ce prix, tu as une probabilité élevée de trouver acheteur en
-              6-9 semaines en vente publique. Si tu veux maximiser, le mode
-              discret va te permettre de mesurer la profondeur du marché avant
-              d&rsquo;arbitrer prix vs vitesse.
-            </p>
+            {these ? (
+              these.split(/\n{2,}/).map((para, i) => (
+                <p key={i}>{para.trim()}</p>
+              ))
+            ) : (
+              <>
+                <p>
+                  Le Chénay est un secteur de Gagny qui présente une
+                  caractéristique rare : son prix médian au m² est{" "}
+                  <b>46 % inférieur</b> à celui du centre-ville (4 680 €/m² vs
+                  8 640 €/m² pour Gagny Centre), pour des biens dont la
+                  connectivité RER E reste très proche (8 min à pied de la
+                  gare). Pour un investisseur locatif visant 6-7 % brut sur du
+                  T3, ton secteur est un sweet spot évident.
+                </p>
+                <p>
+                  À ce prix, tu as une probabilité élevée de trouver acheteur
+                  en 6-9 semaines en vente publique.
+                </p>
+              </>
+            )}
           </TheseBlock>
         </section>
 
@@ -339,18 +442,31 @@ function StepResultatPage() {
             desc="7 ajustements identifiés sur le bien, le secteur, les risques et le marché."
           />
           <div className="grid gap-3 sm:grid-cols-2">
-            {MOCK_ADJUSTMENTS.map((adj) => (
-              <AdjustmentItem
-                key={adj.criterion}
-                tone={adj.tone}
-                icon={adj.icon}
-                criterion={adj.criterion}
-                reason={adj.reason}
-                sources={adj.sources}
-                impactPct={adj.impactPct}
-                impactEur={adj.impactEur}
-              />
-            ))}
+            {ajustements.length > 0
+              ? ajustements.map((adj, i) => (
+                  <AdjustmentItem
+                    key={`${adj.critere}-${i}`}
+                    tone={adj.impact_pct >= 0 ? "pos" : "neg"}
+                    icon={adjIcon(adj.categorie)}
+                    criterion={adj.critere}
+                    reason={adj.raisonnement}
+                    sources={adj.sources.map((s) => ({ label: s }))}
+                    impactPct={formatPct(adj.impact_pct)}
+                    impactEur={formatEur(adj.impact_eur)}
+                  />
+                ))
+              : MOCK_ADJUSTMENTS.map((adj) => (
+                  <AdjustmentItem
+                    key={adj.criterion}
+                    tone={adj.tone}
+                    icon={adj.icon}
+                    criterion={adj.criterion}
+                    reason={adj.reason}
+                    sources={adj.sources}
+                    impactPct={adj.impactPct}
+                    impactEur={adj.impactEur}
+                  />
+                ))}
           </div>
         </section>
 
@@ -761,6 +877,47 @@ function ToggleVisual({ on }: { on: boolean }) {
         )}
       />
     </span>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Loading state — affiché tant que le worker `value-build-estimation`
+// n'a pas écrit `valo_courante`. Le hook `useBien` poll toutes les 3s.
+// ──────────────────────────────────────────────────────────────────
+
+function CalculLoadingState({ message }: { message: string }) {
+  return (
+    <main
+      className={cn(
+        "min-h-screen bg-bg",
+        "[background-image:radial-gradient(900px_500px_at_100%_0%,rgba(217,119,87,0.08),transparent_60%)]",
+      )}
+    >
+      <header className="border-b border-line/60 bg-bg/80 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 max-w-[1180px] items-center justify-between px-6 sm:px-8">
+          <Wordmark />
+          <span className="font-mono text-[11.5px] text-mute-2">
+            Calcul en cours · ne ferme pas la page
+          </span>
+        </div>
+      </header>
+
+      <section className="mx-auto mt-32 flex max-w-[640px] flex-col items-center px-6 text-center sm:px-8">
+        <span className="relative mb-6 flex h-16 w-16 items-center justify-center">
+          <span className="absolute h-16 w-16 animate-ping rounded-full bg-terra/15" />
+          <span className="relative flex h-12 w-12 items-center justify-center rounded-full bg-terra-grad text-white shadow-lvl-2">
+            <Loader2 className="h-6 w-6 animate-spin" strokeWidth={2} />
+          </span>
+        </span>
+        <h1 className="font-serif text-[clamp(1.5rem,3vw,2rem)] italic font-normal leading-[1.15] text-ink [text-wrap:balance]">
+          {message}
+        </h1>
+        <p className="mx-auto mt-3 max-w-[50ch] text-[14px] text-muted-ink">
+          On croise DVF, OLL, INSEE, ADEME, Géorisques. La page se met à
+          jour automatiquement dès que la valorisation est prête (~30 s).
+        </p>
+      </section>
+    </main>
   );
 }
 
