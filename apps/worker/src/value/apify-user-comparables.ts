@@ -67,28 +67,67 @@ async function scrapeUrlWithApify(url: string): Promise<{
     timeoutSecs: 600,
   });
 
-  // Normalisation minimale : on extrait les champs courants. Le mapping
-  // complet par actor existe dans `apify-mappers.ts` mais nécessite une
-  // analyse pré-existante (analysis_id). Pour user-provided, on stocke
-  // un format JSON simplifié — Claude reasoner sait travailler dessus.
+  // Mapping aligné sur les actors réels (azzouzana SeLoger, silentflow
+  // LBC) — cf apify-mappers.ts. Les vrais champs sont imbriqués sous
+  // rawData.X, location.address.X, hardFacts.X pour SeLoger azzouzana.
+  // Pour LBC silentflow, on a des champs flat (`price`, `surface`,
+  // `attributes`...) — on supporte les 2.
   const items: ScrapedItem[] = result.items
     .slice(0, MAX_ITEMS_PER_URL)
     .map((raw): ScrapedItem => {
       const r = raw as Record<string, unknown>;
-      const prix = toNumberOrNull(r.price ?? r.prix);
-      const surface = toNumberOrNull(r.surface ?? r.area);
+      const rawData = (r.rawData ?? {}) as Record<string, unknown>;
+      const location = (r.location ?? {}) as Record<string, unknown>;
+      const address = (location.address ?? {}) as Record<string, unknown>;
+      const surfaceObj = (rawData.surface ?? {}) as Record<string, unknown>;
+
+      const prix = toNumberOrNull(rawData.price ?? r.price ?? r.prix);
+      const surface = toNumberOrNull(
+        surfaceObj.main ?? r.surface ?? r.area ?? r.surfaceHabitable,
+      );
       const prix_m2 =
         prix !== null && surface !== null && surface > 0 ? prix / surface : null;
+
+      // typologie : SeLoger renvoie "FLAT"/"HOUSE"/etc. → on normalise.
+      const propType = String(
+        rawData.propertyType ?? r.propertyType ?? r.type ?? "",
+      ).toUpperCase();
+      const typologie =
+        propType === "FLAT" || propType === "APARTMENT" ? "appartement"
+        : propType === "HOUSE" ? "maison"
+        : propType === "LAND" ? "terrain"
+        : propType ? propType.toLowerCase()
+        : null;
+
       return {
-        ref: String(r.id ?? r.listingId ?? r.url ?? Math.random().toString(36)),
+        ref: String(
+          r.id ??
+            (rawData as { legacy_id?: unknown }).legacy_id ??
+            r.listingId ??
+            r.url ??
+            Math.random().toString(36),
+        ),
         url: typeof r.url === "string" ? r.url : undefined,
         prix,
         surface,
         prix_m2,
-        dpe: typeof r.energyClass === "string" ? r.energyClass : null,
-        typologie: typeof r.propertyType === "string" ? r.propertyType : null,
-        ville: typeof r.city === "string" ? r.city : null,
-        code_postal: typeof r.zipCode === "string" ? r.zipCode : null,
+        dpe:
+          typeof r.dpe === "string" ? r.dpe
+          : typeof r.energyClass === "string" ? r.energyClass
+          : typeof rawData.energyClass === "string" ? (rawData.energyClass as string)
+          : null,
+        typologie,
+        ville:
+          typeof address.city === "string" ? (address.city as string)
+          : typeof r.city === "string" ? r.city
+          : typeof r.ville === "string" ? r.ville
+          : null,
+        code_postal:
+          typeof address.zip === "string" ? (address.zip as string)
+          : typeof address.zipCode === "string" ? (address.zipCode as string)
+          : typeof r.zipCode === "string" ? r.zipCode
+          : typeof r.code_postal === "string" ? r.code_postal
+          : null,
       };
     });
 
