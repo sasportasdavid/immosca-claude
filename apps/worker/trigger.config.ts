@@ -5,7 +5,9 @@ import "./src/lib/sentry";
 import { defineConfig } from "@trigger.dev/sdk";
 
 export default defineConfig({
-  project: process.env.TRIGGER_PROJECT_ID ?? "proj_placeholder",
+  // Hardcodé : ImmoScan n'a qu'un seul projet Trigger.dev (immoscan-wwff).
+  // L'env var TRIGGER_PROJECT_ID reste lue si on veut override en local.
+  project: process.env.TRIGGER_PROJECT_ID ?? "proj_bdgujyaqarbstsmgncmt",
   runtime: "node",
   logLevel: "log",
   maxDuration: 600, // 10 min max par task
