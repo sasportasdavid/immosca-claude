@@ -41,6 +41,10 @@ export const ValorisationQualiteDossierSchema = z.object({
 });
 export type ValorisationQualiteDossier = z.infer<typeof ValorisationQualiteDossierSchema>;
 
+// Note : champs en .default([]) / .optional() pour tolérer les
+// réponses Claude tronquées (token limit) ou les sorties qui sautent
+// les champs périphériques. Le core (valorisation + these + ajustements)
+// reste requis — c'est ce qui justifie la valorisation.
 export const ValorisationOutputSchema = z.object({
   prix_m2_secteur_pondere: z.number(),
   valorisation: z.object({
@@ -49,14 +53,14 @@ export const ValorisationOutputSchema = z.object({
     haut: z.number(),
     confiance: z.number().min(0).max(1),
   }),
-  ajustements: z.array(ValorisationAjustementSchema),
-  comparables_retenus: z.array(ValorisationComparableRetenuSchema),
-  tension_marche: ValorisationTensionSchema,
+  ajustements: z.array(ValorisationAjustementSchema).default([]),
+  comparables_retenus: z.array(ValorisationComparableRetenuSchema).default([]),
+  tension_marche: ValorisationTensionSchema.optional(),
   these: z.string(),
-  signaux_faibles: z.array(z.string()),
-  recommandation_prix_vente: z.number(),
-  duree_vente_estimee_jours: z.number().int(),
-  qualite_dossier: ValorisationQualiteDossierSchema,
+  signaux_faibles: z.array(z.string()).default([]),
+  recommandation_prix_vente: z.number().optional(),
+  duree_vente_estimee_jours: z.number().int().optional(),
+  qualite_dossier: ValorisationQualiteDossierSchema.optional(),
 });
 export type ValorisationOutput = z.infer<typeof ValorisationOutputSchema>;
 
@@ -237,7 +241,7 @@ export async function claudeValorisation(
     toolName: "valorisation_immobiliere",
     toolDescription:
       "Retourne la valorisation argumentée du bien selon les sources fournies (DVF, annonces actives, comparables user, IRIS, OLL, DPE secteur, géorisques, transports, écoles, bruit, tendance).",
-    maxTokens: 4096,
+    maxTokens: 8192,
   });
   return { valo: result.data, tokensUsed: result.tokensUsed, model: result.model };
 }
