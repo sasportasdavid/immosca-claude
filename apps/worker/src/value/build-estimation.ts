@@ -304,15 +304,13 @@ async function userProvidedComparablesLoader(
   bien_id: string,
 ): Promise<UserComparable[]> {
   // Lit ce qui est déjà persisté par `value-apify-user-comparables`.
-  // Le schéma `value` peut ne pas être typé dans `@immoscan/db` →
-  // cast en never pour passer le typecheck (la migration SQL est en
-  // cours dans l'agent Schema-Backend).
+  // Via RPC publique (schéma value pas exposé via PostgREST → SDK
+  // rejette .schema("value") même en service_role).
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabaseApp as any)
-    .schema("value")
-    .from("user_provided_comparables")
-    .select("url_source, marketplace, scraped_at, truncated, items")
-    .eq("bien_id", bien_id);
+  const { data, error } = await (supabaseApp as any).rpc(
+    "value_user_comparables_get",
+    { p_bien_id: bien_id },
+  );
   if (error) {
     logger.warn("user_provided_comparables fetch failed", {
       bien_id,
@@ -812,16 +810,14 @@ export const valueBuildEstimation = task({
     const payload = payloadSchema.parse(rawPayload);
     logger.info("value-build-estimation start", payload);
 
-    // 1. Lit le bien depuis value.biens
+    // 1. Lit le bien depuis value.biens via RPC publique (schéma value
+    //    pas exposé via PostgREST → SDK rejette .schema("value")).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: bienRow, error } = await (supabaseApp as any)
-      .schema("value")
-      .from("biens")
-      .select(
-        "id, address, bien_data, photos_originales_urls, photos_floutees_urls, user_provided_urls",
-      )
-      .eq("id", payload.bien_id)
-      .single();
+    const { data: bienRows, error } = await (supabaseApp as any).rpc(
+      "value_bien_load_for_worker",
+      { p_bien_id: payload.bien_id },
+    );
+    const bienRow = Array.isArray(bienRows) ? bienRows[0] : bienRows;
 
     if (error || !bienRow) {
       const msg = `Bien introuvable: ${payload.bien_id} (${error?.message ?? "no row"})`;
@@ -901,61 +897,37 @@ export const valueBuildEstimation = task({
 
       const valoJson = valo as unknown as Record<string, unknown>;
 
-      // a. Calcul du delta vs valo_courante précédente
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: existing } = await (supabaseApp as any)
-        .schema("value")
-        .from("biens")
-        .select("valo_courante")
-        .eq("id", payload.bien_id)
-        .single();
-
+      // a. Calcul du delta vs valo_courante précédente (already loaded
+      //    via value_bien_load_for_worker → bienRow.valo_courante)
       let deltaPct: number | null = null;
-      if (existing?.valo_courante?.valorisation?.central) {
-        const prev = Number(existing.valo_courante.valorisation.central);
+      const prevValo = bienRow.valo_courante as
+        | { valorisation?: { central?: number } }
+        | null;
+      if (prevValo?.valorisation?.central) {
+        const prev = Number(prevValo.valorisation.central);
         if (Number.isFinite(prev) && prev > 0) {
           deltaPct = ((valo.valorisation.central - prev) / prev) * 100;
         }
       }
 
-      // b. Insert valos_historique
+      // b+c. Insert historique + UPDATE biens en 1 RPC atomique
+      //      (transaction implicite PL/pgSQL).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: histRow, error: histErr } = await (supabaseApp as any)
-        .schema("value")
-        .from("valos_historique")
-        .insert({
-          bien_id: payload.bien_id,
-          valo: valoJson,
-          delta_pct: deltaPct,
-          trigger: payload.trigger,
-        })
-        .select("id")
-        .single();
-      if (histErr) {
-        logger.error("valos_historique insert failed", {
-          err: histErr.message,
+      const { data: histRow, error: saveErr } = await (supabaseApp as any).rpc(
+        "value_save_valorisation",
+        {
+          p_bien_id: payload.bien_id,
+          p_valo: valoJson,
+          p_delta_pct: deltaPct,
+          p_trigger: payload.trigger,
+          p_set_initial: payload.trigger === "initial",
+        },
+      );
+      if (saveErr) {
+        logger.error("value_save_valorisation RPC failed", {
+          err: saveErr.message,
         });
-        throw new Error(`valos_historique insert: ${histErr.message}`);
-      }
-
-      // c. Update biens.valo_courante (+ valo_initiale si premier run)
-      const update: Record<string, unknown> = {
-        valo_courante: valoJson,
-        valo_updated_at: new Date().toISOString(),
-        valo_confiance: valo.valorisation.confiance,
-      };
-      if (payload.trigger === "initial") {
-        update.valo_initiale = valoJson;
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error: updErr } = await (supabaseApp as any)
-        .schema("value")
-        .from("biens")
-        .update(update)
-        .eq("id", payload.bien_id);
-      if (updErr) {
-        logger.error("biens valo_courante update failed", { err: updErr.message });
-        throw new Error(`biens update: ${updErr.message}`);
+        throw new Error(`save valorisation: ${saveErr.message}`);
       }
 
       // 5. Si on a des photos originales et pas encore de floutees,
