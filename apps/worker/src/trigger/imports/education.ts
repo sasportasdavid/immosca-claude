@@ -11,7 +11,7 @@
 
 import { Readable } from "node:stream";
 
-import { logger, schedules, task } from "@trigger.dev/sdk";
+import { task } from "@trigger.dev/sdk";
 import { parse } from "csv-parse";
 import { z } from "zod";
 
@@ -256,26 +256,8 @@ export const educationIpsImport = task({
   },
 });
 
-// ─── Cron annuel : 1er octobre pour le millésime N ────────────────
-
-export const educationImportScheduled = schedules.task({
-  id: "imports.education.scheduled",
-  cron: "0 4 1 10 *", // 1er octobre 4h UTC
-  maxDuration: 1800,
-  run: async () => {
-    // URLs placeholders — à mettre à jour selon dernière publication.
-    const annuaireUrl =
-      "https://static.data.gouv.fr/resources/annuaire-de-leducation/annuaire-de-leducation.csv";
-    const ipsUrl =
-      "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-ips-ecoles-ap2023/exports/csv";
-    const millesime = new Date().getFullYear();
-
-    logger.warn("Education scheduled trigger — vérifier URLs à jour", {
-      annuaireUrl,
-      ipsUrl,
-      millesime,
-    });
-    await educationAnnuaireImport.trigger({ csvUrl: annuaireUrl });
-    await educationIpsImport.trigger({ csvUrl: ipsUrl, millesime });
-  },
-});
+// Pas de cron Education (limite 10 schedules / plan gratuit Trigger.dev
+// déjà atteinte). Le refresh annuel se lance manuellement via le script
+// scripts/imports/run-all-imports.sh ou en triggant directement
+// `imports.education_annuaire` puis `imports.education_ips` depuis le
+// dashboard Trigger.dev.
