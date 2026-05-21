@@ -93,8 +93,17 @@ async function flushAnnuaire(
   batch: ReturnType<typeof mapAnnuaire>[],
   log: (msg: string, extra?: Record<string, unknown>) => void,
 ): Promise<number> {
-  const rows = batch.filter((r): r is NonNullable<typeof r> => r !== null);
-  if (rows.length === 0) return 0;
+  const valid = batch.filter((r): r is NonNullable<typeof r> => r !== null);
+  if (valid.length === 0) return 0;
+  // Dédup par UAI dans le batch (Postgres ON CONFLICT refuse doublons
+  // dans le même upsert). L'annuaire data.gouv liste parfois plusieurs
+  // entrées par UAI (différents cycles d'enseignement). On garde la
+  // dernière occurrence.
+  const dedup = new Map<string, NonNullable<typeof batch[number]>>();
+  for (const row of valid) {
+    dedup.set(row.id, row);
+  }
+  const rows = Array.from(dedup.values());
   const { error, count } = await supabaseData
     .from("education_etablissements")
     .upsert(rows, { onConflict: "id", ignoreDuplicates: false, count: "exact" });
