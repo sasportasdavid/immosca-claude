@@ -20,7 +20,12 @@ import { z } from "zod";
 import { withImportRun } from "@/lib/import-runs";
 import { supabaseData } from "@/lib/supabase";
 
-const BATCH_SIZE = 5_000;
+// Batch réduit à 1000 (avant 5000) — le buffer de 5000 lignes en mémoire
+// + le stream csv-parse + le client Supabase saturait Small 1x (~2GB)
+// et provoquait TASK_RUN_UNCAUGHT_EXCEPTION (OOM) sur le run France
+// entière (~1.5M lignes). Plus de batches = plus d'allers-retours
+// Supabase mais beaucoup moins de mémoire en pic.
+const BATCH_SIZE = 1_000;
 
 const payloadSchema = z.object({
   millesime: z.number().int().min(2014).max(2099),
@@ -84,6 +89,10 @@ export const dvfImport = task({
   id: "imports.dvf",
   maxDuration: 3600, // 1h max par millésime
   retry: { maxAttempts: 2, minTimeoutInMs: 30_000 },
+  // Machine Medium 1x (~4GB RAM) requise : Small 1x (~2GB) OOM sur
+  // le download du CSV 3GB compressé + stream + buffer batch (cf
+  // TASK_RUN_UNCAUGHT_EXCEPTION sur run France entière).
+  machine: "medium-1x",
   run: async (payload: unknown) => {
     const { millesime } = payloadSchema.parse(payload);
     const millesimeStr = String(millesime);
