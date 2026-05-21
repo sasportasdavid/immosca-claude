@@ -43,11 +43,33 @@ API_KEY="${TRIGGER_API_KEY:-}"
 TRIGGER_API_URL="${TRIGGER_API_URL:-https://api.trigger.dev}"
 
 # URLs sources (à vérifier dans docs/imports-data-runbook.md si une casse)
-URL_IRIS_GEOJSON="https://files.opendatarchives.fr/professionnels.ign.fr/contoursiris/contours-iris-${MILLESIME_DVF}.geojson"
-URL_FILOSOFI_CSV="https://www.insee.fr/fr/statistiques/fichier/8229323/BASE_TD_FILO_DEC_IRIS_${MILLESIME_FILOSOFI}.csv"
-URL_OLL_CSV="https://static.data.gouv.fr/resources/observatoires-locaux-des-loyers-resultats/oll-${MILLESIME_OLL}.csv"
-URL_EDUCATION_ANNUAIRE="https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-annuaire-education/exports/csv"
-URL_EDUCATION_IPS="https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-ips-ecoles-ap2023/exports/csv"
+# URLs vérifiées 21 mai 2026 — à mettre à jour si data.gouv casse un lien.
+#
+# IRIS : cartes.gouv.fr/IGN n'expose plus d'URL directe pour les contours
+# IRIS — l'accès passe désormais par WMS/WFS ou un téléchargement manuel
+# depuis https://cartes.gouv.fr/catalogue/dataset/IGNF_CONTOURS-IRIS.
+# La task imports.insee_iris attend une URL GeoJSON publique ; en
+# attendant un nouveau hébergement stable, l'import IRIS doit être lancé
+# avec --iris-url pointant vers ton propre mirror (ou skippé via --skip iris).
+URL_IRIS_GEOJSON="${URL_IRIS_GEOJSON:-}"
+#
+# Filosofi : INSEE publie en ZIP, pas en CSV direct. Le worker actuel
+# imports.insee_filosofi attend un CSV → ne sait pas décompresser le ZIP.
+# Skippé par défaut tant que la task n'a pas été mise à jour pour gunzip.
+URL_FILOSOFI_CSV="${URL_FILOSOFI_CSV:-}"
+#
+# OLL : URLs réelles du réseau Observatoires Locaux des Loyers (par
+# millésime, pattern stable). Confirmé via API data.gouv.
+URL_OLL_CSV="${URL_OLL_CSV:-https://www.observatoires-des-loyers.org/datagouv/${MILLESIME_OLL}/Base_OP_${MILLESIME_OLL}_Nationale.csv}"
+#
+# Education Annuaire : ressource data.gouv UUID stable (38.9 Mo, refresh
+# régulier — la même URL pointera toujours vers le dernier annuaire).
+URL_EDUCATION_ANNUAIRE="${URL_EDUCATION_ANNUAIRE:-https://www.data.gouv.fr/api/1/datasets/r/b22f04bf-64a8-495d-b8bb-d84dbc4c7983}"
+#
+# Education IPS : API data.education.gouv.fr (export CSV à la demande).
+# Le dataset_id change à chaque rentrée (ap2023 → ap2024 → …) — à
+# vérifier annuellement.
+URL_EDUCATION_IPS="${URL_EDUCATION_IPS:-https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-ips-ecoles-ap2023/exports/csv}"
 
 # ─── Parse args ────────────────────────────────────────────────────────
 
@@ -188,6 +210,9 @@ fi
 
 if is_skipped "iris"; then
   echo "⏭  IRIS — sauté (--skip iris)"
+elif [[ -z "$URL_IRIS_GEOJSON" ]]; then
+  echo "⏭  IRIS — pas d'URL configurée (cartes.gouv.fr n'expose plus de"
+  echo "    GeoJSON direct). Pour activer : URL_IRIS_GEOJSON=... ./script"
 else
   run_task "imports.insee_iris" \
     "{\"geojsonUrl\": \"$URL_IRIS_GEOJSON\", \"millesime\": $MILLESIME_DVF}" \
@@ -198,6 +223,9 @@ fi
 
 if is_skipped "filosofi"; then
   echo "⏭  Filosofi — sauté (--skip filosofi)"
+elif [[ -z "$URL_FILOSOFI_CSV" ]]; then
+  echo "⏭  Filosofi — pas d'URL CSV configurée (INSEE publie en ZIP que"
+  echo "    le worker ne décompresse pas encore)."
 else
   run_task "imports.insee_filosofi" \
     "{\"csvUrl\": \"$URL_FILOSOFI_CSV\", \"millesime\": $MILLESIME_FILOSOFI}" \
