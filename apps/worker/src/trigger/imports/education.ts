@@ -119,7 +119,11 @@ export const educationAnnuaireImport = task({
           skip_empty_lines: true,
           trim: true,
           relax_quotes: true,
-          delimiter: [",", ";"],
+          // CSV data.gouv FR : séparateur ';' (auto-detect confond avec
+          // virgules dans noms d'établissements type "École, Privée").
+          delimiter: ";",
+          relax_column_count: true,
+          bom: true, // strip UTF-8 BOM (annuaire commence par ﻿)
         }),
       );
 
@@ -201,7 +205,11 @@ export const educationIpsImport = task({
           skip_empty_lines: true,
           trim: true,
           relax_quotes: true,
-          delimiter: [",", ";"],
+          // CSV data.gouv FR : séparateur ';' (auto-detect confond avec
+          // virgules dans noms d'établissements type "École, Privée").
+          delimiter: ";",
+          relax_column_count: true,
+          bom: true, // strip UTF-8 BOM (annuaire commence par ﻿)
         }),
       );
 

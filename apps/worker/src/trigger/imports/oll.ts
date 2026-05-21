@@ -141,8 +141,11 @@ export const ollImport = task({
           skip_empty_lines: true,
           trim: true,
           relax_quotes: true,
-          // OLL utilise parfois ';' comme séparateur (CSV FR).
-          delimiter: [",", ";"],
+          // OLL utilise ';' comme séparateur (CSV FR avec virgules
+          // décimales dans les loyers, ex: "10,4"). Auto-detect entre
+          // ',' et ';' confond les nombres → on force le ';'.
+          delimiter: ";",
+          relax_column_count: true,
         }),
       );
 
