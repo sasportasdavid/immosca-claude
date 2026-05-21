@@ -5,18 +5,25 @@
 # Lance la chaîne complète d'imports bulk pour peupler immoscan-data
 # avec les datasets publics nécessaires à la valorisation ImmoValue.
 #
+# Les triggers passent par l'API REST Trigger.dev (pas la CLI qui n'a
+# pas de subcommand `trigger` en v4). Auth via le secret key
+# TRIGGER_API_KEY (tr_prod_...) que tu peux trouver dans Trigger.dev
+# Dashboard → Project Settings → API Keys → "PROD: secret key".
+#
 # Pré-requis (cf docs/imports-data-runbook.md) :
-#   1. Worker Trigger.dev déployé (npx trigger.dev@latest deploy --env prod)
+#   1. Worker Trigger.dev déployé en prod (toutes les tasks disponibles)
 #   2. Env vars dans Trigger.dev cloud :
 #        SUPABASE_DATA_URL, SUPABASE_DATA_SERVICE_ROLE_KEY,
 #        APIFY_TOKEN, ANTHROPIC_API_KEY
-#   3. Trigger CLI authentifié : npx trigger.dev@latest login
+#   3. TRIGGER_API_KEY exporté localement OU dans apps/worker/.env.local
+#      OU passé en argument --api-key
 #
 # Usage :
-#   ./scripts/imports/run-all-imports.sh                 # défaut : prod, dernier millésime
-#   ./scripts/imports/run-all-imports.sh --env staging   # déclenche sur env staging
-#   ./scripts/imports/run-all-imports.sh --skip dvf,oll  # saute certains imports
-#   ./scripts/imports/run-all-imports.sh --dry-run       # affiche les commandes sans exécuter
+#   export TRIGGER_API_KEY=tr_prod_xxx
+#   ./scripts/imports/run-all-imports.sh                 # défaut prod
+#   ./scripts/imports/run-all-imports.sh --api-key tr_prod_xxx --env prod
+#   ./scripts/imports/run-all-imports.sh --skip dvf,oll  # saute certains
+#   ./scripts/imports/run-all-imports.sh --dry-run       # affiche sans exécuter
 #
 # Durée totale estimée : 45-60 min (DVF dominant ~30 min).
 # ═══════════════════════════════════════════════════════════════════════
@@ -32,6 +39,8 @@ MILLESIME_DVF=$(date +%Y)
 MILLESIME_FILOSOFI=$(($(date +%Y) - 1))
 MILLESIME_OLL=$(($(date +%Y) - 1))
 MILLESIME_IPS=$(($(date +%Y) - 1))
+API_KEY="${TRIGGER_API_KEY:-}"
+TRIGGER_API_URL="${TRIGGER_API_URL:-https://api.trigger.dev}"
 
 # URLs sources (à vérifier dans docs/imports-data-runbook.md si une casse)
 URL_IRIS_GEOJSON="https://files.opendatarchives.fr/professionnels.ign.fr/contoursiris/contours-iris-${MILLESIME_DVF}.geojson"
@@ -47,6 +56,7 @@ while [[ $# -gt 0 ]]; do
     --env)         ENV="$2"; shift 2 ;;
     --skip)        SKIP="$2"; shift 2 ;;
     --dry-run)     DRY_RUN=1; shift ;;
+    --api-key)     API_KEY="$2"; shift 2 ;;
     --dvf)         MILLESIME_DVF="$2"; shift 2 ;;
     --filosofi)    MILLESIME_FILOSOFI="$2"; shift 2 ;;
     --oll)         MILLESIME_OLL="$2"; shift 2 ;;
@@ -61,6 +71,39 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Tente de charger TRIGGER_API_KEY depuis apps/worker/.env.local si pas
+# encore défini. Pratique pour ne pas avoir à l'exporter à chaque shell.
+if [[ -z "$API_KEY" ]]; then
+  for envfile in "apps/worker/.env.local" "apps/worker/.env" ".env.local" ".env"; do
+    if [[ -f "$envfile" ]] && grep -q "^TRIGGER_API_KEY=" "$envfile"; then
+      API_KEY=$(grep "^TRIGGER_API_KEY=" "$envfile" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+      echo "ℹ️  TRIGGER_API_KEY chargé depuis $envfile"
+      break
+    fi
+  done
+fi
+
+if [[ -z "$API_KEY" && $DRY_RUN -eq 0 ]]; then
+  cat >&2 <<'ERREUR'
+❌ TRIGGER_API_KEY manquant.
+
+Récupère-le dans Trigger.dev Dashboard → Project Settings → API Keys
+→ copie la valeur "PROD: secret key" (tr_prod_xxx) et exporte-la :
+
+  export TRIGGER_API_KEY=tr_prod_xxxxxxxxxxxxxxxx
+  ./scripts/imports/run-all-imports.sh
+
+Ou ajoute-le dans apps/worker/.env.local :
+
+  echo 'TRIGGER_API_KEY=tr_prod_xxxxxxxxxxxxxxxx' >> apps/worker/.env.local
+
+Ou passe-le directement :
+
+  ./scripts/imports/run-all-imports.sh --api-key tr_prod_xxx
+ERREUR
+  exit 1
+fi
 
 # ─── Helpers ───────────────────────────────────────────────────────────
 
@@ -85,14 +128,31 @@ run_task() {
   fi
 
   local start_ts=$(date +%s)
-  if npx trigger.dev@latest trigger \
-       --task "$task_id" \
-       --env "$ENV" \
-       --payload "$payload"; then
-    local elapsed=$(($(date +%s) - start_ts))
-    echo "  ✅ déclenché en ${elapsed}s (suivre l'avancement dans Trigger.dev dashboard)"
+  # API REST Trigger.dev v3/v4 :
+  #   POST {TRIGGER_API_URL}/api/v1/tasks/{taskId}/trigger
+  #   Authorization: Bearer <secret_key>
+  #   Body: { "payload": { ... } }
+  local body
+  body=$(printf '{"payload":%s}' "$payload")
+  local http_response
+  http_response=$(curl -sS -w "\n%{http_code}" -X POST \
+    "${TRIGGER_API_URL}/api/v1/tasks/${task_id}/trigger" \
+    -H "Authorization: Bearer ${API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d "$body" 2>&1)
+  local http_code
+  http_code=$(printf '%s' "$http_response" | tail -1)
+  local http_body
+  http_body=$(printf '%s' "$http_response" | sed '$d')
+  local elapsed=$(($(date +%s) - start_ts))
+
+  if [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
+    local run_id
+    run_id=$(printf '%s' "$http_body" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+    echo "  ✅ déclenché en ${elapsed}s (run id : ${run_id:-?})"
   else
-    echo "  ❌ ÉCHEC trigger $task_id — voir logs Trigger.dev"
+    echo "  ❌ ÉCHEC HTTP $http_code en ${elapsed}s"
+    echo "     body: $http_body"
     return 1
   fi
 }
@@ -104,16 +164,14 @@ echo "║         Imports bulk immoscan-data                             ║"
 echo "║         Env: $ENV  ·  Skip: ${SKIP:-aucun}  ·  Dry-run: $DRY_RUN              ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 
-if ! command -v npx >/dev/null 2>&1; then
-  echo "❌ npx introuvable — installer Node.js ≥ 18" >&2
+if ! command -v curl >/dev/null 2>&1; then
+  echo "❌ curl introuvable" >&2
   exit 1
 fi
 
-# Vérifie que trigger.dev CLI est joignable
-if [[ $DRY_RUN -eq 0 ]]; then
-  if ! npx --no-install trigger.dev@latest --version >/dev/null 2>&1; then
-    echo "⚠️  trigger.dev CLI pas en cache — npx va le télécharger au premier appel"
-  fi
+# Validation rapide du format de l'API key
+if [[ $DRY_RUN -eq 0 && -n "$API_KEY" && ! "$API_KEY" =~ ^tr_(prod|dev|stg)_ ]]; then
+  echo "⚠️  Format de TRIGGER_API_KEY inattendu (devrait commencer par tr_prod_/tr_dev_/tr_stg_)" >&2
 fi
 
 # ─── 1. DVF+ (millésime courant) ────────────────────────────────────────
