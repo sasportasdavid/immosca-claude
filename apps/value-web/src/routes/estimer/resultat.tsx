@@ -33,7 +33,6 @@ import {
   Pencil,
   Share2,
   Sparkles,
-  Star,
   Volume2,
   Zap,
 } from "lucide-react";
@@ -45,18 +44,8 @@ import { AdjustmentItem } from "@web/components/ui/adjustment-item";
 import { Button } from "@web/components/ui/button";
 import { Card } from "@web/components/ui/card";
 import { Eyebrow } from "@web/components/ui/eyebrow";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@web/components/ui/tabs";
 import { TheseBlock } from "@web/components/ui/these-block";
-import {
-  ComparablesMap,
-  type ComparableKind,
-  type ComparablePin,
-} from "@/components/value/ComparablesMap";
+import type { ComparableKind } from "@/components/value/ComparablesMap";
 import { Wordmark } from "@/components/value/EstimationStepperLayout";
 import { ValorisationCard } from "@/components/value/ValorisationCard";
 import { useBien } from "@/hooks/use-bien";
@@ -75,6 +64,11 @@ interface ValorisationOutput {
     impact_eur: number;
     raisonnement: string;
     sources: string[];
+  }>;
+  comparables_retenus?: Array<{
+    type: "dvf" | "actif" | "user";
+    ref: string;
+    poids: number;
   }>;
   these: string;
   recommandation_prix_vente: number;
@@ -190,71 +184,6 @@ const MOCK_ADJUSTMENTS: Array<{
     impactPct: "−2,0 %",
     impactEur: "−6 000 €",
   },
-];
-
-const MOCK_COMPARABLES = [
-  {
-    kind: "user" as const,
-    title: "8 rue Anatole France",
-    detail: "T3 · 64 m² · 3e",
-    src: "Lien SeLoger · pondération haute · refait",
-    price: "315 000 €",
-    pricem2: "4 921 €/m²",
-  },
-  {
-    kind: "user" as const,
-    title: "14 av Jean Jaurès",
-    detail: "T3 · 60 m² · 2e",
-    src: "Lien SeLoger · pondération haute · bon état",
-    price: "298 000 €",
-    pricem2: "4 966 €/m²",
-  },
-  {
-    kind: "user" as const,
-    title: "3 rue de la Paix",
-    detail: "T3 · 65 m² · 4e",
-    src: "Lien Leboncoin · pondération haute · refait",
-    price: "329 000 €",
-    pricem2: "5 061 €/m²",
-  },
-  {
-    kind: "dvf" as const,
-    title: "22 rue Pasteur",
-    detail: "T3 · 61 m² · 3e",
-    src: "DVF · vente notariée · mars 2025",
-    price: "285 000 €",
-    pricem2: "4 672 €/m²",
-  },
-  {
-    kind: "dvf" as const,
-    title: "9 av Pierre Brossolette",
-    detail: "T3 · 63 m² · 2e",
-    src: "DVF · vente notariée · nov. 2024",
-    price: "302 000 €",
-    pricem2: "4 793 €/m²",
-  },
-  {
-    kind: "actif" as const,
-    title: "17 rue Henri Barbusse",
-    detail: "T3 · 60 m² · 1er",
-    src: "SeLoger · actif · 12 jours · 1 baisse",
-    price: "309 000 €",
-    pricem2: "5 150 €/m²",
-  },
-];
-
-const MOCK_PINS: ComparablePin[] = [
-  { kind: "self", x: 47, y: 48, title: "Ton bien" },
-  { kind: "user", x: 38, y: 36 },
-  { kind: "user", x: 56, y: 38 },
-  { kind: "user", x: 52, y: 60 },
-  { kind: "dvf", x: 30, y: 50 },
-  { kind: "dvf", x: 42, y: 62 },
-  { kind: "dvf", x: 60, y: 52 },
-  { kind: "dvf", x: 36, y: 70 },
-  { kind: "actif", x: 50, y: 30 },
-  { kind: "actif", x: 22, y: 60 },
-  { kind: "actif", x: 70, y: 64 },
 ];
 
 // ──────────────────────────────────────────────────────────────────
@@ -377,14 +306,14 @@ function StepResultatPage() {
           confidence={valoConf}
           computedAtLabel={`Estimation au ${formatDate(new Date())} — réévaluée chaque semaine`}
           localisation={
-            (bien?.bien_data as { code_iris?: string })?.code_iris
-              ? `IRIS ${(bien!.bien_data as { code_iris: string }).code_iris}`
-              : "Le Chénay · IRIS 930320206"
+            bien?.code_iris
+              ? `IRIS ${bien.code_iris}`
+              : address.split(",").slice(-1)[0]?.trim() || "Localisation"
           }
           typologie={
             (bien?.bien_data as { typologie?: string; pieces?: number })?.typologie
               ? `${(bien!.bien_data as { typologie: string }).typologie} · ${surface} m² Carrez`
-              : `T3 · ${surface} m² Carrez · 3e étage`
+              : `${surface} m² Carrez`
           }
           dpe={
             ((bien?.bien_data as { dpe?: string })?.dpe ?? "D") as
@@ -413,9 +342,8 @@ function StepResultatPage() {
               </>
             ) : (
               <>
-                Estimation <b className="text-ink-2">solide</b> : 23 transactions
-                DVF récentes au Chénay, 2 recherches comparables fournies (47
-                et 32 biens), et 6 photos clairement analysables.
+                Estimation en cours de calcul — Claude croise DVF, OLL, INSEE,
+                ADEME et Géorisques pour ton bien.
               </>
             )
           }
@@ -429,21 +357,11 @@ function StepResultatPage() {
                 <p key={i}>{para.trim()}</p>
               ))
             ) : (
-              <>
-                <p>
-                  Le Chénay est un secteur de Gagny qui présente une
-                  caractéristique rare : son prix médian au m² est{" "}
-                  <b>46 % inférieur</b> à celui du centre-ville (4 680 €/m² vs
-                  8 640 €/m² pour Gagny Centre), pour des biens dont la
-                  connectivité RER E reste très proche (8 min à pied de la
-                  gare). Pour un investisseur locatif visant 6-7 % brut sur du
-                  T3, ton secteur est un sweet spot évident.
-                </p>
-                <p>
-                  À ce prix, tu as une probabilité élevée de trouver acheteur
-                  en 6-9 semaines en vente publique.
-                </p>
-              </>
+              <p>
+                La thèse argumentée n&rsquo;est pas encore disponible. Claude
+                a besoin de quelques secondes supplémentaires pour croiser
+                toutes les sources publiques.
+              </p>
             )}
           </TheseBlock>
         </section>
@@ -499,64 +417,22 @@ function StepResultatPage() {
                 </span>
               </>
             }
-            desc="DVF + marché actif + tes liens, croisés sur un rayon de 600 m."
+            desc="DVF + marché actif + tes liens, croisés par Claude."
           />
 
-          <Tabs defaultValue="all">
-            <TabsList>
-              <TabsTrigger value="all">
-                Tous{" "}
-                <span className="ml-1.5 font-mono text-[10.5px] text-mute-2">
-                  26
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="dvf">
-                <DotMini kind="dvf" />
-                Transactions DVF{" "}
-                <span className="ml-1.5 font-mono text-[10.5px] text-mute-2">
-                  11
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="actif">
-                <DotMini kind="actif" />
-                Marché actif{" "}
-                <span className="ml-1.5 font-mono text-[10.5px] text-mute-2">
-                  8
-                </span>
-              </TabsTrigger>
-              <TabsTrigger value="user">
-                <Star className="mr-0.5 h-3 w-3 fill-terra text-terra" strokeWidth={1.5} />
-                Tes liens{" "}
-                <span className="ml-1.5 font-mono text-[10.5px] text-mute-2">
-                  7
-                </span>
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="all">
-              <ComparablesLayout pins={MOCK_PINS} rows={MOCK_COMPARABLES} />
-            </TabsContent>
-            <TabsContent value="dvf">
-              <ComparablesLayout
-                pins={MOCK_PINS.filter((p) => p.kind === "self" || p.kind === "dvf")}
-                rows={MOCK_COMPARABLES.filter((r) => r.kind === "dvf")}
-              />
-            </TabsContent>
-            <TabsContent value="actif">
-              <ComparablesLayout
-                pins={MOCK_PINS.filter(
-                  (p) => p.kind === "self" || p.kind === "actif",
-                )}
-                rows={MOCK_COMPARABLES.filter((r) => r.kind === "actif")}
-              />
-            </TabsContent>
-            <TabsContent value="user">
-              <ComparablesLayout
-                pins={MOCK_PINS.filter((p) => p.kind === "self" || p.kind === "user")}
-                rows={MOCK_COMPARABLES.filter((r) => r.kind === "user")}
-              />
-            </TabsContent>
-          </Tabs>
+          {valo && Array.isArray(valo.comparables_retenus) && valo.comparables_retenus.length > 0 ? (
+            <ComparablesRecap
+              comparables={valo.comparables_retenus}
+              lat={bien?.lat ?? null}
+              lng={bien?.lng ?? null}
+              address={address}
+            />
+          ) : (
+            <div className="rounded-r-lg border border-line/60 bg-card/60 p-6 text-[13.5px] text-muted-ink">
+              Les comparables retenus ne sont pas encore disponibles — Claude
+              les sélectionne pendant la valorisation.
+            </div>
+          )}
         </section>
 
         {/* Section 5 — Que faire maintenant */}
@@ -622,8 +498,8 @@ function StepResultatPage() {
               desc={
                 <>
                   Annonce publique complète, contact direct, visibilité Google
-                  et auprès des <b>200+ investisseurs actifs sur Gagny</b> via
-                  ImmoScan. Paiement unique, pas d&rsquo;abonnement.
+                  et auprès des investisseurs actifs sur ta zone via ImmoScan.
+                  Paiement unique, pas d&rsquo;abonnement.
                 </>
               }
               footer={
@@ -745,63 +621,85 @@ function DotMini({ kind }: { kind: ComparableKind }) {
   );
 }
 
-function ComparablesLayout({
-  pins,
-  rows,
+/**
+ * Récap des comparables que Claude a réellement retenus pour valoriser
+ * le bien (sans mock). Compte par type (dvf/actif/user) + affiche une
+ * carte OSM centrée sur le bien.
+ */
+function ComparablesRecap({
+  comparables,
+  lat,
+  lng,
+  address,
 }: {
-  pins: ComparablePin[];
-  rows: typeof MOCK_COMPARABLES;
+  comparables: Array<{ type: "dvf" | "actif" | "user"; ref: string; poids: number }>;
+  lat: number | null;
+  lng: number | null;
+  address: string;
 }) {
+  const nbDvf = comparables.filter((c) => c.type === "dvf").length;
+  const nbActif = comparables.filter((c) => c.type === "actif").length;
+  const nbUser = comparables.filter((c) => c.type === "user").length;
+  const hasCoords = lat !== null && lng !== null && lat !== 0 && lng !== 0;
   return (
     <div className="grid gap-4 lg:grid-cols-[1.05fr_1fr]">
-      <ComparablesMap pins={pins} caption="RAYON 600 m · IRIS 930320206" />
-      <ul className="flex flex-col gap-2">
-        {rows.length === 0 ? (
-          <li className="rounded-r-lg border border-dashed border-line px-4 py-6 text-center text-[13px] text-mute-2">
-            Aucun comparable pour cet onglet.
-          </li>
+      <div className="relative aspect-[4/3] overflow-hidden rounded-r-lg border border-line bg-bg-2">
+        {hasCoords ? (
+          <iframe
+            title="Localisation du bien"
+            className="absolute inset-0 h-full w-full"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${
+              lng! - 0.012
+            }%2C${lat! - 0.006}%2C${lng! + 0.012}%2C${
+              lat! + 0.006
+            }&layer=mapnik&marker=${lat}%2C${lng}`}
+            loading="lazy"
+          />
         ) : (
-          rows.map((c, i) => (
-            <li
-              key={i}
-              className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3.5 rounded-r border border-line bg-card px-4 py-3 transition-colors hover:border-line-2 hover:shadow-lvl-1"
-            >
-              <DotMini kind={c.kind} />
-              <div>
-                <div className="text-[13px] font-medium text-ink">
-                  {c.title}{" "}
-                  <span className="ml-1 font-normal text-mute-2">
-                    · {c.detail}
-                  </span>
-                </div>
-                <div className="mt-0.5 font-mono text-[10.5px] text-mute-2">
-                  {c.kind === "user" && (
-                    <Star className="mr-1 inline h-2.5 w-2.5 fill-terra text-terra" strokeWidth={1.5} />
-                  )}
-                  {c.src}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="font-mono text-[13.5px] font-semibold tnum text-ink">
-                  {c.price}
-                </div>
-                <div className="mt-0.5 font-mono text-[10.5px] text-mute-2 tnum">
-                  {c.pricem2}
-                </div>
-              </div>
-              <ChevronRight className="h-3.5 w-3.5 text-faint" strokeWidth={2} />
-            </li>
-          ))
+          <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-mute-2">
+            Coordonnées non disponibles — le worker n&rsquo;a pas finalisé le
+            géocodage de cette adresse.
+          </div>
         )}
-        <li className="mt-1 text-center">
-          <a
-            href="#"
-            className="text-[12.5px] text-violet no-underline hover:text-violet-deep"
-          >
-            Voir les autres comparables →
-          </a>
-        </li>
-      </ul>
+        <span className="absolute bottom-3 left-3 rounded-r-xs border border-line bg-white/95 px-3 py-1.5 text-[11.5px] text-ink-2 z-10">
+          📍 {address}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <RecapCard kind="dvf" count={nbDvf} label="Transactions DVF" />
+        <RecapCard kind="actif" count={nbActif} label="Annonces actives" />
+        <RecapCard kind="user" count={nbUser} label="Tes liens" />
+        <div className="col-span-3 rounded-r-lg border border-line/60 bg-card/60 px-4 py-3 text-[12.5px] leading-[1.55] text-muted-ink">
+          Sur les <b className="text-ink-2">{comparables.length} comparables</b>{" "}
+          analysés, Claude a pondéré chaque source pour cibler les biens les
+          plus proches en surface, type et secteur. Le détail des refs est
+          discuté dans l&rsquo;analyse ci-dessus.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecapCard({
+  kind,
+  count,
+  label,
+}: {
+  kind: "dvf" | "actif" | "user";
+  count: number;
+  label: string;
+}) {
+  return (
+    <div className="rounded-r-lg border border-line bg-card p-4">
+      <div className="flex items-center gap-2 mb-2">
+        <DotMini kind={kind} />
+        <span className="font-mono text-[10.5px] uppercase tracking-wider text-mute-2">
+          {label}
+        </span>
+      </div>
+      <div className="font-mono text-2xl font-semibold text-ink tnum">
+        {count}
+      </div>
     </div>
   );
 }
