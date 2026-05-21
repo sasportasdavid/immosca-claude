@@ -134,51 +134,36 @@ Deno.serve(async (req) => {
     throw err;
   }
 
-  // 4) INSERT value.biens en mode admin (service_role).
+  // 4) INSERT value.biens via RPC publique.
   //
-  // Pour les biens anonymes, `user_id` est NULL → la migration Schema
-  // doit assouplir la contrainte NOT NULL en parallèle de l'ajout du
-  // statut `anonymous_draft` (sinon l'INSERT échoue). Si ce n'est pas
-  // fait, on remonte clairement l'erreur Postgres au caller.
-  //
-  // On utilise `.schema('value')` pour adresser le schéma dédié
-  // ImmoValue (le client Supabase JS v2 supporte cette API depuis 2.45).
-  //
-  // Note adresse / lat / lng / code_insee / code_iris : la spec impose
-  // ces colonnes NOT NULL. Pour V1 on stocke l'adresse brute et on met
-  // des placeholders zéro / "" pour le reste — le worker
-  // `value-build-estimation` se chargera de la géocoder via BAN +
-  // d'enrichir code_insee / code_iris (Source 2 du pipeline). Si le
-  // worker préfère que l'Edge Function fasse le géocoding upfront,
-  // l'agent Workers pourra inverser ce contrat (cf. doute en rapport).
-  const insertPayload = {
-    user_id: userId, // peut être NULL pour anonymous_draft
-    status: userId ? "suivi" : "anonymous_draft",
-    address: body.address,
-    address_hash: "", // rempli par le worker après normalisation BAN
-    lat: 0,
-    lng: 0,
-    code_insee: "",
-    code_iris: "",
-    bien_data: body.bien_data,
-    photos_originales_urls: body.photos_urls,
-    user_provided_urls: body.user_provided_urls,
-  };
+  // Le schéma `value` n'est pas exposé via PostgREST (sinon le SDK
+  // rejette `.schema("value")` avec "Invalid schema: value"). On passe
+  // donc par la fonction RPC `public.value_bien_create` (SECURITY
+  // DEFINER) qui insère côté serveur. address_hash / lat / lng /
+  // code_insee / code_iris sont initialisés à des placeholders dans
+  // la RPC — le worker `value-build-estimation` se charge du
+  // géocoding BAN + enrichissement IRIS post-insertion.
+  const { data: newBienId, error: insertErr } = await admin.rpc(
+    "value_bien_create",
+    {
+      p_user_id: userId, // peut être NULL pour anonymous_draft
+      p_status: userId ? "suivi" : "anonymous_draft",
+      p_address: body.address,
+      p_bien_data: body.bien_data,
+      p_photos_urls: body.photos_urls,
+      p_user_provided_urls: body.user_provided_urls,
+    },
+  );
 
-  const { data: bien, error: insertErr } = await admin
-    .schema("value" as any)
-    .from("biens")
-    .insert(insertPayload)
-    .select("id")
-    .single();
-
-  if (insertErr || !bien) {
-    console.error("[value-estimer] insert biens failed:", insertErr);
+  if (insertErr || !newBienId) {
+    console.error("[value-estimer] RPC value_bien_create failed:", insertErr);
     return json(500, {
       error: "insert_failed",
       detail: insertErr?.message ?? "unknown",
     });
   }
+
+  const bien = { id: newBienId as string };
 
   // 5) Trigger.dev — pipeline async.
   //
