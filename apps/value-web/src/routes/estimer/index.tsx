@@ -236,36 +236,37 @@ function StepAdressePage() {
             fill="none"
             strokeDasharray="6 3"
           />
-          <text
-            x="40"
-            y="222"
-            fontFamily="JetBrains Mono"
-            fontSize="11"
-            fill="#5B47E0"
-          >
-            RER E · Gagny
-          </text>
         </svg>
 
-        {/* Pin centré, draggable visuellement (pas réellement V1). */}
-        <div
-          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-full"
-          aria-hidden
-        >
-          <svg viewBox="0 0 36 44" width="36" height="44" fill="none">
-            <path
-              d="M18 0c-9.94 0-18 8.06-18 18 0 13 18 26 18 26s18-13 18-26C36 8.06 27.94 0 18 0z"
-              fill="#D97757"
-            />
-            <circle cx="18" cy="18" r="6.5" fill="white" />
-          </svg>
-        </div>
+        {/* Vraie carte OSM via iframe — centrée sur lat/lng réels du bien
+            (depuis géocodage BAN) avec un marker. Zéro dépendance JS. */}
+        {hasResolvedCoords && state.lat !== null && state.lng !== null ? (
+          <iframe
+            title="Carte du bien"
+            className="absolute inset-0 h-full w-full"
+            src={`https://www.openstreetmap.org/export/embed.html?bbox=${
+              state.lng - 0.008
+            }%2C${state.lat - 0.004}%2C${state.lng + 0.008}%2C${
+              state.lat + 0.004
+            }&layer=mapnik&marker=${state.lat}%2C${state.lng}`}
+            loading="lazy"
+          />
+        ) : (
+          <div
+            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-full"
+            aria-hidden
+          >
+            <svg viewBox="0 0 36 44" width="36" height="44" fill="none">
+              <path
+                d="M18 0c-9.94 0-18 8.06-18 18 0 13 18 26 18 26s18-13 18-26C36 8.06 27.94 0 18 0z"
+                fill="#D97757"
+              />
+              <circle cx="18" cy="18" r="6.5" fill="white" />
+            </svg>
+          </div>
+        )}
 
-        <span className="absolute right-3 top-3 rounded-r-xs border border-line bg-white/95 px-3 py-1.5 text-[11px] text-mute-2">
-          Pin <b className="font-mono text-ink">déplaçable</b> pour ajuster
-        </span>
-
-        <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-r-xs border border-line bg-white/95 px-3 py-2 text-[12px]">
+        <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-r-xs border border-line bg-white/95 px-3 py-2 text-[12px] z-10">
           <span className="h-1.5 w-1.5 rounded-full bg-terra" />
           {trimmed || "Adresse à saisir"}
           {hasResolvedCoords && state.lat !== null && state.lng !== null && (
