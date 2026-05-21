@@ -825,11 +825,25 @@ export const valueBuildEstimation = task({
       throw new Error(msg);
     }
 
+    // Le bien_data côté DB suit le schéma Edge Function
+    // (typologie CamelCase : "T1", "Studio", "Maison", "Loft"...).
+    // BienInputSchema worker attend bienTypeSchema large
+    // ("appartement", "maison", "terrain", "immeuble", "autre").
+    // → On normalise avant parse.
+    const rawBien = (bienRow.bien_data ?? {}) as Record<string, unknown>;
+    const rawTyp = String(rawBien.typologie ?? "").toLowerCase();
+    const typologie =
+      rawTyp === "maison" ? "maison"
+      : rawTyp === "loft" ? "appartement"
+      : rawTyp === "autre" ? "autre"
+      : rawTyp.startsWith("t") || rawTyp.startsWith("studio") ? "appartement"
+      : "appartement"; // défaut : appartement (le cas T1-T6+ etc.)
+
     const bien = BienInputSchema.parse({
       id: bienRow.id,
       address: bienRow.address,
-      // bien_data contient les caractéristiques (typologie, surface, etc.)
-      ...(bienRow.bien_data ?? {}),
+      ...rawBien,
+      typologie, // override avec la valeur normalisée
       photos_originales_urls: bienRow.photos_originales_urls ?? [],
     });
 
