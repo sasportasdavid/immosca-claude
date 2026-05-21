@@ -90,10 +90,19 @@ export async function postEstimer(payload: EstimerPayload): Promise<EstimerRespo
   // on perd les détails Zod (issues). On fetch directement pour pouvoir
   // remonter le vrai message au caller (qui l'affiche dans un bandeau).
   const { data: { session } } = await supabase.auth.getSession();
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/value-estimer`;
+  // value-web et web partagent le même projet Supabase, mais les env
+  // vars sont préfixées VITE_SUPABASE_APP_* (cf supabase.ts).
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_APP_URL as string | undefined;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_APP_ANON_KEY as string | undefined;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+      "VITE_SUPABASE_APP_URL ou VITE_SUPABASE_APP_ANON_KEY manquante en env",
+    );
+  }
+  const url = `${supabaseUrl}/functions/v1/value-estimer`;
   const headers: Record<string, string> = {
     "content-type": "application/json",
-    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+    apikey: supabaseAnonKey,
   };
   if (session?.access_token) {
     headers["authorization"] = `Bearer ${session.access_token}`;
