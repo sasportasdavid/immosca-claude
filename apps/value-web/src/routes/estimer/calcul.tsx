@@ -30,8 +30,74 @@ import {
   type EstimerState,
 } from "@/hooks/use-estimer-state";
 import { requireAuth } from "@/lib/auth-guards";
-import { postEstimer } from "@/lib/value-api";
+import {
+  postEstimer,
+  type EstimerEtatGeneral,
+  type EstimerExposition,
+  type EstimerPayload,
+  type EstimerTypologie,
+} from "@/lib/value-api";
 import { cn } from "@/lib/utils";
+
+// Mapping état frontend → payload Edge Function value-estimer.
+// La validation Zod côté serveur est stricte → tout mismatch enum
+// provoque un 400 "validation_failed".
+
+const TYPOLOGIE_MAP: Record<NonNullable<EstimerState["bien_data"]["type"]>, EstimerTypologie> = {
+  T1: "T1", T2: "T2", T3: "T3", T4: "T4",
+  "T5+": "T6+", // serveur n'a pas "T5+" — on remonte sur T6+
+  maison: "Maison",
+};
+
+const EXPOSITION_MAP: Record<NonNullable<EstimerState["bien_data"]["exposition"]>, EstimerExposition> = {
+  N: "Nord", S: "Sud", E: "Est", O: "Ouest",
+  NE: "Nord-Est", NO: "Nord-Ouest",
+  SE: "Sud-Est", SO: "Sud-Ouest",
+};
+
+const ETAT_MAP: Record<NonNullable<EstimerState["bien_data"]["etat"]>, EstimerEtatGeneral> = {
+  a_renover: "lourds_travaux",
+  travaux_moyens: "travaux",
+  bon_etat: "bon_etat",
+  refait: "refait_a_neuf",
+  haut_de_gamme: "neuf",
+};
+
+function buildEstimerPayload(state: EstimerState): EstimerPayload {
+  const t = state.bien_data.type;
+  const typologie: EstimerTypologie = t ? TYPOLOGIE_MAP[t] : "T3";
+
+  const annee = Number(state.bien_data.annee_construction);
+  const expo = state.bien_data.exposition;
+  const etat = state.bien_data.etat;
+  const dpe = state.bien_data.dpe ?? undefined;
+
+  return {
+    address: state.address || "Adresse à confirmer",
+    bien_data: {
+      typologie,
+      surface_carrez: state.bien_data.surface_carrez,
+      pieces: state.bien_data.pieces,
+      chambres: state.bien_data.chambres,
+      etage: state.bien_data.etage ?? undefined,
+      etage_total: state.bien_data.etage_total ?? undefined,
+      ascenseur: state.bien_data.ascenseur,
+      exposition: expo ? EXPOSITION_MAP[expo] : undefined,
+      balcon: state.bien_data.balcon,
+      terrasse: state.bien_data.terrasse,
+      jardin: state.bien_data.jardin,
+      cave: state.bien_data.cave,
+      parking: state.bien_data.parking,
+      etat_general: etat ? ETAT_MAP[etat] : undefined,
+      dpe,
+      annee_construction:
+        Number.isFinite(annee) && annee >= 1700 && annee <= 2100 ? annee : undefined,
+      particularites: state.bien_data.particularites || undefined,
+    },
+    photos_urls: state.photos_urls,
+    user_provided_urls: state.user_provided_urls,
+  };
+}
 
 type StepStatus = "todo" | "running" | "done";
 
@@ -164,6 +230,7 @@ function StepCalculPage() {
   const navigate = useNavigate();
   const { state, patch } = useEstimerState();
   const [now, setNow] = React.useState(0);
+  const [apiError, setApiError] = React.useState<string | null>(null);
   const startRef = React.useRef<number>(Date.now());
 
   // Étapes recalculées à chaque rendu (memo sur state). Les labels sont
@@ -184,33 +251,26 @@ function StepCalculPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  // Appel API réel — en parallèle de la simulation visuelle. En V1, si
-  // le worker n'est pas branché, on ignore l'erreur et on continue.
+  // Appel API réel — en parallèle de la simulation visuelle.
+  // En cas d'erreur on stocke le message pour l'afficher à l'utilisateur
+  // au lieu de tomber silencieusement sur du mock.
   React.useEffect(() => {
     let mounted = true;
     async function run() {
       try {
-        const res = await postEstimer({
-          address: state.address || "Adresse à confirmer",
-          bien_data: {
-            type:
-              state.bien_data.type === "maison" ? "maison" : "appartement",
-            surface: state.bien_data.surface_carrez,
-            pieces: state.bien_data.pieces,
-            chambres: state.bien_data.chambres,
-            etage: state.bien_data.etage ?? undefined,
-            annee_construction: Number(state.bien_data.annee_construction) || undefined,
-            dpe: state.bien_data.dpe ?? undefined,
-          },
-          photos_urls: state.photos_urls,
-          user_provided_urls: state.user_provided_urls,
-        });
+        const payload = buildEstimerPayload(state);
+        const res = await postEstimer(payload);
         if (!mounted) return;
         patch("bien_id", res.bien_id);
-      } catch {
-        // Worker pas encore branché — V1 : on continue avec un id mocké.
+        setApiError(null);
+      } catch (err) {
         if (!mounted) return;
-        patch("bien_id", "mock-bien-id");
+        const msg = err instanceof Error ? err.message : String(err);
+        // eslint-disable-next-line no-console
+        console.error("[value-estimer] échec:", err);
+        setApiError(msg);
+        // On NE met PLUS "mock-bien-id" — on laisse bien_id null pour
+        // que l'écran resultat affiche l'erreur au lieu du mock.
       }
     }
     void run();
@@ -219,15 +279,17 @@ function StepCalculPage() {
     };
   }, []);
 
-  // Quand la simulation est terminée, on redirige.
+  // Quand la simulation est terminée, on redirige — uniquement si on a
+  // un vrai bien_id (l'API a réussi). Si erreur, on reste sur la page
+  // et on affiche le détail de l'erreur (cf bloc apiError plus bas).
   React.useEffect(() => {
-    if (totalDuration > 0 && now >= totalDuration) {
+    if (totalDuration > 0 && now >= totalDuration && state.bien_id) {
       void navigate({
         to: "/estimer/resultat",
-        search: { id: state.bien_id ?? "mock-bien-id" },
+        search: { id: state.bien_id },
       });
     }
-  }, [now, totalDuration]);
+  }, [now, totalDuration, state.bien_id]);
 
   return (
     <main
@@ -246,6 +308,24 @@ function StepCalculPage() {
       </header>
 
       <section className="mx-auto max-w-[640px] px-6 pb-24 pt-20 sm:px-8">
+        {/* Banner d'erreur si l'Edge Function value-estimer a échoué */}
+        {apiError && (
+          <div className="mb-8 rounded-r-lg border border-bad/30 bg-bad-soft px-5 py-4 text-[13.5px] leading-[1.55] text-ink-2">
+            <div className="font-semibold text-bad-deep">
+              Échec du calcul d'estimation
+            </div>
+            <p className="mt-1 text-muted-ink">
+              L'API <code className="font-mono text-[12.5px]">value-estimer</code>{" "}
+              a renvoyé : <span className="font-mono text-[12.5px] text-ink-2">{apiError}</span>
+            </p>
+            <p className="mt-2 text-[12.5px] text-muted-ink">
+              Reviens à l'étape précédente, vérifie les infos saisies et relance.
+              Si le problème persiste, l'estimation ne pourra pas être faite —
+              dis-le nous, on regarde côté serveur.
+            </p>
+          </div>
+        )}
+
         {/* Radar animé */}
         <div className="mx-auto mb-8 flex h-28 w-28 items-center justify-center">
           <span className="absolute h-28 w-28 animate-ping rounded-full bg-terra/15" />
