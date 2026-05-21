@@ -1,10 +1,8 @@
-// useBien — lit un enregistrement value.biens via Supabase + React Query.
-//
-// NOTE : le schéma `value` n'est pas (encore) exposé dans `AppDatabase`
-// public. On cast donc `as any` sur l'appel chaîné pour garder un typage
-// `ValueBien` côté retour, sans perdre l'auto-complétion du SDK Supabase.
-// Quand le schéma value sera ajouté à `config.toml#[api].schemas`, on
-// pourra retirer ce cast (cf packages/db/src/value.types.ts).
+// useBien — lit un enregistrement value.biens via la RPC publique
+// `public.value_bien_get(bien_id)` (le schéma value n'est pas exposé
+// via PostgREST, sinon ".schema('value').from('biens')" plante avec
+// 'Invalid schema: value'). La RPC est SECURITY INVOKER → l'user ne
+// peut lire que ses propres biens (RLS-like check via auth.uid()).
 
 import type { ValueBien } from "@immoscan/db";
 import { useQuery } from "@tanstack/react-query";
@@ -16,15 +14,13 @@ export function useBien(bienId: string | undefined) {
     queryKey: ["value", "bien", bienId],
     queryFn: async (): Promise<ValueBien | null> => {
       if (!bienId) return null;
-      // any: schéma value pas dans AppDatabase typé public — cf header.
-      const { data, error } = await (supabase as any)
-        .schema("value")
-        .from("biens")
-        .select("*")
-        .eq("id", bienId)
-        .maybeSingle();
+      const { data, error } = await (supabase as any).rpc("value_bien_get", {
+        p_bien_id: bienId,
+      });
       if (error) throw error;
-      return (data as ValueBien | null) ?? null;
+      // La RPC returns table → SDK renvoie un array. On prend la 1re row.
+      const row = Array.isArray(data) ? data[0] : data;
+      return (row as ValueBien | undefined) ?? null;
     },
     enabled: !!bienId,
     staleTime: 30 * 1000,
