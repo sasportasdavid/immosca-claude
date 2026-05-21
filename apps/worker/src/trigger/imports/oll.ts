@@ -15,7 +15,7 @@
 
 import { Readable } from "node:stream";
 
-import { logger, schedules, task } from "@trigger.dev/sdk";
+import { task } from "@trigger.dev/sdk";
 import { parse } from "csv-parse";
 import { z } from "zod";
 
@@ -177,22 +177,7 @@ export const ollImport = task({
   },
 });
 
-// ─── Cron annuel : 15 décembre pour le millésime N-1 ──────────────
-
-export const ollImportScheduled = schedules.task({
-  id: "imports.oll_loyers.scheduled",
-  cron: "0 4 15 12 *", // 15 décembre 4h UTC
-  maxDuration: 600,
-  run: async () => {
-    const millesime = new Date().getFullYear() - 1;
-    // URL placeholder — à mettre à jour selon la dernière publication OLL.
-    // Si data.gouv casse l'URL, lancer manuellement `imports.oll_loyers`
-    // avec la nouvelle URL en payload.
-    const csvUrl = `https://static.data.gouv.fr/resources/observatoires-locaux-des-loyers-resultats/${millesime}/oll-${millesime}.csv`;
-    logger.warn("OLL scheduled trigger — vérifier que l'URL est à jour", {
-      csvUrl,
-      millesime,
-    });
-    await ollImport.trigger({ csvUrl, millesime });
-  },
-});
+// Pas de cron OLL (limite 10 schedules / plan gratuit Trigger.dev déjà
+// atteinte). Le refresh annuel se lance manuellement via le script
+// scripts/imports/run-all-imports.sh ou en triggant directement
+// `imports.oll_loyers` depuis le dashboard Trigger.dev.
