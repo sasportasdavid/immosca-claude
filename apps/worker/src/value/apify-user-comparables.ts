@@ -135,19 +135,20 @@ export const valueApifyUserComparables = task({
       const url = payload.urls[i] ?? "";
       if (res.status === "fulfilled") {
         try {
+          // Via RPC publique (schéma value pas exposé via PostgREST).
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error } = await (supabaseApp as any)
-            .schema("value")
-            .from("user_provided_comparables")
-            .insert({
-              bien_id: payload.bien_id,
-              url_source: url,
-              marketplace: res.value.marketplace,
-              scraped_count: res.value.items.length,
-              truncated: res.value.truncated,
-              items: res.value.items,
-              apify_run_id: res.value.runId,
-            });
+          const { error } = await (supabaseApp as any).rpc(
+            "value_user_comparable_save",
+            {
+              p_bien_id: payload.bien_id,
+              p_url_source: url,
+              p_marketplace: res.value.marketplace,
+              p_scraped_count: res.value.items.length,
+              p_truncated: res.value.truncated,
+              p_items: res.value.items,
+              p_apify_run_id: res.value.runId,
+            },
+          );
           if (error) {
             logger.error("save user_provided_comparables failed", {
               err: error.message,
