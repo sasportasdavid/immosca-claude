@@ -55,46 +55,67 @@ function mapRow(
   loyer_m2_q3: number | null;
   nb_observations: number | null;
 } | null {
-  const code = (row.code_zonage_oll ?? row.code_zonage ?? row.zonage ?? "").trim();
-  const nom = (row.nom_zonage ?? row.nom_zonage_oll ?? row.zonage_label ?? "").trim();
-  const typeRaw = (row.type_logement ?? row.type_bien ?? "").toLowerCase().trim();
-  const piecesRaw = (row.nombre_pieces ?? row.nb_pieces ?? row.pieces ?? "").trim();
-  const epoque = (row.epoque_construction ?? row.epoque ?? row.periode ?? "").trim() || null;
-  const median = Number(row.loyer_m2_median ?? row.loyer_median ?? row.mediane);
-  const q1 = row.loyer_m2_q1 ?? row.q1 ?? row.quartile_1;
-  const q3 = row.loyer_m2_q3 ?? row.q3 ?? row.quartile_3;
-  const nbObs = row.nb_observations ?? row.n_obs ?? row.effectif;
+  // Vrais noms de colonnes OLL nationale (vérifiés sur
+  // www.observatoires-des-loyers.org/datagouv/2024/Base_OP_2024_Nationale.csv) :
+  //   Observatory;Data_year;agglomeration;Zone_complementaire;Type_habitat;
+  //   epoque_construction_homogene;anciennete_locataire_homogene;
+  //   nombre_pieces_homogene;loyer_1_decile;loyer_1_quartile;loyer_median;
+  //   loyer_3_quartile;loyer_9_decile;loyer_moyen;...;surface_moyenne;
+  //   nombre_observations;nombre_logements;methodologie_production
+  //
+  // Notes :
+  //   - loyer_median est déjà en €/m² (valeurs ~10-25, cohérent avec loyer
+  //     parisien/banlieue). Les colonnes loyer_mensuel_* donnent les loyers
+  //     totaux mensuels (en €).
+  //   - Les nombres décimaux utilisent ',' (10,4 → on remplace par '.').
+  //   - Type_habitat peut être vide (ligne aggrégée) ou "Appartement 1-3P",
+  //     "Maison 4-5P", etc.
+  const code = (row.Observatory ?? "").trim();
+  const nom = (row.agglomeration ?? "").trim();
+  const typeRaw = (row.Type_habitat ?? "").toLowerCase().trim();
+  const piecesRaw = (row.nombre_pieces_homogene ?? "").trim();
+  const epoque = (row.epoque_construction_homogene ?? "").trim() || null;
+  const parseDecimalFr = (v: string | undefined): number =>
+    Number((v ?? "").replace(",", "."));
+  const median = parseDecimalFr(row.loyer_median);
+  const q1 = parseDecimalFr(row.loyer_1_quartile);
+  const q3 = parseDecimalFr(row.loyer_3_quartile);
+  const nbObs = Number(row.nombre_observations ?? "");
 
+  // On ne stocke que les lignes désagrégées (Type_habitat + pieces non
+  // vides). Les lignes aggrégées sans Type_habitat sont skippées car
+  // elles ne sont pas exploitables par rpc_oll_market(type, pieces).
   if (!code || !nom || !typeRaw || !piecesRaw || !Number.isFinite(median)) {
     return null;
   }
 
-  // Normalisation type_logement : OLL utilise parfois "individuel"/"collectif"
-  const typeLogement: "appartement" | "maison" =
-    typeRaw.includes("maison") || typeRaw.includes("individuel")
-      ? "maison"
-      : "appartement";
+  // Type_habitat OLL : "Appartement X-YP" ou "Maison X-YP" (ex: "Maison 1-3P")
+  const typeLogement: "appartement" | "maison" = typeRaw.startsWith("maison")
+    ? "maison"
+    : "appartement";
 
-  // Normalisation nombre_pieces : OLL peut écrire "4 et plus", "T4+", "4_plus"
-  const pieces = piecesRaw.replace(/[^0-9+_a-z]/gi, "").toLowerCase();
+  // nombre_pieces_homogene OLL : "1 pièce", "2 pièces", "3 pièces",
+  // "4 pièces et plus", etc. On extrait le premier chiffre et on
+  // normalise sur "1" / "2" / "3" / "4_plus".
+  const piecesNum = piecesRaw.match(/^(\d+)/)?.[1] ?? "";
   const nbPieces =
-    pieces.startsWith("1") ? "1"
-    : pieces.startsWith("2") ? "2"
-    : pieces.startsWith("3") ? "3"
+    piecesNum === "1" ? "1"
+    : piecesNum === "2" ? "2"
+    : piecesNum === "3" ? "3"
     : "4_plus";
 
   return {
     annee: millesime,
     code_zonage_oll: code,
     nom_zonage: nom,
-    region: row.region || row.nom_region || null,
+    region: null, // OLL national n'expose pas la région directement
     type_logement: typeLogement,
     nombre_pieces: nbPieces,
     epoque_construction: epoque,
     loyer_m2_median: Number(median.toFixed(2)),
-    loyer_m2_q1: q1 ? Number(Number(q1).toFixed(2)) : null,
-    loyer_m2_q3: q3 ? Number(Number(q3).toFixed(2)) : null,
-    nb_observations: nbObs ? Number(nbObs) : null,
+    loyer_m2_q1: Number.isFinite(q1) ? Number(q1.toFixed(2)) : null,
+    loyer_m2_q3: Number.isFinite(q3) ? Number(q3.toFixed(2)) : null,
+    nb_observations: Number.isFinite(nbObs) ? nbObs : null,
   };
 }
 
