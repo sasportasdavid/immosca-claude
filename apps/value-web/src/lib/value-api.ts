@@ -12,17 +12,53 @@ import { supabase } from "@/lib/supabase";
 // dans @immoscan/shared/src/value/).
 // ──────────────────────────────────────────────────────────────────
 
+// Forme exacte attendue par l'Edge Function `value-estimer`
+// (cf supabase-app/supabase/functions/_shared/value-bien-schema.ts).
+// **Toute divergence fait planter la validation Zod côté serveur → 400.**
+
+export type EstimerTypologie =
+  | "Studio" | "T1" | "T2" | "T3" | "T4" | "T5" | "T6+"
+  | "Maison" | "Loft" | "Autre";
+
+export type EstimerDpe = "A" | "B" | "C" | "D" | "E" | "F" | "G" | "NC";
+
+export type EstimerEtatGeneral =
+  | "neuf" | "refait_a_neuf" | "bon_etat"
+  | "rafraichir" | "travaux" | "lourds_travaux";
+
+export type EstimerExposition =
+  | "Nord" | "Sud" | "Est" | "Ouest"
+  | "Nord-Est" | "Nord-Ouest" | "Sud-Est" | "Sud-Ouest"
+  | "Traversant";
+
 export type EstimerPayload = {
   address: string;
   bien_data: {
-    type: "appartement" | "maison";
-    surface: number;
+    typologie: EstimerTypologie;
+    surface_carrez: number;
+    surface_habitable?: number;
+    surface_terrain?: number;
     pieces: number;
     chambres?: number;
+    sdb?: number;
     etage?: number;
+    etage_total?: number;
+    ascenseur?: boolean;
+    exposition?: EstimerExposition;
+    balcon?: boolean;
+    terrasse?: boolean;
+    jardin?: boolean;
+    cave?: boolean;
+    parking?: boolean;
+    box?: boolean;
+    etat_general?: EstimerEtatGeneral;
+    dpe?: EstimerDpe;
+    ges?: EstimerDpe;
     annee_construction?: number;
-    dpe?: "A" | "B" | "C" | "D" | "E" | "F" | "G";
-    [key: string]: unknown;
+    type_chauffage?:
+      | "gaz" | "electrique" | "fioul" | "pompe_chaleur"
+      | "bois" | "collectif" | "autre";
+    particularites?: string;
   };
   photos_urls?: string[];
   user_provided_urls?: string[];
