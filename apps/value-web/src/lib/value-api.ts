@@ -86,11 +86,45 @@ export type BiensPublishResponse = {
  * afficher le résultat.
  */
 export async function postEstimer(payload: EstimerPayload): Promise<EstimerResponse> {
-  const { data, error } = await supabase.functions.invoke<EstimerResponse>(
-    "value-estimer",
-    { body: payload },
-  );
-  if (error) throw error;
+  // `supabase.functions.invoke` masque le body en cas d'erreur HTTP →
+  // on perd les détails Zod (issues). On fetch directement pour pouvoir
+  // remonter le vrai message au caller (qui l'affiche dans un bandeau).
+  const { data: { session } } = await supabase.auth.getSession();
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/value-estimer`;
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+  };
+  if (session?.access_token) {
+    headers["authorization"] = `Bearer ${session.access_token}`;
+  }
+  const res = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    /* not JSON */
+  }
+  if (!res.ok) {
+    const b = body as { error?: string; detail?: string; issues?: Array<{ path?: (string | number)[]; message?: string }> } | null;
+    let msg = `${res.status}`;
+    if (b?.error) msg += ` ${b.error}`;
+    if (b?.detail) msg += ` — ${b.detail}`;
+    if (b?.issues && b.issues.length > 0) {
+      const summary = b.issues
+        .slice(0, 3)
+        .map((i) => `${(i.path ?? []).join(".") || "?"}: ${i.message ?? "?"}`)
+        .join(" | ");
+      msg += ` (${summary})`;
+    }
+    throw new Error(msg || text || "Edge Function error");
+  }
+  const data = body as EstimerResponse | null;
   if (!data) throw new Error("value-estimer: réponse vide");
   return data;
 }
